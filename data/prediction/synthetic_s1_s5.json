@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "horizon_seconds": 240,
+    "max_age_seconds": 240,
+    "observation_state_ttl_seconds": 5,
+    "baseline_uncertainty_seconds": 2,
+    "assumed_manual_uncertainty_seconds": 1,
+    "drift_seconds_per_second": 0.02,
+    "confidence_half_life_seconds": 120,
+    "residual_scale_seconds": 10
+  },
+  "relations": [
+    {"source_signal_id":"S1","target_signal_id":"S2","green_start_delta_seconds":30,"uncertainty_seconds":1,"source":"Synthetic test fixture","verified":false,"data_quality":"PLACEHOLDER"},
+    {"source_signal_id":"S1","target_signal_id":"S3","green_start_delta_seconds":60,"uncertainty_seconds":2,"source":"Synthetic test fixture","verified":false,"data_quality":"PLACEHOLDER"},
+    {"source_signal_id":"S1","target_signal_id":"S4","green_start_delta_seconds":90,"uncertainty_seconds":4,"source":"Synthetic test fixture","verified":false,"data_quality":"PLACEHOLDER"},
+    {"source_signal_id":"S1","target_signal_id":"S5","green_start_delta_seconds":120,"uncertainty_seconds":6,"source":"Synthetic test fixture","verified":false,"data_quality":"PLACEHOLDER"}
+  ]
+}

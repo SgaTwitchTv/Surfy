@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "horizon_seconds": 240,
+    "max_age_seconds": 240,
+    "observation_state_ttl_seconds": 5,
+    "baseline_uncertainty_seconds": 2,
+    "assumed_manual_uncertainty_seconds": 1,
+    "drift_seconds_per_second": 0.02,
+    "confidence_half_life_seconds": 120,
+    "residual_scale_seconds": 10
+  },
+  "relations": []
+}

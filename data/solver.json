@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "vehicle": {
+    "comfortable_acceleration": 1.0,
+    "max_acceleration": 2.0,
+    "comfortable_deceleration": 1.5,
+    "max_deceleration": 4.5,
+    "coast_deceleration": 0.15,
+    "engine_braking_deceleration": 0.45,
+    "reaction_delay": 1.0,
+    "stop_buffer_m": 2.0
+  },
+  "solver": {
+    "min_moving_speed_mps": 5.0,
+    "edge_margin_seconds": 0.5,
+    "minimum_hold_seconds": 2.0,
+    "deadband_kmh": 1.0,
+    "smoothing_alpha": 0.35,
+    "max_uncertainty_for_acceleration": 8.0,
+    "minimum_confidence_for_acceleration": 0.6,
+    "unknown_confidence_acceleration": 0.8,
+    "acceleration_slack_seconds": 8.0
+  }
+}

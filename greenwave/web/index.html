@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pl">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+ <meta name="greenwave-token" content="__GREENWAVE_TOKEN__">
+ <title>GreenWave · mapa i prognozy</title>
+ <link rel="icon" href="data:,">
+ <link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+<main id="app">
+ <header><div class="brand">≋ <span>GreenWave</span></div><span class="route-title">Żwirki i Wigury → kierunek lotnisko</span><span class="badge">LABORATORIUM M6</span></header>
+ <section class="controls" aria-label="Sterowanie sesją">
+  <label>Dane <select id="dataset" class="server-action"><option value="synthetic_s1_s5">S1–S5 · dane syntetyczne</option><option value="zwirki_wigury">Warszawa · niezweryfikowane</option></select></label>
+  <button id="play" class="server-action primary" type="button">Start</button><button id="reset" class="server-action" type="button">Nowa sesja / reset</button>
+  <label>Tempo <select id="rate" class="server-action"><option>1</option><option>2</option><option>5</option><option>10</option></select> ×</label>
+  <label><input id="follow" class="server-action" type="checkbox" checked> Jedź według rekomendacji</label>
+  <button id="record" class="server-action" type="button">● Rozpocznij nagranie</button><span id="record-status" class="subtle">Brak aktywnego nagrania</span>
+  <label class="speed-control">Ręczny cel prędkości <input id="speed" class="server-action" type="range" min="0" max="50" step="1" value="36"><output id="speed-value">36 km/h</output></label>
+ </section>
+ <div id="error" role="alert" hidden></div>
+ <div id="warning" class="warning">Łączenie z lokalną aplikacją…</div>
+ <section class="phone-panel" aria-label="Dane telefonu"><h2>Telefon · GPS na żywo</h2><strong id="phone-status">Oczekiwanie na telefon</strong><pre id="phone-values">Brak pomiarów</pre><p>Odbiór pomiarów telefonu. Rekomendacje i sonda na mapie nadal korzystają z symulacji — mapowanie GPS na korytarz wymaga zweryfikowanej geometrii.</p></section>
+ <section class="navigation" aria-label="Mapa i światła">
+  <div id="map" aria-label="Mapa OSM z testowymi punktami kontroli i pozycją sondy">
+   <canvas id="map-canvas" role="img" aria-label="Mapa ulic. Punkty S1–S5 można też wybrać z listy obok."></canvas>
+   <div class="map-buttons"><button id="zoom-in" type="button" aria-label="Przybliż mapę">+</button><button id="zoom-out" type="button" aria-label="Oddal mapę">−</button><button id="map-fit" type="button">Cała trasa</button></div>
+   <div class="speed-panel"><div><div class="eyebrow">Prędkość docelowa</div><div class="target"><span id="target-value">—</span> <span>km/h</span></div><div id="target-range" class="subtle">Brak rekomendacji</div></div><div class="current"><div class="eyebrow">Prędkość pojazdu</div><div><span id="current-speed">0</span> <span class="subtle">km/h</span></div><div id="limit" class="limit">50</div></div><div id="driving-action" class="action" aria-live="polite">Oczekiwanie na model</div></div>
+   <div class="map-bottom"><strong id="next-signal">Następny punkt: —</strong><span id="position">Pozycja 0 m</span></div>
+   <div class="attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a> · mapa lokalna · punkty demo</div>
+  </div>
+  <aside><div class="aside-heading"><h1>Światła na trasie</h1><p>Prosto · stany prognozowane i obserwacje</p></div><div id="signals" aria-label="Wybierz punkt obserwacji"></div>
+   <section class="observe"><h2 id="selected-label">Obserwujesz S1</h2><label>Rodzaj pomiaru <select id="kind"><option value="STATE_START">Właśnie zaczęła się faza</option><option value="STATE_SEEN">Widzę ten kolor teraz</option></select></label><button id="green" class="server-action green-now" type="button">Zielone teraz</button><div class="other-colors"><button id="yellow" class="server-action" type="button">Żółte teraz</button><button id="red" class="server-action" type="button">Czerwone teraz</button></div><p id="feedback" aria-live="polite">Kliknij kolor w momencie obserwacji.</p></section>
+  </aside>
+ </section>
+ <section class="session-strip"><span id="session">Sesja —</span><span id="time">Czas modelu —</span><span id="utc">UTC —</span></section>
+ <details id="debug"><summary>Diagnostyka prognoz i modelu</summary><div class="debug-options"><label><input id="jitter" class="server-action" type="checkbox"> Jitter ±2 s i 10% wydłużeń zielonego o 8 s (nowa sesja)</label><span id="version">Wersja modelu 0</span></div><p class="subtle">Stan symulacji jest prawdą testową. Predykcja nie odczytuje go. Marginesy są założeniami modelu; indeks confidence nie jest skalibrowanym prawdopodobieństwem.</p><div class="table-wrap"><table><thead><tr><th>Punkt</th><th>Typ</th><th>Prawda testowa</th><th>Prognoza / nominalnie</th><th>Offset / korekta</th><th>Wiek / ważność</th><th>Margines / confidence</th><th>Źródło / brak prognozy</th><th>Zielone okna</th></tr></thead><tbody id="debug-rows"></tbody></table></div><h2>Jawne relacje między punktami</h2><div id="relations"></div><p id="settings" class="subtle"></p><p id="resync"></p></details>
+ <details id="history"><summary>Historia obserwacji <span id="history-count">0</span></summary><p class="subtle">Ostatnie 100 wpisów w pamięci aplikacji. Podczas nagrania te same zdarzenia trafiają także do surowego CSV M5.</p><div class="table-wrap"><table><thead><tr><th>UTC</th><th>Czas symulacji</th><th>Sesja / korytarz</th><th>Punkt</th><th>Kolor</th><th>Zdarzenie</th><th>Źródło</th><th>Kolejność</th></tr></thead><tbody id="history-rows"></tbody></table></div></details>
+ <details id="runs"><summary>Trwałe nagrania przejazdów</summary><p class="subtle">Surowe pliki M5 są zapisywane lokalnie w data/runs. Każdy zakończony przejazd można pobrać jako ZIP zawierający metadata.json, raw.csv i manifest SHA-256.</p><div id="run-list"></div></details>
+ <details id="replay"><summary>Replay nagrania</summary><div class="replay-controls"><select id="replay-run" aria-label="Wybierz nagranie"></select><button id="replay-load" type="button">Wczytaj</button><button id="replay-play" type="button">▶ Odtwarzaj</button><button id="replay-pause" type="button">Pauza</button><select id="replay-rate" aria-label="Tempo replay"><option>1</option><option>2</option><option>5</option><option>10</option></select><span>×</span><input id="replay-seek" type="range" min="0" max="0" step="0.1" value="0"><output id="replay-time">—</output></div><p id="replay-status" class="subtle">Wybierz zakończone nagranie.</p></details>
+ <details id="analysis"><summary>Analiza przejazdu i jakości GPS</summary><p class="subtle">Raport sprawdza transmisję, dokładność, dostępność prędkości oraz przejścia postój/ruch. Metryki są liczone z surowego CSV bez jego modyfikacji.</p><select id="analysis-run" aria-label="Wybierz przejazd do analizy"></select><button id="analysis-load" type="button">Policz raport</button><pre id="analysis-result"></pre></details>
+ <details id="solver-debug"><summary>Plan korytarza — trajektoria i koszt</summary><p id="solver-status"></p><p id="solver-dynamics" class="subtle"></p><p id="trajectory-status"></p><div class="table-wrap"><table><thead><tr><th>Punkt</th><th>Cel</th><th>Przejazd za</th><th>Prędkość na linii</th><th>Zatrzymania / czekanie</th></tr></thead><tbody id="trajectory-legs"></tbody></table></div><p id="trajectory-cost"></p><p id="trajectory-baseline"></p><p id="trajectory-alternatives" class="subtle"></p><div class="table-wrap"><table><thead><tr><th>Cel / zakres</th><th>Profil zwalniania</th><th>Zielone okno</th><th>Przewidywany przejazd</th><th>Przyspieszenie / zwalnianie</th></tr></thead><tbody id="solver-candidates"></tbody></table></div><p id="crossings"></p></details>
+ <footer>Offline · dane testowe · M6 replay i logi lokalne · symulacja, nie wskazówki do jazdy drogowej</footer>
+</main>
+</body></html>

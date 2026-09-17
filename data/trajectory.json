@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "trajectory": {
+    "max_signals": 5,
+    "beam_width": 12,
+    "horizon_seconds": 240,
+    "stop_weight": 10000,
+    "braking_weight": 30,
+    "variation_weight": 4,
+    "time_weight": 1,
+    "risk_weight": 20,
+    "unknown_risk": 0.5,
+    "stop_speed_mps": 0.05,
+    "switch_cost_tolerance": 2
+  }
+}
