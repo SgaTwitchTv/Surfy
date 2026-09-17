@@ -1,139 +1,166 @@
-# GreenWave (repozytorium Surfy)
+# GreenWave (Surfy repository)
 
-Lokalne laboratorium zielonej fali. **Wykonane M1–M7 (do L10) oraz pierwszy etap M8**:
-mapa, obserwacje, predykcja, resynchronizacja i planowanie przez wiele świateł
-z dynamiką pojazdu, kosztem zatrzymań, hamowania, zmian przyspieszenia, czasu
-i ryzyka, trwały logger surowych przejazdów oraz diagnostyczny odbiór GPS z telefonu.
+GreenWave is a local laboratory for developing a mobile application that helps
+users catch a green wave. The project currently includes a map, traffic-light
+observations, prediction and resynchronization, multi-signal route planning with
+vehicle dynamics, a cost model for stops, braking, acceleration changes, travel
+time and risk, an append-only raw trip logger, and diagnostic GPS reception from
+a phone.
 
-## Uruchomienie
+## Running the application
 
-Python 3.11+, bez instalowania zależności pip:
+GreenWave requires Python 3.11 or newer and has no pip dependencies:
 
 ```powershell
 python -m greenwave
 ```
 
-Aplikacja otwiera się w przeglądarce pod adresem `http://127.0.0.1:8765`.
-Serwer działa wyłącznie lokalnie. Zatrzymanie: Ctrl+C w terminalu.
-Jeśli port jest zajęty, użyj `python -m greenwave --port 8766` lub `--port 0`.
-Opcja `--no-browser` uruchamia sam serwer. Mapa, style i skrypty są lokalne;
-nie potrzeba internetu ani klucza mapowego.
+The application opens in a browser at `http://127.0.0.1:8765`. The server binds
+to the local computer only. Press Ctrl+C in the terminal to stop it. If the port
+is already occupied, run `python -m greenwave --port 8766` or use `--port 0` to
+select a free port automatically. The `--no-browser` option starts the server
+without opening a browser. The map, styles and scripts are stored locally, so no
+internet connection or map API key is required.
 
-Starszy panel Tkinter z P02 jest dostępny przez `python -m greenwave --lab`.
-Ten panel pozostaje historycznym narzędziem M1/P02; nowa mapa i M2 są w widoku
-przeglądarkowym. Tkinter wymaga lokalnej instalacji Tcl/Tk.
+The legacy P02 Tkinter panel is available through:
 
-## Szybki test M4 na komputerze
+```powershell
+python -m greenwave --lab
+```
 
-Zostaw zaznaczone **Jedź według rekomendacji**, ustaw tempo 5× lub 10× i kliknij
-Start. Pojazd rusza od zera, rozpędza się w granicach modelu i podąża za celem.
-Duża liczba to prędkość docelowa, a mniejsza to aktualna prędkość pojazdu.
-M4 pokazuje pojedynczy cel (np. 34–34 km/h), zweryfikowany dla całej wybranej trajektorii.
+This panel remains a historical M1/P02 tool. The current map and M2 features are
+available in the browser interface. Tkinter requires a local Tcl/Tk installation.
 
-Odznacz automatyczne podążanie, aby suwakiem zadawać własny cel prędkości.
-Zmiana suwaka nie powoduje natychmiastowego skoku prędkości. Symulowany kierowca
-reaguje na niezielony sygnał także w tym trybie.
+## Quick M4 desktop test
 
-W sekcji **Plan korytarza — trajektoria i koszt** zobaczysz plan kolejnych punktów,
-zatrzymania, składniki kosztu, alternatywy i porównanie z wyborem lokalnym.
-Niżej są profil pierwszego polecenia i lista przekroczonych linii. Brak wykonalnego profilu
-lub ważnej prognozy usuwa liczbę docelową i pokazuje powód. Niewykonalna sytuacja
-przy sygnalizacji przerywa symulację i wymaga nowej sesji, bez przestawiania pojazdu.
+Leave **Jedź według rekomendacji** (“Follow the recommendation”) enabled, set the
+simulation rate to 5× or 10×, and click **Start**. The vehicle starts from rest,
+accelerates within the model limits and follows the recommended target. The large
+number is the target speed; the smaller number is the vehicle's current speed. M4
+shows one target range, for example 34–34 km/h, validated against the complete
+selected trajectory.
 
-Obserwacje i diagnostykę M2 można sprawdzić tak:
+Disable automatic following to set a target speed manually with the slider. A
+slider change does not cause an instantaneous speed jump. The simulated driver
+also reacts to a non-green signal in this mode.
 
-1. Zostaw zestaw **S1–S5 · dane syntetyczne**, kliknij Start i następnie Pauza.
-2. Wybierz S3 na liście lub mapie. Wybierz „Właśnie zaczęła się faza” i „Zielone teraz”.
-   Zmienią się okna S3. Pozostałe modele nie są automatycznie przesuwane.
-3. Otwórz „Diagnostyka prognoz i modelu”: porównaj offset, korektę i źródło.
-4. Wybierz S1 i zgłoś początek fazy. Konfiguracja demo zawiera jawne relacje S1→S2–S5;
-   dalsze prognozy zostaną skorygowane, o ile nowsza obserwacja punktu nie ma pierwszeństwa.
-5. „Widzę ten kolor teraz” zapisuje aktualny kolor bez wymyślania początku fazy.
-   Sprzeczność z modelem wstrzymuje prognozę do ponownej synchronizacji.
-6. W diagnostyce można włączyć jitter i wydłużenia zielonego (nowa sesja).
-   Prawda symulatora pozostaje niezależna od prognoz.
-7. Wybierz niezweryfikowany zestaw warszawski: fazy pozostają UNKNOWN, pozycja
-   i znaczniki są wyłączone. GREEN NOW zapisuje obserwację, ale nie wymyśla cyklu.
+The **Plan korytarza — trajektoria i koszt** (“Corridor plan — trajectory and
+cost”) section shows the plan for the upcoming signals, predicted stops, cost
+components, alternatives and a comparison with the local-choice baseline. Below
+it are the first command profile and the list of crossed stop lines. If no feasible
+profile or valid prediction exists, GreenWave removes the target value and displays
+the reason. An infeasible traffic-signal situation stops the simulation and requires
+a new session without relocating the vehicle.
 
-Mapa obsługuje przesuwanie, zoom i powrót do całej trasy. Pozycja sondy i kolory
-punktów odświeżają się podczas symulacji. M4 analizuje domyślnie do pięciu kolejnych
-świateł na danych testowych; ten etap nie jest doradcą jazdy drogowej.
+M2 observations and diagnostics can be tested as follows:
 
-M5 zapisuje przejazd przyciskiem **Rozpocznij nagranie**. Pliki trafiają do
-`data/runs/<run_id>/`; sekcja nagrań pozwala pobrać zakończony zapis jako ZIP.
-Replay i seek należą do M6.
+1. Keep **S1–S5 · dane syntetyczne** (“synthetic data”) selected, click **Start**,
+   and then click **Pauza** (“Pause”).
+2. Select S3 in the list or on the map. Choose **Właśnie zaczęła się faza** (“The
+   phase has just started”) and **Zielone teraz** (“Green now”). The S3 prediction
+   windows will change. Other signal models are not shifted automatically.
+3. Open **Diagnostyka prognoz i modelu** (“Prediction and model diagnostics”) and
+   compare the offset, correction and source.
+4. Select S1 and report the start of a phase. The demo configuration contains
+   explicit S1→S2–S5 relationships. Downstream predictions are corrected unless a
+   newer direct observation of a signal takes precedence.
+5. **Widzę ten kolor teraz** (“I see this colour now”) records the currently visible
+   colour without inventing the start time of the phase. A contradiction with the
+   model suspends its prediction until the next resynchronization.
+6. The diagnostics panel can enable timing jitter and green extensions for a new
+   session. The simulator's ground truth remains independent of the prediction.
+7. Select the unverified Warsaw dataset. Its phases remain `UNKNOWN`, and position
+   markers are disabled. **GREEN NOW** records an observation but does not invent a
+   cycle.
 
-W sekcji **Replay nagrania** wybierz zakończony przejazd, wczytaj go, ustaw tempo
-1×–10×, odtwarzaj, zatrzymuj i przewijaj suwakiem. Replay działa niezależnie od
-bieżącej symulacji.
+The map supports panning, zooming and fitting the complete route. Probe position
+and signal colours update during the simulation. By default, M4 analyses up to five
+upcoming signals using test data. This stage is a research tool, not a road-driving
+advisor.
 
-Sekcja **Analiza przejazdu i jakości GPS** liczy metryki z zakończonego CSV. Raport
-pokazuje częstotliwość i luki pomiarów, dokładność GPS, dostępność oraz źródła
-prędkości, a także przejścia postój–ruch. Rozdziela przerwy dostawcy lokalizacji
-telefonu od dodatkowych opóźnień transportu. Plik źródłowy pozostaje niezmieniony;
-analiza odrzuca zapis z niezgodnym hashem lub przerwaną kolejnością rekordów.
+M5 records a trip through the **Rozpocznij nagranie** (“Start recording”) button.
+Files are written to `data/runs/<run_id>/`, and the recordings section can export a
+completed run as a ZIP archive. Replay and seeking belong to M6.
 
-Telefon można podłączyć przez USB i `adb reverse`. Strona mobilna przesyła surową
-lokalizację, a serwer ocenia jej jakość, wylicza prędkość zastępczą i filtruje dryf
-podczas postoju. Pełna instrukcja uruchomienia i kontrolowanego nagrania znajduje się
-w [docs/phone-gps.md](docs/phone-gps.md). Natywny nadajnik Android oraz mapowanie
-pozycji na rzeczywisty korytarz pozostają kolejnymi etapami M8.
+In **Replay nagrania** (“Replay recording”), select a completed run, load it, choose
+a playback rate from 1× to 10×, play or pause it, and seek with the slider. Replay is
+independent of the current simulation.
 
-## Dane i ich znaczenie
+The **Analiza przejazdu i jakości GPS** (“Trip and GPS quality analysis”) section
+calculates metrics from a completed CSV file. Its report covers sample frequency
+and gaps, GPS accuracy, speed availability and sources, and stop-to-motion
+transitions. It distinguishes gaps produced by the phone's location provider from
+additional transport delays. The source file remains unchanged, and analysis
+rejects a run with an invalid hash or a broken record sequence.
 
-- `data/corridors/synthetic_s1_s5.json`: testowe fazy, odległości i limit.
-- `data/corridors/zwirki_wigury.json`: niezweryfikowana inwentaryzacja, nieznane parametry null.
-- `data/prediction/`: ustawienia horyzontu, marginesów, ważności i jawne relacje.
-- `data/maps/warsaw.json`: lokalny wyciąg geometrii OpenStreetMap i odcinek jezdni.
-- `data/solver.json`: dynamika pojazdu, minimalna prędkość, marginesy i stabilizacja.
-- `data/trajectory.json`: wagi kosztu, horyzont, liczba punktów i szerokość przeszukiwania M4.
+A phone can connect over USB through `adb reverse`. The mobile page transmits raw
+location measurements, while the server evaluates their quality, calculates a
+fallback speed when needed and filters stationary GPS drift. See
+[docs/phone-gps.md](docs/phone-gps.md) for the complete setup and controlled-recording
+procedure. A native Android transmitter and projection onto a verified real-world
+corridor are the next M8 stages.
 
-**Znaczniki S1–S5 są rozmieszczone testowo na dostępnym odcinku mapy. Nie są
-zweryfikowanymi warszawskimi liniami zatrzymania.** Mapa obejmuje fragment ulicy,
-nie pełną trasę Wawelska–lotnisko; pozycja demo jest normalizowana na ten fragment.
-Geometria mapy nie uzupełnia automatycznie nieznanych danych korytarza.
-Źródło, data pobrania i licencja ODbL są w metadanych pliku mapy.
-© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
+## Data and interpretation
 
-Margines czasowy nie jest skalibrowanym przedziałem ufności. Confidence pozostaje
-null, gdy nie podano jego podstawy. Przy podanej wartości jest prezentowany wyłącznie
-jako malejący indeks modelu, nie prawdopodobieństwo. Domyślny model wygasa po 240 s;
-nowa obserwacja początku fazy może go odnowić.
+- `data/corridors/synthetic_s1_s5.json`: test phases, distances and speed limit.
+- `data/corridors/zwirki_wigury.json`: unverified inventory with unknown values set
+  to `null`.
+- `data/prediction/`: horizon, uncertainty, validity and explicit relationship
+  settings.
+- `data/maps/warsaw.json`: a local OpenStreetMap geometry extract and road segment.
+- `data/solver.json`: vehicle dynamics, minimum speed, margins and stabilization.
+- `data/trajectory.json`: cost weights, horizon, signal count and M4 search width.
 
-UTC rejestruje czas obsługi obserwacji przez lokalny serwer, a zegar monotoniczny
-steruje tempem symulacji. Nie znamy opóźnienia reakcji operatora. W niezweryfikowanym
-korytarzu czas modelu oznacza czas UTC od początku sesji, niezależny od pauzy symulacji.
+**The S1–S5 markers are placed experimentally along the available map segment.
+They are not verified Warsaw stop-line locations.** The map covers a fragment of
+the road rather than the complete Wawelska-to-airport route, and the demo position
+is normalized onto that fragment. Map geometry does not automatically fill missing
+corridor data. The map file contains its source, retrieval date and ODbL licence
+metadata. © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
 
-**Historia jest tylko w pamięci serwera.** Reset zachowuje wcześniejsze sesje;
-zamknięcie samej karty nie usuwa historii. Zatrzymanie serwera ją usuwa. Trwały logger
-jest zakresem M5. UI pokazuje ostatnie 100 obserwacji.
+The timing margin is not a calibrated confidence interval. `confidence` remains
+`null` when there is no stated basis for it. When present, it is displayed only as
+a decreasing model index, not as a probability. The default model expires after
+240 seconds; a new phase-start observation can renew it.
 
-## Testy
+UTC records when the local server processes an observation, while a monotonic clock
+controls simulation speed. Operator reaction delay is unknown. For an unverified
+corridor, model time means elapsed UTC time since the start of the session and is
+independent of simulation pause state.
+
+**Observation history is stored only in server memory.** Resetting the application
+preserves earlier sessions; closing a browser tab does not remove the history, but
+stopping the server does. Persistent logging belongs to M5. The UI displays the 100
+most recent observations.
+
+## Tests
 
 ```powershell
 python -m unittest discover -s tests -v
 node tests/mobile_flow.cjs
 ```
 
-Test Tkinter może zostać pominięty w środowisku bez dostępu do Tcl/Tk; testy HTTP
-wymagają dostępu do lokalnych gniazd sieciowych. Scenariusz przeglądarkowy:
+The Tkinter test may be skipped when Tcl/Tk is unavailable. HTTP tests require
+access to local network sockets. To run the browser scenario:
 
 ```powershell
 python -m greenwave --no-browser --port 8766
-# W drugim terminalu; Playwright oraz Edge są potrzebne tylko do tego testu:
+# In a second terminal; Playwright and Edge are required only for this test:
 $env:GW_TEST_URL = 'http://127.0.0.1:8766'
 node scripts/check_web.cjs
 ```
 
-Playwright musi być dostępny jako moduł Node albo wskazany przez
-`GW_PLAYWRIGHT_MODULE`. Test zmienia sesję, więc uruchamiaj go na osobnym serwerze.
-Zrzuty ekranu trafiają do ignorowanego przez Git katalogu `artifacts/web-check`.
+Playwright must be available as a Node module or specified through
+`GW_PLAYWRIGHT_MODULE`. The scenario changes the active session, so run it against
+a separate server. Screenshots are written to the Git-ignored
+`artifacts/web-check` directory.
 
-Architektura: [docs/architecture.md](docs/architecture.md).
-Kontrakt i odbiór M2: [docs/m2.md](docs/m2.md).
-Profile, ograniczenia i testy M3: [docs/m3.md](docs/m3.md).
+## Documentation
 
-Szczegóły P07/P08 i ograniczenia przeszukiwania: [docs/m4.md](docs/m4.md).
-Logger L09: [docs/m5.md](docs/m5.md).
-Replay: [docs/m6.md](docs/m6.md).
-Analiza danych M7: [docs/m7.md](docs/m7.md).
+- Architecture: [docs/architecture.md](docs/architecture.md)
+- M2 contract and acceptance criteria: [docs/m2.md](docs/m2.md)
+- M3 profiles, constraints and tests: [docs/m3.md](docs/m3.md)
+- P07/P08 search details and limitations: [docs/m4.md](docs/m4.md)
+- L09 logger: [docs/m5.md](docs/m5.md)
+- Replay: [docs/m6.md](docs/m6.md)
+- M7 data analysis: [docs/m7.md](docs/m7.md)
