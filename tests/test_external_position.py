@@ -69,6 +69,66 @@ class ExternalPositionProviderTests(unittest.TestCase):
         self.assertEqual(sample.speed_mps, 0.55)
         self.assertEqual(sample.speed_source, 'DEVICE')
 
+    def test_stationary_latch_survives_drift_and_worse_accuracy(self):
+        provider = ExternalPositionProvider()
+        for index in range(6):
+            provider.update(timestamp_seconds=10 + index, latitude=52.2,
+                            longitude=20.9, speed_mps=.12, gps_accuracy_m=6)
+        sample = provider.update(timestamp_seconds=16, latitude=52.20004,
+                                 longitude=20.90004, speed_mps=.15,
+                                 gps_accuracy_m=25)
+        self.assertEqual(sample.speed_mps, 0)
+        self.assertEqual(sample.speed_source, 'STATIONARY_FILTER')
+        self.assertEqual(provider.status()['motion_state'], 'STATIONARY')
+
+    def test_single_speed_spike_does_not_release_stationary_latch(self):
+        provider = ExternalPositionProvider()
+        for index in range(6):
+            provider.update(timestamp_seconds=10 + index, latitude=52.2,
+                            longitude=20.9, speed_mps=.1, gps_accuracy_m=6)
+        spike = provider.update(timestamp_seconds=16, latitude=52.2,
+                                longitude=20.9, speed_mps=1.1,
+                                speed_accuracy_mps=.2, gps_accuracy_m=6)
+        settled = provider.update(timestamp_seconds=17, latitude=52.2,
+                                  longitude=20.9, speed_mps=.1,
+                                  speed_accuracy_mps=.2, gps_accuracy_m=6)
+        self.assertEqual(spike.speed_mps, 0)
+        self.assertEqual(settled.speed_mps, 0)
+        self.assertEqual(provider.status()['movement_evidence_count'], 0)
+
+    def test_two_reliable_samples_release_stationary_latch(self):
+        provider = ExternalPositionProvider()
+        for index in range(6):
+            provider.update(timestamp_seconds=10 + index, latitude=52.2,
+                            longitude=20.9, speed_mps=.1, gps_accuracy_m=6)
+        first = provider.update(timestamp_seconds=16, latitude=52.20001,
+                                longitude=20.9, speed_mps=1.1,
+                                speed_accuracy_mps=.2, gps_accuracy_m=6)
+        second = provider.update(timestamp_seconds=17, latitude=52.20002,
+                                 longitude=20.9, speed_mps=1.2,
+                                 speed_accuracy_mps=.2, gps_accuracy_m=6)
+        self.assertEqual(first.speed_mps, 0)
+        self.assertEqual(first.speed_source, 'STATIONARY_FILTER')
+        self.assertEqual(second.speed_mps, 1.2)
+        self.assertEqual(second.speed_source, 'DEVICE')
+        self.assertEqual(provider.status()['motion_state'], 'MOVING')
+        self.assertIn('ruszenie', provider.status()['diagnostic'])
+
+    def test_reliable_device_speed_releases_latch_with_poor_position_fix(self):
+        provider = ExternalPositionProvider()
+        for index in range(6):
+            provider.update(timestamp_seconds=10 + index, latitude=52.2,
+                            longitude=20.9, speed_mps=.1, gps_accuracy_m=6)
+        provider.update(timestamp_seconds=16, latitude=52.2, longitude=20.9,
+                        speed_mps=3, speed_accuracy_mps=.3, gps_accuracy_m=80)
+        sample = provider.update(timestamp_seconds=17, latitude=52.2, longitude=20.9,
+                                 speed_mps=4, speed_accuracy_mps=.3,
+                                 gps_accuracy_m=80)
+        self.assertEqual(sample.speed_mps, 4)
+        self.assertEqual(sample.speed_source, 'DEVICE')
+        self.assertFalse(sample.usable_for_live)
+        self.assertEqual(provider.status()['motion_state'], 'MOVING')
+
     def test_invalid_sensor_values_are_rejected(self):
         provider = ExternalPositionProvider()
         with self.assertRaises(ValueError):

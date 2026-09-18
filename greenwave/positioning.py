@@ -84,6 +84,9 @@ class ExternalPositionProvider:
     MAX_DERIVATION_ACCURACY_M = 30.0
     MAX_PLAUSIBLE_SPEED_MPS = 80.0
     STATIONARY_DEVICE_SPEED_MPS = 3.0 / 3.6
+    MOVEMENT_RELEASE_SPEED_MPS = 2.7 / 3.6
+    MOVEMENT_RELEASE_CALCULATED_MPS = 1.2
+    MOVEMENT_RELEASE_SAMPLES = 2
 
     def __init__(self):
         self.reset()
@@ -103,6 +106,8 @@ class ExternalPositionProvider:
         self._points = deque(maxlen=12)
         self._calculated_speeds = deque(maxlen=5)
         self._last_sequence_by_stream = {}
+        self._stationary_latched = False
+        self._movement_evidence_count = 0
 
     @staticmethod
     def _number(value, name, *, optional=False):
@@ -275,9 +280,29 @@ class ExternalPositionProvider:
                 self._points.append((timestamp_seconds, latitude, longitude, gps_accuracy_m))
             self._last_timestamp = timestamp_seconds
 
-        stationary = timestamp_newer and self._stationary_confirmed(
+        stationary_evidence = timestamp_newer and self._stationary_confirmed(
             timestamp_seconds, latitude, longitude, gps_accuracy_m)
-        if stationary and (raw_speed is None or raw_speed <= self.STATIONARY_DEVICE_SPEED_MPS):
+        device_movement_reliable = (
+            raw_speed is not None and raw_speed >= self.MOVEMENT_RELEASE_SPEED_MPS and
+            (speed_accuracy_mps is None or speed_accuracy_mps <= 1.5))
+        calculated_movement_reliable = (
+            quality in ('GOOD', 'FAIR', 'POOR') and calculated_speed is not None and
+            calculated_speed >= self.MOVEMENT_RELEASE_CALCULATED_MPS)
+        movement_reliable = timestamp_newer and (
+            device_movement_reliable or calculated_movement_reliable)
+        movement_released = False
+        if self._stationary_latched:
+            self._movement_evidence_count = (
+                self._movement_evidence_count + 1 if movement_reliable else 0)
+            if self._movement_evidence_count >= self.MOVEMENT_RELEASE_SAMPLES:
+                self._stationary_latched = False
+                self._movement_evidence_count = 0
+                movement_released = True
+        elif stationary_evidence and (raw_speed is None or raw_speed <= self.STATIONARY_DEVICE_SPEED_MPS):
+            self._stationary_latched = True
+            self._movement_evidence_count = 0
+
+        if self._stationary_latched:
             selected_speed, speed_source = 0.0, 'STATIONARY_FILTER'
             calculated_speed = 0.0
         elif raw_speed is not None:
@@ -302,7 +327,9 @@ class ExternalPositionProvider:
         elif selected_speed is None:
             self.last_diagnostic = 'Pozycja dociera, ale telefon nie podał prędkości i brakuje dobrych punktów do jej wyliczenia.'
         elif speed_source == 'STATIONARY_FILTER':
-            self.last_diagnostic = 'Filtr potwierdził postój na podstawie stabilnej serii punktów GPS.'
+            self.last_diagnostic = 'Filtr utrzymuje potwierdzony postój; ruszenie wymaga dwóch wiarygodnych próbek.'
+        elif movement_released:
+            self.last_diagnostic = 'Filtr potwierdził ponowne ruszenie na podstawie kolejnych próbek.'
         elif speed_source == 'CALCULATED':
             self.last_diagnostic = 'Prędkość wyliczona z kolejnych punktów GPS.'
         else:
@@ -339,6 +366,10 @@ class ExternalPositionProvider:
             state=state,
             position_quality=None if sample is None else sample.position_quality,
             speed_source=None if sample is None else sample.speed_source,
+            motion_state=('STATIONARY' if self._stationary_latched else
+                          'MOVING' if sample and sample.speed_mps is not None and
+                          sample.speed_mps >= self.MOVEMENT_RELEASE_SPEED_MPS else 'UNKNOWN'),
+            movement_evidence_count=self._movement_evidence_count,
             sample_source=None if sample is None else sample.source,
             device_id=None if sample is None else sample.device_id,
             stream_id=None if sample is None else sample.stream_id,
