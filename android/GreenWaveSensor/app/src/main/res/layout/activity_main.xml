@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:background="#F3F7F5">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="20dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="GreenWave Sensor" android:textSize="30sp" android:textStyle="bold" android:textColor="#073B2E" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Natywny Fused Location → GreenWave na Surface" android:textSize="15sp" android:layout_marginBottom="18dp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Adres serwera" />
+        <EditText android:id="@+id/serverUrl" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="textUri" android:singleLine="true" android:text="http://localhost:8765" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Kod parowania z ekranu komputera" android:layout_marginTop="10dp" />
+        <EditText android:id="@+id/pairingCode" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="number" android:maxLength="6" android:singleLine="true" />
+        <Button android:id="@+id/pair" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Połącz z GreenWave" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/start" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Uruchom pomiary" />
+            <Button android:id="@+id/stop" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Zatrzymaj" />
+        </LinearLayout>
+        <Button android:id="@+id/battery" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ustawienia baterii aplikacji" />
+        <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:padding="16dp" android:background="#FFFFFF"
+            android:textIsSelectable="true" android:typeface="monospace" android:text="Oczekiwanie." />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:text="Podczas pomiaru pozostaw usługę aktywną. Android pokaże stałe powiadomienie. Telefon może mieć wygaszony ekran." />
+    </LinearLayout>
+</ScrollView>

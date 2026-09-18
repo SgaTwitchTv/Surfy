@@ -36,7 +36,7 @@ class AnalysisTests(unittest.TestCase):
    self.assertEqual(gps['status'],'READY');self.assertEqual(gps['sample_count'],40);self.assertAlmostEqual(gps['sample_rate_hz'],1);self.assertEqual(gps['largest_gap_seconds'],1);self.assertEqual(gps['gaps_over_2_seconds'],0)
    self.assertEqual(gps['largest_phone_gap_seconds'],1);self.assertEqual(gps['phone_gaps_over_2_seconds'],0);self.assertEqual(gps['transport_only_gaps_over_2_seconds'],0)
    self.assertEqual(gps['accuracy']['median_m'],8);self.assertEqual(gps['accuracy']['within_10m_ratio'],1);self.assertEqual(gps['usable_ratio'],1);self.assertEqual(gps['speed']['final_available_ratio'],1)
-   self.assertEqual(gps['speed']['source_counts']['DEVICE'],20);self.assertEqual(gps['movement_transitions'],2);self.assertEqual(gps['movement_starts'],1);self.assertEqual(gps['stop_confirmations'],1);self.assertFalse(gps['issues'])
+   self.assertEqual(gps['speed']['source_counts']['DEVICE'],20);self.assertEqual(gps['location_source_counts']['WEB_GEOLOCATION'],40);self.assertEqual(gps['movement_transitions'],2);self.assertEqual(gps['movement_starts'],1);self.assertEqual(gps['stop_confirmations'],1);self.assertFalse(gps['issues'])
    self.assertEqual(raw,(__import__('pathlib').Path(root)/rid/'raw.csv').read_bytes())
 
 if __name__=='__main__':unittest.main()

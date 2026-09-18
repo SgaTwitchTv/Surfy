@@ -231,7 +231,7 @@ class GreenWaveApplication:
         integration step.
         """
         sample = self.external_position.update(**payload)
-        if self.logger.active:
+        if self.logger.active and self.external_position.last_update_accepted:
             self._record('EXTERNAL_TELEMETRY', latitude=sample.latitude, longitude=sample.longitude,
                          heading=sample.heading_deg, gps_accuracy=sample.gps_accuracy_m,
                          speed_mps=sample.speed_mps,
@@ -244,7 +244,16 @@ class GreenWaveApplication:
                                       speed_source=sample.speed_source,
                                       position_quality=sample.position_quality,
                                       usable_for_live=sample.usable_for_live,
-                                      quality_reasons=sample.quality_reasons))
+                                      quality_reasons=sample.quality_reasons,
+                                      device_id=sample.device_id,
+                                      stream_id=sample.stream_id,
+                                      sample_sequence=sample.sample_sequence,
+                                      elapsed_realtime_nanos=sample.elapsed_realtime_nanos,
+                                      speed_accuracy_mps=sample.speed_accuracy_mps,
+                                      heading_accuracy_deg=sample.heading_accuracy_deg,
+                                      altitude_m=sample.altitude_m,
+                                      vertical_accuracy_m=sample.vertical_accuracy_m,
+                                      is_mock=sample.is_mock))
         return sample
 
 

@@ -21,6 +21,30 @@ class ServerTests(unittest.TestCase):
         with patch('greenwave.positioning.time.monotonic',return_value=provider.received_at+6):
             self.assertEqual(provider.status()['state'],'STALE')
 
+    def test_android_pairs_and_duplicate_retry_is_acknowledged(self):
+        status,payload=self.request('POST','/api/pair',{'code':self.server.pairing_code},
+                                    {'Content-Type':'application/json'})
+        self.assertEqual(status,200)
+        paired=json.loads(payload)
+        self.assertEqual(paired['token'],self.server.token)
+        body=dict(session_id=paired['session_id'],timestamp_seconds=12,
+                  latitude=52.2,longitude=20.9,speed_mps=3,gps_accuracy_m=4,
+                  source='ANDROID_FUSED',device_id='phone-1',stream_id='drive-1',
+                  sample_sequence=1,elapsed_realtime_nanos=123,is_mock=False)
+        headers={'X-GreenWave-Token':paired['token'],'Content-Type':'application/json'}
+        first=json.loads(self.request('POST','/api/position',body,headers)[1])
+        second=json.loads(self.request('POST','/api/position',body,headers)[1])
+        self.assertTrue(first['accepted'])
+        self.assertTrue(second['duplicate'])
+        self.assertEqual(second['external_status']['received_count'],1)
+        self.assertEqual(second['external_status']['transmission_count'],2)
+
+    def test_pairing_rejects_wrong_code_and_locks_after_five_attempts(self):
+        for _ in range(4):
+            self.assertEqual(self.request('POST','/api/pair',{'code':'wrong'})[0],403)
+        self.assertEqual(self.request('POST','/api/pair',{'code':'wrong'})[0],429)
+        self.assertEqual(self.request('POST','/api/pair',{'code':self.server.pairing_code})[0],429)
+
     def setUp(self):
         try:
             self.server=LocalServer(0)

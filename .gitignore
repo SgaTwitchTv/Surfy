@@ -294,6 +294,11 @@ FakesAssemblies/
 node_modules/
 data/runs/
 
+# Android/Gradle generated and machine-specific files
+**/.gradle/
+**/build/
+**/local.properties
+
 # Visual Studio 6 build log
 *.plg
 

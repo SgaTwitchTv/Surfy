@@ -93,12 +93,15 @@ transitions. It distinguishes gaps produced by the phone's location provider fro
 additional transport delays. The source file remains unchanged, and analysis
 rejects a run with an invalid hash or a broken record sequence.
 
-A phone can connect over USB through `adb reverse`. The mobile page transmits raw
-location measurements, while the server evaluates their quality, calculates a
-fallback speed when needed and filters stationary GPS drift. See
+A phone can connect over USB through `adb reverse`. The native Android transmitter
+uses Google Play services Fused Location in a foreground service, keeps a bounded
+retry queue, refreshes changed server sessions, and displays live accuracy, speed,
+age and delivery counters. A six-digit code pairs it with the local server. The
+browser transmitter remains available as a diagnostic fallback. The server
+evaluates quality, deduplicates retried native samples, calculates a fallback speed
+when needed and filters stationary GPS drift. See
 [docs/phone-gps.md](docs/phone-gps.md) for the complete setup and controlled-recording
-procedure. A native Android transmitter and projection onto a verified real-world
-corridor are the next M8 stages.
+procedure. Projection onto a verified real-world corridor is the next M8 stage.
 
 ## Data and interpretation
 

@@ -78,6 +78,37 @@ class ExternalPositionProviderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             provider.update(timestamp_seconds=1, speed_mps=1, latitude=91, longitude=20)
 
+    def test_native_fields_are_preserved_and_duplicate_sequence_is_ignored(self):
+        provider = ExternalPositionProvider()
+        fields = dict(timestamp_seconds=20, latitude=52.2, longitude=20.9,
+                      speed_mps=4.5, gps_accuracy_m=5, source='ANDROID_FUSED',
+                      device_id='device-1', stream_id='stream-1', sample_sequence=7,
+                      elapsed_realtime_nanos=123456, speed_accuracy_mps=.4,
+                      heading_accuracy_deg=3, altitude_m=100,
+                      vertical_accuracy_m=2, is_mock=False)
+        sample = provider.update(**fields)
+        duplicate = provider.update(**fields)
+        self.assertIs(sample, duplicate)
+        self.assertEqual(sample.speed_accuracy_mps, .4)
+        self.assertEqual(provider.count, 1)
+        self.assertEqual(provider.transmission_count, 2)
+        self.assertEqual(provider.duplicate_count, 1)
+        self.assertFalse(provider.last_update_accepted)
+
+    def test_mock_native_location_is_retained_but_not_usable(self):
+        provider = ExternalPositionProvider()
+        sample = provider.update(timestamp_seconds=20, latitude=52.2, longitude=20.9,
+                                 speed_mps=1, gps_accuracy_m=5, source='ANDROID_FUSED',
+                                 device_id='device-1', stream_id='stream-1',
+                                 sample_sequence=0, is_mock=True)
+        self.assertFalse(sample.usable_for_live)
+        self.assertIn('MOCK_LOCATION', sample.quality_reasons)
+
+    def test_native_source_requires_stable_identity(self):
+        provider = ExternalPositionProvider()
+        with self.assertRaises(ValueError):
+            provider.update(timestamp_seconds=1, speed_mps=1, source='ANDROID_FUSED')
+
 
 if __name__ == '__main__':
     unittest.main()

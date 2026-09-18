@@ -95,7 +95,11 @@ class RunAnalysis:
         raw_speeds = [sample['payload'].get('raw_speed_mps') for sample in samples]
         calculated_speeds = [sample['payload'].get('calculated_speed_mps') for sample in samples]
         speed_sources = Counter(sample['payload'].get('speed_source') or 'UNKNOWN' for sample in samples)
+        location_sources = Counter(sample.get('source') or 'UNKNOWN' for sample in samples)
         position_qualities = Counter(sample['payload'].get('position_quality') or 'UNKNOWN' for sample in samples)
+        speed_accuracies = [sample['payload'].get('speed_accuracy_mps') for sample in samples]
+        speed_accuracies = [float(value) for value in speed_accuracies
+                            if isinstance(value, (int, float)) and not isinstance(value, bool)]
         reasons = Counter()
         for sample in samples:
             values = sample['payload'].get('quality_reasons') or []
@@ -192,6 +196,12 @@ class RunAnalysis:
                 calculated_available_ratio=_ratio(available_calculated, len(samples)),
                 source_counts=dict(speed_sources),
                 maximum_final_mps=max((speed for speed in final_speeds if speed is not None), default=None)),
+            location_source_counts=dict(location_sources),
+            native_quality=dict(
+                speed_accuracy_samples=len(speed_accuracies),
+                speed_accuracy_median_mps=_percentile(speed_accuracies, 0.5),
+                speed_accuracy_p95_mps=_percentile(speed_accuracies, 0.95),
+                mock_samples=sum(sample['payload'].get('is_mock') is True for sample in samples)),
             position_quality_counts=dict(position_qualities),
             rejection_reason_counts=dict(reasons),
             raw_path_distance_m=path_distance,
@@ -267,6 +277,15 @@ class RunAnalysis:
                 'prediction_error_mean', 'recommendation_compliance')
         delta = {key: (None if baseline.get(key) is None or greenwave.get(key) is None
                        else greenwave[key] - baseline[key]) for key in keys}
+        gps_keys = ('sample_rate_hz', 'largest_gap_seconds', 'largest_phone_gap_seconds',
+                    'gaps_over_2_seconds', 'phone_gaps_over_2_seconds', 'usable_ratio')
+        baseline_gps, greenwave_gps = baseline['gps_quality'], greenwave['gps_quality']
+        gps_delta = {key: (None if baseline_gps.get(key) is None or greenwave_gps.get(key) is None
+                           else greenwave_gps[key] - baseline_gps[key]) for key in gps_keys}
+        for key in ('median_m', 'p95_m'):
+            first, second = baseline_gps.get('accuracy', {}).get(key), greenwave_gps.get('accuracy', {}).get(key)
+            gps_delta[f'accuracy_{key}'] = None if first is None or second is None else second - first
         return dict(schema_version=1, baseline=baseline, greenwave=greenwave,
                     delta=delta,
+                    gps_delta=gps_delta,
                     interpretation='Różnice opisują dwa zakończone logi; nie są dowodem przyczynowości.')

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from statistics import median
 from typing import Protocol
 import math
+import re
 import time
 
 
@@ -23,6 +24,15 @@ class PositionSample:
     position_quality: str = 'UNKNOWN'
     usable_for_live: bool = False
     quality_reasons: tuple[str, ...] = ()
+    device_id: str | None = None
+    stream_id: str | None = None
+    sample_sequence: int | None = None
+    elapsed_realtime_nanos: int | None = None
+    speed_accuracy_mps: float | None = None
+    heading_accuracy_deg: float | None = None
+    altitude_m: float | None = None
+    vertical_accuracy_m: float | None = None
+    is_mock: bool | None = None
 
 
 class PositionProvider(Protocol):
@@ -82,6 +92,9 @@ class ExternalPositionProvider:
         self._sample = None
         self.received_at = None
         self.count = 0
+        self.transmission_count = 0
+        self.duplicate_count = 0
+        self.last_update_accepted = True
         self.usable_count = 0
         self.quality_rejected_count = 0
         self.last_interval_seconds = None
@@ -89,6 +102,7 @@ class ExternalPositionProvider:
         self._last_timestamp = None
         self._points = deque(maxlen=12)
         self._calculated_speeds = deque(maxlen=5)
+        self._last_sequence_by_stream = {}
 
     @staticmethod
     def _number(value, name, *, optional=False):
@@ -97,6 +111,22 @@ class ExternalPositionProvider:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError(f'{name} must be a finite number')
         return float(value)
+
+    @staticmethod
+    def _identifier(value, name, *, optional=True):
+        if value is None and optional:
+            return None
+        if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9._:-]{1,80}', value):
+            raise ValueError(f'{name} must be a 1–80 character identifier')
+        return value
+
+    @staticmethod
+    def _integer(value, name, *, optional=True):
+        if value is None and optional:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f'{name} must be a non-negative integer')
+        return value
 
     @staticmethod
     def _position_quality(latitude, longitude, accuracy):
@@ -150,7 +180,15 @@ class ExternalPositionProvider:
                latitude: float | None = None, longitude: float | None = None,
                heading_deg: float | None = None, gps_accuracy_m: float | None = None,
                acceleration_mps2: float | None = None,
-               road_position_m: float | None = None, source: str = 'EXTERNAL'):
+               road_position_m: float | None = None, source: str = 'EXTERNAL',
+               device_id: str | None = None, stream_id: str | None = None,
+               sample_sequence: int | None = None,
+               elapsed_realtime_nanos: int | None = None,
+               speed_accuracy_mps: float | None = None,
+               heading_accuracy_deg: float | None = None,
+               altitude_m: float | None = None,
+               vertical_accuracy_m: float | None = None,
+               is_mock: bool | None = None):
         timestamp_seconds = self._number(timestamp_seconds, 'timestamp_seconds')
         speed_mps = self._number(speed_mps, 'speed_mps', optional=True)
         latitude = self._number(latitude, 'latitude', optional=True)
@@ -159,6 +197,14 @@ class ExternalPositionProvider:
         gps_accuracy_m = self._number(gps_accuracy_m, 'gps_accuracy_m', optional=True)
         acceleration_mps2 = self._number(acceleration_mps2, 'acceleration_mps2', optional=True)
         road_position_m = self._number(road_position_m, 'road_position_m', optional=True)
+        speed_accuracy_mps = self._number(speed_accuracy_mps, 'speed_accuracy_mps', optional=True)
+        heading_accuracy_deg = self._number(heading_accuracy_deg, 'heading_accuracy_deg', optional=True)
+        altitude_m = self._number(altitude_m, 'altitude_m', optional=True)
+        vertical_accuracy_m = self._number(vertical_accuracy_m, 'vertical_accuracy_m', optional=True)
+        device_id = self._identifier(device_id, 'device_id')
+        stream_id = self._identifier(stream_id, 'stream_id')
+        sample_sequence = self._integer(sample_sequence, 'sample_sequence')
+        elapsed_realtime_nanos = self._integer(elapsed_realtime_nanos, 'elapsed_realtime_nanos')
         if timestamp_seconds < 0 or speed_mps is not None and speed_mps < 0:
             raise ValueError('Invalid external position')
         if (latitude is None) != (longitude is None):
@@ -169,14 +215,37 @@ class ExternalPositionProvider:
             raise ValueError('longitude must be in [-180, 180]')
         if gps_accuracy_m is not None and gps_accuracy_m < 0:
             raise ValueError('gps_accuracy_m must be non-negative')
+        if any(value is not None and value < 0 for value in
+               (speed_accuracy_mps, heading_accuracy_deg, vertical_accuracy_m)):
+            raise ValueError('Accuracy values must be non-negative')
+        if is_mock is not None and not isinstance(is_mock, bool):
+            raise ValueError('is_mock must be a boolean')
         if not isinstance(source, str) or source not in ('EXTERNAL', 'WEB_GEOLOCATION', 'ANDROID_FUSED'):
             raise ValueError('Unknown external position source')
+        native_identity = (device_id, stream_id, sample_sequence)
+        if source == 'ANDROID_FUSED' and any(value is None for value in native_identity):
+            raise ValueError('ANDROID_FUSED requires device_id, stream_id and sample_sequence')
+        if source != 'ANDROID_FUSED' and any(value is not None for value in native_identity):
+            raise ValueError('Native identity fields require ANDROID_FUSED source')
 
         now = time.monotonic()
+        self.transmission_count += 1
+        if stream_id is not None:
+            stream_key = (device_id, stream_id)
+            previous_sequence = self._last_sequence_by_stream.get(stream_key)
+            if previous_sequence is not None and sample_sequence <= previous_sequence:
+                self.duplicate_count += 1
+                self.last_update_accepted = False
+                self.last_diagnostic = 'Powtórzona próbka Androida została bezpiecznie pominięta.'
+                return self._sample
+            self._last_sequence_by_stream[stream_key] = sample_sequence
+        self.last_update_accepted = True
         self.last_interval_seconds = None if self.received_at is None else max(0.0, now - self.received_at)
         self.received_at = now
         self.count += 1
         reasons = []
+        if is_mock:
+            reasons.append('MOCK_LOCATION')
         quality = self._position_quality(latitude, longitude, gps_accuracy_m)
         if quality == 'MISSING':
             reasons.append('LOCATION_MISSING')
@@ -219,12 +288,14 @@ class ExternalPositionProvider:
             selected_speed, speed_source = None, 'UNAVAILABLE'
             reasons.append('SPEED_UNAVAILABLE')
 
-        usable = quality in ('GOOD', 'FAIR', 'POOR') and timestamp_newer
+        usable = quality in ('GOOD', 'FAIR', 'POOR') and timestamp_newer and not is_mock
         if usable:
             self.usable_count += 1
         else:
             self.quality_rejected_count += 1
-        if quality == 'UNUSABLE':
+        if is_mock:
+            self.last_diagnostic = 'Android oznaczył lokalizację jako testową; próbka nie steruje aplikacją.'
+        elif quality == 'UNUSABLE':
             self.last_diagnostic = f'Dokładność GPS {gps_accuracy_m:.0f} m przekracza limit {self.MAX_USABLE_ACCURACY_M:.0f} m.'
         elif not timestamp_newer:
             self.last_diagnostic = 'Telefon przesłał próbkę ze starszym lub powtórzonym czasem.'
@@ -238,9 +309,19 @@ class ExternalPositionProvider:
             self.last_diagnostic = 'Telefon podał prędkość bezpośrednio.'
 
         self._sample = PositionSample(
-            timestamp_seconds, road_position_m, selected_speed, latitude, longitude,
-            heading_deg, gps_accuracy_m, acceleration_mps2, source, raw_speed,
-            calculated_speed, speed_source, quality, usable, tuple(dict.fromkeys(reasons)))
+            elapsed_seconds=timestamp_seconds, road_position_m=road_position_m,
+            speed_mps=selected_speed, latitude=latitude, longitude=longitude,
+            heading_deg=heading_deg, gps_accuracy_m=gps_accuracy_m,
+            acceleration_mps2=acceleration_mps2, source=source,
+            raw_speed_mps=raw_speed, calculated_speed_mps=calculated_speed,
+            speed_source=speed_source, position_quality=quality,
+            usable_for_live=usable, quality_reasons=tuple(dict.fromkeys(reasons)),
+            device_id=device_id, stream_id=stream_id,
+            sample_sequence=sample_sequence,
+            elapsed_realtime_nanos=elapsed_realtime_nanos,
+            speed_accuracy_mps=speed_accuracy_mps,
+            heading_accuracy_deg=heading_accuracy_deg, altitude_m=altitude_m,
+            vertical_accuracy_m=vertical_accuracy_m, is_mock=is_mock)
         return self._sample
 
     def status(self):
@@ -249,6 +330,8 @@ class ExternalPositionProvider:
         sample = self._sample
         return dict(
             received_count=self.count,
+            transmission_count=self.transmission_count,
+            duplicate_count=self.duplicate_count,
             usable_count=self.usable_count,
             quality_rejected_count=self.quality_rejected_count,
             age_seconds=age,
@@ -256,6 +339,9 @@ class ExternalPositionProvider:
             state=state,
             position_quality=None if sample is None else sample.position_quality,
             speed_source=None if sample is None else sample.speed_source,
+            sample_source=None if sample is None else sample.source,
+            device_id=None if sample is None else sample.device_id,
+            stream_id=None if sample is None else sample.stream_id,
             usable_for_live=bool(sample and sample.usable_for_live and state == 'RECEIVING'),
             diagnostic=self.last_diagnostic)
 

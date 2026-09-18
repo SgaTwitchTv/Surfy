@@ -21,12 +21,30 @@ class LocalServer(HTTPServer):
     def __init__(self, port=8765, application=None, host='127.0.0.1'):
         self.application = application if application is not None else GreenWaveApplication()
         self.token = secrets.token_hex(32)
+        self.pairing_code = f'{secrets.randbelow(1_000_000):06d}'
+        self.pairing_failures = 0
+        self.pairing_locked_until = 0.0
         self.replay = ReplaySession(self.application.logger)
         self.analysis = RunAnalysis(self.application.logger)
         self.replay_tick = time.monotonic()
         self.bind_host = host
         self.allow_network = host not in ('127.0.0.1', 'localhost')
         super().__init__((host, port), Handler)
+
+    def pair(self, code):
+        now = time.monotonic()
+        if now < self.pairing_locked_until:
+            raise PermissionError(f'Pairing locked for {int(self.pairing_locked_until - now) + 1} seconds')
+        if not isinstance(code, str) or not secrets.compare_digest(code, self.pairing_code):
+            self.pairing_failures += 1
+            if self.pairing_failures >= 5:
+                self.pairing_failures = 0
+                self.pairing_locked_until = now + 30
+            raise PermissionError('Invalid pairing code')
+        self.pairing_failures = 0
+        self.pairing_locked_until = 0.0
+        return dict(token=self.token, session_id=self.application.session_id,
+                    server_version='M8-native-1')
 
     def server_close(self):
         try:
@@ -104,6 +122,8 @@ class Handler(BaseHTTPRequestHandler):
         content = (STATIC / filename).read_bytes()
         if route in ('/', '/mobile.js'):
             content = content.replace(b'__GREENWAVE_TOKEN__', self.server.token.encode('ascii'))
+        if route == '/':
+            content = content.replace(b'__GREENWAVE_PAIRING_CODE__', self.server.pairing_code.encode('ascii'))
         self._send(200, content, content_type)
 
     def do_POST(self):
@@ -115,8 +135,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(413,{'error':'Request body must be 1–8192 bytes'})
         self.connection.settimeout(5)
         payload=self.rfile.read(length)
-        if not self._valid_host() or self.headers.get('X-GreenWave-Token') != self.server.token:
-            return self._send(403, {'error': 'Unauthorized local request'})
+        if not self._valid_host():
+            return self._send(403, {'error': 'Invalid local Host header'})
         origin = self.headers.get('Origin')
         allowed_origin = origin in (None, f'http://127.0.0.1:{self.server.server_port}',
                                     f'http://localhost:{self.server.server_port}')
@@ -128,6 +148,15 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(payload)
             if not isinstance(data, dict):
                 raise ValueError('Expected a JSON object')
+            route = self.path.split('?', 1)[0]
+            if route == '/api/pair':
+                try:
+                    return self._send(200, self.server.pair(data.get('code')))
+                except PermissionError as error:
+                    return self._send(429 if time.monotonic() < self.server.pairing_locked_until else 403,
+                                      {'error': str(error)})
+            if self.headers.get('X-GreenWave-Token') != self.server.token:
+                return self._send(403, {'error': 'Unauthorized local request'})
             app = self.server.application
             if data.pop('session_id', None) != app.session_id:
                 return self._send(409, {'error': 'Sesja zmieniła się. Odśwież widok i ponów działanie.'})
@@ -142,7 +171,9 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == '/api/position':
                 sample = app.ingest_external_position(**data)
                 self._send(200, {'external_position': asdict(sample),
-                                 'external_status': app.external_position.status()})
+                                 'external_status': app.external_position.status(),
+                                 'accepted': app.external_position.last_update_accepted,
+                                 'duplicate': not app.external_position.last_update_accepted})
                 return
             elif self.path == '/api/replay':
                 command=data.pop('command',None); value=data.pop('value',None)
@@ -168,7 +199,8 @@ def main():
     with LocalServer(args.port, host=args.host) as server:
         display_host = '127.0.0.1' if args.host in ('0.0.0.0', '') else args.host
         url = f'http://{display_host}:{server.server_port}'
-        print(f'GreenWave M7: {url}\nRecordings, replay and analysis enabled. Ctrl+C closes an active recording.', flush=True)
+        print(f'GreenWave M8: {url}\nAndroid pairing code: {server.pairing_code}\n'
+              'Recordings, replay and analysis enabled. Ctrl+C closes an active recording.', flush=True)
         if not args.no_browser:
             webbrowser.open(url)
         try:

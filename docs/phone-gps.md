@@ -1,5 +1,23 @@
 # Telefon → GreenWave przez USB
 
+## Zalecane: natywna aplikacja Android
+
+1. Podłącz telefon z włączonym debugowaniem USB. `adb devices` musi pokazać `device`.
+2. Zbuduj aplikację: `cd android/GreenWaveSensor`, a następnie `gradlew.bat testDebugUnitTest assembleDebug`.
+3. Zainstaluj ją: `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+4. W katalogu głównym repozytorium uruchom `python -m greenwave --no-browser`.
+5. W drugim terminalu wykonaj `adb reverse tcp:8765 tcp:8765`.
+6. Otwórz na komputerze `http://127.0.0.1:8765` i odczytaj sześciocyfrowy kod parowania.
+7. Otwórz aplikację **GreenWave Sensor**. Pozostaw adres `http://localhost:8765`, wpisz kod i wybierz **Połącz z GreenWave**.
+8. Wybierz **Uruchom pomiary** oraz zezwól na dokładną lokalizację i powiadomienia.
+9. Liczniki `Próbki utworzone` i `Potwierdzone przez Surface` powinny rosnąć, kolejka powinna wracać do zera, a komputer powinien pokazać źródło `ANDROID_FUSED`.
+
+Aplikacja żąda lokalizacji wysokiej dokładności co około sekundę, działa jako usługa pierwszoplanowa i wysyła czas monotoniczny Androida, dokładność pozycji, prędkość i jej dokładność, kierunek i jego dokładność, wysokość, dokładność pionową oraz flagę lokalizacji testowej. Bufor przechowuje do 300 próbek i ponawia wysyłkę po chwilowej utracie połączenia. Powtórzona próbka jest potwierdzana, lecz nie jest ponownie zapisywana w nagraniu.
+
+Przycisk **Ustawienia baterii aplikacji** otwiera ekran systemowy. Na czas testu ustaw użycie baterii GreenWave Sensor na `Unrestricted`/`Bez ograniczeń`. Nie trzeba przyznawać lokalizacji w tle: pomiar rozpoczyna użytkownik z widocznej aplikacji i kontynuuje go usługa pierwszoplanowa.
+
+## Awaryjnie: strona w Chrome
+
 1. Podłącz telefon z włączonym USB debugging. `adb devices` musi pokazać `device`.
 2. Zatrzymaj poprzedni serwer przez Ctrl+C i uruchom w repozytorium:
    `python -m greenwave --no-browser`
