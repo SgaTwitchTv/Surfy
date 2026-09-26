@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "route_id": "zwirki_wigury_draft",
+  "geometry_version": "osm-draft-2026-09-11-v1",
+  "name": "Żwirki i Wigury — geometria robocza",
+  "direction_description": "Roboczo: Banacha w kierunku południowym; bez zweryfikowanych linii zatrzymania",
+  "coordinates": [
+    [20.9882089, 52.2154971],
+    [20.9883752, 52.2141172],
+    [20.9885008, 52.2129090],
+    [20.9877647, 52.2103854],
+    [20.9870775, 52.2083825],
+    [20.9860110, 52.2052718],
+    [20.9854530, 52.2036337],
+    [20.9849167, 52.2020823]
+  ],
+  "source": {
+    "kind": "OPENSTREETMAP_EXTRACT",
+    "url": "https://www.openstreetmap.org/copyright",
+    "obtained_on": "2026-09-11",
+    "attribution": "© OpenStreetMap contributors, ODbL 1.0",
+    "notes": "Uproszczona linia z istniejącego lokalnego podkładu. Nie jest pomiarem osi jezdni ani linii zatrzymania."
+  },
+  "geometry_verification": {
+    "status": "DRAFT",
+    "date": "2026-09-18",
+    "notes": "Wyłącznie do diagnostyki matchera; wymaga desktopowego i terenowego sprawdzenia."
+  },
+  "speed_sections": [],
+  "stop_lines": []
+}

@@ -1,0 +1,799 @@
+{
+  "schema_version": 1,
+  "route_id": "arkadia_maczka_okopowa_v1",
+  "geometry_version": "osm-osrm-desk-2026-09-19-v1",
+  "name": "Arkadia: Reymonta/Maczka → Powązkowska/Okopowa",
+  "direction_description": "Od świateł przy Reymonta/Maczka w kierunku wschodnim ulicą Maczka, następnie Powązkowską do świateł jazdy na wprost przez Okopową; pierwszy test kończy się przy McDonald’s, bez przedłużenia do ronda ONZ.",
+  "coordinates": [
+    [
+      20.932512,
+      52.268512
+    ],
+    [
+      20.932555,
+      52.268504
+    ],
+    [
+      20.932675,
+      52.268483
+    ],
+    [
+      20.932883,
+      52.268448
+    ],
+    [
+      20.933277,
+      52.268381
+    ],
+    [
+      20.933365,
+      52.268366
+    ],
+    [
+      20.933885,
+      52.268281
+    ],
+    [
+      20.935341,
+      52.268062
+    ],
+    [
+      20.935583,
+      52.268024
+    ],
+    [
+      20.935822,
+      52.267987
+    ],
+    [
+      20.936156,
+      52.267929
+    ],
+    [
+      20.93695,
+      52.267773
+    ],
+    [
+      20.937528,
+      52.267646
+    ],
+    [
+      20.938116,
+      52.26751
+    ],
+    [
+      20.939601,
+      52.267139
+    ],
+    [
+      20.939674,
+      52.267121
+    ],
+    [
+      20.940314,
+      52.266947
+    ],
+    [
+      20.941388,
+      52.266652
+    ],
+    [
+      20.943149,
+      52.266099
+    ],
+    [
+      20.944689,
+      52.265582
+    ],
+    [
+      20.944739,
+      52.265565
+    ],
+    [
+      20.944942,
+      52.265488
+    ],
+    [
+      20.945196,
+      52.265394
+    ],
+    [
+      20.945606,
+      52.265235
+    ],
+    [
+      20.949201,
+      52.263847
+    ],
+    [
+      20.949344,
+      52.263792
+    ],
+    [
+      20.949479,
+      52.263739
+    ],
+    [
+      20.949961,
+      52.26355
+    ],
+    [
+      20.950756,
+      52.26324
+    ],
+    [
+      20.951357,
+      52.262972
+    ],
+    [
+      20.952099,
+      52.262656
+    ],
+    [
+      20.952584,
+      52.262466
+    ],
+    [
+      20.952641,
+      52.262444
+    ],
+    [
+      20.952682,
+      52.262427
+    ],
+    [
+      20.952797,
+      52.262382
+    ],
+    [
+      20.952983,
+      52.262304
+    ],
+    [
+      20.953565,
+      52.262087
+    ],
+    [
+      20.953603,
+      52.262072
+    ],
+    [
+      20.953724,
+      52.262025
+    ],
+    [
+      20.953913,
+      52.261954
+    ],
+    [
+      20.953956,
+      52.261938
+    ],
+    [
+      20.954302,
+      52.261808
+    ],
+    [
+      20.955616,
+      52.261306
+    ],
+    [
+      20.95646,
+      52.260982
+    ],
+    [
+      20.956886,
+      52.26082
+    ],
+    [
+      20.957314,
+      52.260656
+    ],
+    [
+      20.957378,
+      52.260632
+    ],
+    [
+      20.95784,
+      52.260456
+    ],
+    [
+      20.958264,
+      52.260285
+    ],
+    [
+      20.960039,
+      52.259539
+    ],
+    [
+      20.960844,
+      52.259235
+    ],
+    [
+      20.960939,
+      52.259199
+    ],
+    [
+      20.960966,
+      52.259189
+    ],
+    [
+      20.961188,
+      52.259105
+    ],
+    [
+      20.961375,
+      52.25903
+    ],
+    [
+      20.961701,
+      52.258903
+    ],
+    [
+      20.96172,
+      52.258895
+    ],
+    [
+      20.96195,
+      52.258805
+    ],
+    [
+      20.965728,
+      52.257351
+    ],
+    [
+      20.966006,
+      52.257222
+    ],
+    [
+      20.96625,
+      52.257108
+    ],
+    [
+      20.966493,
+      52.257014
+    ],
+    [
+      20.967016,
+      52.256816
+    ],
+    [
+      20.96712,
+      52.256777
+    ],
+    [
+      20.967191,
+      52.25675
+    ],
+    [
+      20.967354,
+      52.256687
+    ],
+    [
+      20.967461,
+      52.256646
+    ],
+    [
+      20.967616,
+      52.256587
+    ],
+    [
+      20.967667,
+      52.256568
+    ],
+    [
+      20.96852,
+      52.256255
+    ],
+    [
+      20.968663,
+      52.256195
+    ],
+    [
+      20.968766,
+      52.256157
+    ],
+    [
+      20.969093,
+      52.256047
+    ],
+    [
+      20.969199,
+      52.256009
+    ],
+    [
+      20.969695,
+      52.255821
+    ],
+    [
+      20.969761,
+      52.255796
+    ],
+    [
+      20.970017,
+      52.255701
+    ],
+    [
+      20.970196,
+      52.255634
+    ],
+    [
+      20.970682,
+      52.255452
+    ],
+    [
+      20.971287,
+      52.255229
+    ],
+    [
+      20.971778,
+      52.255087
+    ],
+    [
+      20.971955,
+      52.255019
+    ],
+    [
+      20.972102,
+      52.254964
+    ],
+    [
+      20.972411,
+      52.254847
+    ],
+    [
+      20.972632,
+      52.254766
+    ],
+    [
+      20.97316,
+      52.254576
+    ],
+    [
+      20.973913,
+      52.254305
+    ],
+    [
+      20.973966,
+      52.254286
+    ],
+    [
+      20.974602,
+      52.254061
+    ],
+    [
+      20.974936,
+      52.253943
+    ],
+    [
+      20.975154,
+      52.25387
+    ],
+    [
+      20.975403,
+      52.253795
+    ],
+    [
+      20.975538,
+      52.25376
+    ],
+    [
+      20.975709,
+      52.253721
+    ],
+    [
+      20.975968,
+      52.253669
+    ],
+    [
+      20.976254,
+      52.253632
+    ],
+    [
+      20.976712,
+      52.253593
+    ],
+    [
+      20.97719,
+      52.25356
+    ],
+    [
+      20.977444,
+      52.253543
+    ],
+    [
+      20.978125,
+      52.253496
+    ],
+    [
+      20.978156,
+      52.253493
+    ],
+    [
+      20.97862,
+      52.253462
+    ],
+    [
+      20.978945,
+      52.25344
+    ],
+    [
+      20.979489,
+      52.253404
+    ],
+    [
+      20.979631,
+      52.253394
+    ],
+    [
+      20.979809,
+      52.253382
+    ],
+    [
+      20.980186,
+      52.253354
+    ],
+    [
+      20.980443,
+      52.253335
+    ],
+    [
+      20.980611,
+      52.253288
+    ],
+    [
+      20.98082,
+      52.253274
+    ],
+    [
+      20.980867,
+      52.253271
+    ],
+    [
+      20.980911,
+      52.253269
+    ],
+    [
+      20.980955,
+      52.253266
+    ],
+    [
+      20.981087,
+      52.253284
+    ]
+  ],
+  "source": {
+    "kind": "OSRM_ROUTE_OVER_OPENSTREETMAP",
+    "url": "https://router.project-osrm.org/route/v1/driving/20.932530,52.268550;20.981089,52.253278",
+    "obtained_on": "2026-09-19",
+    "attribution": "© OpenStreetMap contributors, ODbL 1.0",
+    "distance_m": 3764.9,
+    "duration_seconds": 359.4,
+    "notes": "Granice i kierunek podał użytkownik; przebieg sprawdzono biurkowo z OSM/OSRM."
+  },
+  "geometry_verification": {
+    "status": "DESK_CHECKED",
+    "date": "2026-09-19",
+    "notes": "Właściwa jezdnia i wszystkie połączenia wymagają odbioru podczas kontrolowanego przejazdu."
+  },
+  "speed_sections": [
+    {
+      "start_s_m": 0,
+      "end_s_m": 3755.3205339128076,
+      "limit_mps": 13.88888888888889,
+      "source": {
+        "kind": "OPENSTREETMAP_MAXSPEED",
+        "url": "https://www.openstreetmap.org/copyright",
+        "obtained_on": "2026-09-19",
+        "notes": "Tag maxspeed=50 na odcinkach Maczka, ronda i Powązkowskiej; znaki wymagają kontroli terenowej."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-19",
+        "notes": "Nie używać do rekomendacji live przed potwierdzeniem znaków w terenie."
+      }
+    }
+  ],
+  "stop_lines": [
+    {
+      "stop_line_id": "SL01_MACZKA_PEDESTRIAN",
+      "signal_id": null,
+      "segment_index": 13,
+      "coordinates": [
+        [
+          20.93953386088566,
+          52.267039208280764
+        ],
+        [
+          20.93966716737951,
+          52.26723903448935
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/12168894882",
+        "obtained_on": "2026-09-19",
+        "label": "Maczka — przejście przed Rudnickiego",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL02_MACZKA_RUDNICKIEGO",
+      "signal_id": null,
+      "segment_index": 21,
+      "coordinates": [
+        [
+          20.944851180706095,
+          52.26539549280579
+        ],
+        [
+          20.94503369277279,
+          52.26558018393825
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/34675218",
+        "obtained_on": "2026-09-19",
+        "label": "Maczka × Rudnickiego",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL03_RONDO_KATYNSKIE_ENTRY",
+      "signal_id": null,
+      "segment_index": 30,
+      "coordinates": [
+        [
+          20.952488625268167,
+          52.26237522619793
+        ],
+        [
+          20.95267878113057,
+          52.2625570063469
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/10028482222",
+        "obtained_on": "2026-09-19",
+        "label": "Wjazd na rondo Ofiar Zbrodni Katyńskiej",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL04_RONDO_KATYNSKIE_EXIT",
+      "signal_id": null,
+      "segment_index": 37,
+      "coordinates": [
+        [
+          20.95350892920982,
+          52.26198071776926
+        ],
+        [
+          20.953697936780703,
+          52.26216294585426
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/10028482225",
+        "obtained_on": "2026-09-19",
+        "label": "Wyjazd z ronda w Powązkowską",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL05_POWAZKOWSKA_CEMETERY",
+      "signal_id": null,
+      "segment_index": 44,
+      "coordinates": [
+        [
+          20.95721997472265,
+          52.26056470020261
+        ],
+        [
+          20.957407149924478,
+          52.26074763521298
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/9797089261",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska — przejście przy cmentarzu",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL06_POWAZKOWSKA_KRASINSKIEGO",
+      "signal_id": null,
+      "segment_index": 50,
+      "coordinates": [
+        [
+          20.960751229491034,
+          52.25914322128525
+        ],
+        [
+          20.960936913357166,
+          52.25932672458279
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/13278522081",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska × Krasińskiego/Ficowskiego",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL07_POWAZKOWSKA_RYDYGIERA",
+      "signal_id": null,
+      "segment_index": 63,
+      "coordinates": [
+        [
+          20.967027432678844,
+          52.25668514376385
+        ],
+        [
+          20.96721358845187,
+          52.256868467918835
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/5022839623",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska × Rydygiera",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL08_POWAZKOWSKA_DUCHNICKA",
+      "signal_id": null,
+      "segment_index": 73,
+      "coordinates": [
+        [
+          20.969601781664633,
+          52.2557293910192
+        ],
+        [
+          20.96978749559473,
+          52.25591288292281
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/9972107244",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska × Duchnicka",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL09_POWAZKOWSKA_TATARSKA",
+      "signal_id": null,
+      "segment_index": 84,
+      "coordinates": [
+        [
+          20.972606432686888,
+          52.254650006928976
+        ],
+        [
+          20.972785209373882,
+          52.25483606126885
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/12593615866",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska × Tatarska",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    },
+    {
+      "stop_line_id": "SL10_POWAZKOWSKA_OKOPOWA",
+      "signal_id": null,
+      "segment_index": 109,
+      "coordinates": [
+        [
+          20.980802084322203,
+          52.25316663966341
+        ],
+        [
+          20.980838673346682,
+          52.253381311974735
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "STRAIGHT",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/3707287275",
+        "obtained_on": "2026-09-19",
+        "label": "Powązkowska × Okopowa",
+        "notes": "Linia prostopadła do geometrii w pozycji węzła OSM; nie jest pomiarem terenowym."
+      },
+      "verification": {
+        "status": "DRAFT",
+        "date": "2026-09-19",
+        "notes": "Położenie i właściwy sygnalizator wymagają potwierdzenia przez pasażera."
+      },
+      "position_uncertainty_m": 15
+    }
+  ]
+}

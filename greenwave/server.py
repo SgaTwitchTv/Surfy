@@ -11,6 +11,9 @@ import webbrowser
 from greenwave.application import DATA, GreenWaveApplication
 from greenwave.replay import ReplaySession
 from greenwave.analysis import RunAnalysis
+from greenwave.gps_replay import GPSReplaySession
+from greenwave.mapping_analysis import MappingAnalysis, MappingAnalysisJobs
+from greenwave.observation_history import ObservationHistory
 
 STATIC = Path(__file__).resolve().parent / 'web'
 
@@ -26,7 +29,12 @@ class LocalServer(HTTPServer):
         self.pairing_locked_until = 0.0
         self.replay = ReplaySession(self.application.logger)
         self.analysis = RunAnalysis(self.application.logger)
+        self.gps_replay = GPSReplaySession(self.application.logger, self.application.selected_route)
+        self.mapping_analysis = MappingAnalysis(self.application.logger)
+        self.observation_history = ObservationHistory(self.application.logger, self.application.routes)
+        self.mapping_analysis_jobs = MappingAnalysisJobs(self.mapping_analysis)
         self.replay_tick = time.monotonic()
+        self.gps_replay_tick = time.monotonic()
         self.bind_host = host
         self.allow_network = host not in ('127.0.0.1', 'localhost')
         super().__init__((host, port), Handler)
@@ -48,6 +56,7 @@ class LocalServer(HTTPServer):
 
     def server_close(self):
         try:
+            self.mapping_analysis_jobs.close()
             self.application.close()
         finally:
             super().server_close()
@@ -83,12 +92,37 @@ class Handler(BaseHTTPRequestHandler):
         route = self.path.split('?', 1)[0]
         if route == '/api/state':
             return self._send(200, self.server.application.snapshot())
+        if route == '/api/routes':
+            return self._send(200, self.server.application.routes.list())
+        if route in ('/api/observation-history', '/api/observation-history/completeness'):
+            if self.headers.get('X-GreenWave-Token') != self.server.token:
+                return self._send(403, {'error': 'Unauthorized local request'})
+            from urllib.parse import parse_qs, urlparse
+            query = parse_qs(urlparse(self.path).query)
+            try:
+                method = self.server.observation_history.completeness if route.endswith('/completeness') else self.server.observation_history.read
+                return self._send(200, method(query.get('route_id', [None])[0]))
+            except (ValueError, OSError) as error:
+                return self._send(400, {'error': str(error)})
         if route == '/mobile':
             content = (STATIC / 'mobile.html').read_bytes().replace(b'__GREENWAVE_TOKEN__', self.server.token.encode('ascii'))
             return self._send(200, content, 'text/html; charset=utf-8')
         if route == '/api/replay/state':
             now=time.monotonic(); self.server.replay.advance(now-self.server.replay_tick); self.server.replay_tick=now
             return self._send(200, self.server.replay.state())
+        if route == '/api/gps-replay/state':
+            now = time.monotonic()
+            self.server.gps_replay.advance(now - self.server.gps_replay_tick)
+            self.server.gps_replay_tick = now
+            return self._send(200, self.server.gps_replay.state())
+        if route.startswith('/api/mapping/jobs/'):
+            if self.headers.get('X-GreenWave-Token') != self.server.token:
+                return self._send(403, {'error': 'Unauthorized local request'})
+            try:
+                job_id = route.removeprefix('/api/mapping/jobs/')
+                return self._send(200, self.server.mapping_analysis_jobs.status(job_id))
+            except ValueError as error:
+                return self._send(400, {'error': str(error)})
         if route.startswith('/api/analysis/'):
             try:
                 path=route.removeprefix('/api/analysis/')
@@ -116,6 +150,12 @@ class Handler(BaseHTTPRequestHandler):
                  '/mobile.js': ('mobile.js', 'text/javascript; charset=utf-8')}
         if route == '/map-data.json':
             return self._send(200, (DATA / 'maps/warsaw.json').read_bytes())
+        if route == '/map-data/chomiczowka.json':
+            return self._send(200, (DATA / 'maps/chomiczowka.json').read_bytes())
+        if route == '/map-data/arkadia.json':
+            return self._send(200, (DATA / 'maps/arkadia.json').read_bytes())
+        if route == '/map-data/radom.json':
+            return self._send(200, (DATA / 'maps/radom.json').read_bytes())
         if route not in files:
             return self._send(404, {'error': 'Not found'})
         filename, content_type = files[route]
@@ -166,6 +206,8 @@ class Handler(BaseHTTPRequestHandler):
                 app.reset(**data)
             elif self.path == '/api/observe':
                 app.observe(**data)
+            elif self.path == '/api/observe-route':
+                app.observe_route(**data)
             elif self.path == '/api/recording':
                 app.recording(**data)
             elif self.path == '/api/position':
@@ -175,6 +217,35 @@ class Handler(BaseHTTPRequestHandler):
                                  'accepted': app.external_position.last_update_accepted,
                                  'duplicate': not app.external_position.last_update_accepted})
                 return
+            elif self.path == '/api/mapping/select':
+                app.select_route(data.pop('route_id', None))
+                self.server.gps_replay.set_route(app.selected_route)
+            elif self.path == '/api/view':
+                app.set_view_mode(data.pop('mode', None))
+            elif self.path == '/api/gps-replay':
+                command = data.pop('command', None); value = data.pop('value', None)
+                self.server.gps_replay_tick = time.monotonic()
+                self.server.gps_replay.command(command, value)
+                if command == 'load':
+                    # A run used to construct a local draft route has an exact,
+                    # reviewable association. Select it automatically; generic
+                    # recordings still require an explicit route choice.
+                    associated_route = app.routes.for_recording(value)
+                    if associated_route is not None:
+                        app.select_route(associated_route.route_id)
+                        self.server.gps_replay.set_route(app.selected_route)
+                self._send(200, self.server.gps_replay.state()); return
+            elif self.path == '/api/mapping/analyze':
+                run_id = data.pop('run_id', None)
+                write = data.pop('write', False)
+                if data:
+                    raise ValueError('Unknown mapping analysis fields')
+                self._send(202, self.server.mapping_analysis_jobs.start(
+                    run_id, app.selected_route, write=write)); return
+            elif self.path == '/api/observation-history/sync':
+                if data:
+                    raise ValueError('Unknown observation history fields')
+                self._send(200, self.server.observation_history.sync()); return
             elif self.path == '/api/replay':
                 command=data.pop('command',None); value=data.pop('value',None)
                 self.server.replay_tick=time.monotonic(); self.server.replay.command(command,value)

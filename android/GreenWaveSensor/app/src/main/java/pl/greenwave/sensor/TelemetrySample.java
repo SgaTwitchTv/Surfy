@@ -18,11 +18,13 @@ final class TelemetrySample {
         this.sequence = sequence;
     }
 
-    JSONObject toJson(String sessionId) throws JSONException {
+    JSONObject toJson(String sessionId, long sentElapsedRealtimeNanos) throws JSONException {
+        captureAgeNanos(location.getElapsedRealtimeNanos(), sentElapsedRealtimeNanos);
         JSONObject json = new JSONObject();
         json.put("session_id", sessionId);
         json.put("timestamp_seconds", location.getTime() / 1000.0);
         json.put("elapsed_realtime_nanos", location.getElapsedRealtimeNanos());
+        json.put("sent_elapsed_realtime_nanos", sentElapsedRealtimeNanos);
         json.put("latitude", location.getLatitude());
         json.put("longitude", location.getLongitude());
         json.put("gps_accuracy_m", location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL);
@@ -38,5 +40,13 @@ final class TelemetrySample {
         json.put("stream_id", streamId);
         json.put("sample_sequence", sequence);
         return json;
+    }
+
+    static long captureAgeNanos(long capturedElapsedRealtimeNanos,
+                                long sentElapsedRealtimeNanos) {
+        if (capturedElapsedRealtimeNanos < 0 || sentElapsedRealtimeNanos < capturedElapsedRealtimeNanos) {
+            throw new IllegalArgumentException("Send time cannot precede the location measurement");
+        }
+        return sentElapsedRealtimeNanos - capturedElapsedRealtimeNanos;
     }
 }

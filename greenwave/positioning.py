@@ -28,6 +28,10 @@ class PositionSample:
     stream_id: str | None = None
     sample_sequence: int | None = None
     elapsed_realtime_nanos: int | None = None
+    sent_elapsed_realtime_nanos: int | None = None
+    measurement_age_lower_bound_seconds: float | None = None
+    freshness_status: str = 'UNKNOWN'
+    live_control_eligible: bool = False
     speed_accuracy_mps: float | None = None
     heading_accuracy_deg: float | None = None
     altitude_m: float | None = None
@@ -94,6 +98,7 @@ class ExternalPositionProvider:
     def reset(self):
         self._sample = None
         self.received_at = None
+        self.last_transmission_received_at = None
         self.count = 0
         self.transmission_count = 0
         self.duplicate_count = 0
@@ -102,10 +107,25 @@ class ExternalPositionProvider:
         self.quality_rejected_count = 0
         self.last_interval_seconds = None
         self.last_diagnostic = 'Oczekiwanie na pierwszą próbkę.'
-        self._last_timestamp = None
+        # The acceptance watermark is deliberately separate from motion
+        # history.  Clearing a speed/filter window must never make an older
+        # packet eligible to replace the current position.
+        self._timestamp_watermark = None
+        self._motion_last_timestamp = None
         self._points = deque(maxlen=12)
         self._calculated_speeds = deque(maxlen=5)
         self._last_sequence_by_stream = {}
+        self._active_stream = None
+        self._last_elapsed_realtime_nanos = None
+        self._stationary_latched = False
+        self._movement_evidence_count = 0
+        self.last_update_continuity_reset = False
+
+    def _reset_motion_history(self):
+        self._motion_last_timestamp = None
+        self._last_elapsed_realtime_nanos = None
+        self._points.clear()
+        self._calculated_speeds.clear()
         self._stationary_latched = False
         self._movement_evidence_count = 0
 
@@ -189,6 +209,7 @@ class ExternalPositionProvider:
                device_id: str | None = None, stream_id: str | None = None,
                sample_sequence: int | None = None,
                elapsed_realtime_nanos: int | None = None,
+               sent_elapsed_realtime_nanos: int | None = None,
                speed_accuracy_mps: float | None = None,
                heading_accuracy_deg: float | None = None,
                altitude_m: float | None = None,
@@ -210,6 +231,8 @@ class ExternalPositionProvider:
         stream_id = self._identifier(stream_id, 'stream_id')
         sample_sequence = self._integer(sample_sequence, 'sample_sequence')
         elapsed_realtime_nanos = self._integer(elapsed_realtime_nanos, 'elapsed_realtime_nanos')
+        sent_elapsed_realtime_nanos = self._integer(
+            sent_elapsed_realtime_nanos, 'sent_elapsed_realtime_nanos')
         if timestamp_seconds < 0 or speed_mps is not None and speed_mps < 0:
             raise ValueError('Invalid external position')
         if (latitude is None) != (longitude is None):
@@ -232,9 +255,15 @@ class ExternalPositionProvider:
             raise ValueError('ANDROID_FUSED requires device_id, stream_id and sample_sequence')
         if source != 'ANDROID_FUSED' and any(value is not None for value in native_identity):
             raise ValueError('Native identity fields require ANDROID_FUSED source')
+        if sent_elapsed_realtime_nanos is not None and elapsed_realtime_nanos is None:
+            raise ValueError('sent_elapsed_realtime_nanos requires elapsed_realtime_nanos')
+        if (sent_elapsed_realtime_nanos is not None and
+                sent_elapsed_realtime_nanos < elapsed_realtime_nanos):
+            raise ValueError('sent_elapsed_realtime_nanos cannot precede the measurement')
 
         now = time.monotonic()
         self.transmission_count += 1
+        self.last_update_continuity_reset = False
         if stream_id is not None:
             stream_key = (device_id, stream_id)
             previous_sequence = self._last_sequence_by_stream.get(stream_key)
@@ -244,11 +273,25 @@ class ExternalPositionProvider:
                 self.last_diagnostic = 'Powtórzona próbka Androida została bezpiecznie pominięta.'
                 return self._sample
             self._last_sequence_by_stream[stream_key] = sample_sequence
+            if self._active_stream is not None and stream_key != self._active_stream:
+                self._reset_motion_history()
+                self._timestamp_watermark = None
+                self.last_update_continuity_reset = True
+            self._active_stream = stream_key
         self.last_update_accepted = True
-        self.last_interval_seconds = None if self.received_at is None else max(0.0, now - self.received_at)
-        self.received_at = now
+        self.last_interval_seconds = (None if self.last_transmission_received_at is None else
+                                      max(0.0, now - self.last_transmission_received_at))
+        self.last_transmission_received_at = now
         self.count += 1
         reasons = []
+        measurement_age = (None if sent_elapsed_realtime_nanos is None else
+                           (sent_elapsed_realtime_nanos - elapsed_realtime_nanos) / 1_000_000_000)
+        freshness = ('UNKNOWN' if measurement_age is None else
+                     'STALE' if measurement_age > self.STALE_AFTER_SECONDS else 'FRESH')
+        if freshness == 'UNKNOWN':
+            reasons.append('FRESHNESS_UNKNOWN')
+        elif freshness == 'STALE':
+            reasons.append('MEASUREMENT_STALE')
         if is_mock:
             reasons.append('MOCK_LOCATION')
         quality = self._position_quality(latitude, longitude, gps_accuracy_m)
@@ -261,7 +304,8 @@ class ExternalPositionProvider:
         elif quality == 'UNUSABLE':
             reasons.append('GPS_ACCURACY_TOO_LOW')
 
-        timestamp_newer = self._last_timestamp is None or timestamp_seconds > self._last_timestamp
+        timestamp_newer = (self._timestamp_watermark is None or
+                           timestamp_seconds > self._timestamp_watermark)
         if not timestamp_newer:
             reasons.append('TIMESTAMP_NOT_NEWER')
         raw_speed = speed_mps
@@ -270,15 +314,25 @@ class ExternalPositionProvider:
             raw_speed = None
 
         calculated_speed = None
-        if timestamp_newer:
-            if self._last_timestamp is not None and timestamp_seconds - self._last_timestamp > 12.0:
-                self._points.clear()
-                self._calculated_speeds.clear()
+        if timestamp_newer and not is_mock:
+            monotonic_gap = (None if elapsed_realtime_nanos is None or self._last_elapsed_realtime_nanos is None else
+                             (elapsed_realtime_nanos - self._last_elapsed_realtime_nanos) / 1_000_000_000)
+            wall_gap = (None if self._motion_last_timestamp is None else
+                        timestamp_seconds - self._motion_last_timestamp)
+            if ((monotonic_gap is not None and (monotonic_gap <= 0 or monotonic_gap > self.STALE_AFTER_SECONDS)) or
+                    (monotonic_gap is None and wall_gap is not None and wall_gap > self.STALE_AFTER_SECONDS)):
+                self._reset_motion_history()
+                self.last_update_continuity_reset = True
             calculated_speed = self._calculate_speed(timestamp_seconds, latitude, longitude, gps_accuracy_m)
             if (latitude is not None and gps_accuracy_m is not None and
                     gps_accuracy_m <= self.MAX_DERIVATION_ACCURACY_M):
                 self._points.append((timestamp_seconds, latitude, longitude, gps_accuracy_m))
-            self._last_timestamp = timestamp_seconds
+            self._timestamp_watermark = timestamp_seconds
+            self._motion_last_timestamp = timestamp_seconds
+            self._last_elapsed_realtime_nanos = elapsed_realtime_nanos
+        elif not timestamp_newer or is_mock:
+            self._reset_motion_history()
+            self.last_update_continuity_reset = True
 
         stationary_evidence = timestamp_newer and self._stationary_confirmed(
             timestamp_seconds, latitude, longitude, gps_accuracy_m)
@@ -314,6 +368,7 @@ class ExternalPositionProvider:
             reasons.append('SPEED_UNAVAILABLE')
 
         usable = quality in ('GOOD', 'FAIR', 'POOR') and timestamp_newer and not is_mock
+        live_control_eligible = usable and freshness == 'FRESH'
         if usable:
             self.usable_count += 1
         else:
@@ -335,7 +390,7 @@ class ExternalPositionProvider:
         else:
             self.last_diagnostic = 'Telefon podał prędkość bezpośrednio.'
 
-        self._sample = PositionSample(
+        received_sample = PositionSample(
             elapsed_seconds=timestamp_seconds, road_position_m=road_position_m,
             speed_mps=selected_speed, latitude=latitude, longitude=longitude,
             heading_deg=heading_deg, gps_accuracy_m=gps_accuracy_m,
@@ -346,15 +401,27 @@ class ExternalPositionProvider:
             device_id=device_id, stream_id=stream_id,
             sample_sequence=sample_sequence,
             elapsed_realtime_nanos=elapsed_realtime_nanos,
+            sent_elapsed_realtime_nanos=sent_elapsed_realtime_nanos,
+            measurement_age_lower_bound_seconds=measurement_age,
+            freshness_status=freshness,
+            live_control_eligible=live_control_eligible,
             speed_accuracy_mps=speed_accuracy_mps,
             heading_accuracy_deg=heading_accuracy_deg, altitude_m=altitude_m,
             vertical_accuracy_m=vertical_accuracy_m, is_mock=is_mock)
-        return self._sample
+        # Preserve the last forward-moving real-time sample when an old/mock packet
+        # arrives; the received packet is still returned so the logger can archive it.
+        if timestamp_newer and not is_mock:
+            self._sample = received_sample
+            self.received_at = now
+        return received_sample
 
     def status(self):
-        age = None if self.received_at is None else max(0.0, time.monotonic() - self.received_at)
-        state = 'WAITING' if age is None else 'STALE' if age > self.STALE_AFTER_SECONDS else 'RECEIVING'
         sample = self._sample
+        age = None if self.received_at is None else max(0.0, time.monotonic() - self.received_at)
+        measurement_age = (None if sample is None or sample.measurement_age_lower_bound_seconds is None or age is None
+                           else sample.measurement_age_lower_bound_seconds + age)
+        state = ('WAITING' if age is None else 'STALE' if age > self.STALE_AFTER_SECONDS or
+                 measurement_age is not None and measurement_age > self.STALE_AFTER_SECONDS else 'RECEIVING')
         return dict(
             received_count=self.count,
             transmission_count=self.transmission_count,
@@ -362,6 +429,10 @@ class ExternalPositionProvider:
             usable_count=self.usable_count,
             quality_rejected_count=self.quality_rejected_count,
             age_seconds=age,
+            receipt_age_seconds=age,
+            measurement_age_lower_bound_seconds=measurement_age,
+            freshness_status=(None if sample is None else 'UNKNOWN' if measurement_age is None else
+                              'STALE' if measurement_age > self.STALE_AFTER_SECONDS else 'FRESH'),
             sample_interval_seconds=self.last_interval_seconds,
             state=state,
             position_quality=None if sample is None else sample.position_quality,
@@ -374,6 +445,8 @@ class ExternalPositionProvider:
             device_id=None if sample is None else sample.device_id,
             stream_id=None if sample is None else sample.stream_id,
             usable_for_live=bool(sample and sample.usable_for_live and state == 'RECEIVING'),
+            live_control_eligible=bool(sample and sample.live_control_eligible and state == 'RECEIVING'),
+            continuity_reset=self.last_update_continuity_reset,
             diagnostic=self.last_diagnostic)
 
     def sample(self) -> PositionSample | None:

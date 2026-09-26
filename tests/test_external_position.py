@@ -4,6 +4,39 @@ from greenwave.positioning import ExternalPositionProvider
 
 
 class ExternalPositionProviderTests(unittest.TestCase):
+    def test_out_of_order_packet_never_lowers_acceptance_watermark(self):
+        provider = ExternalPositionProvider()
+        common = dict(latitude=52.2, longitude=20.9, speed_mps=1,
+                      gps_accuracy_m=4, source='EXTERNAL')
+        provider.update(timestamp_seconds=100, **common)
+        old = provider.update(timestamp_seconds=90, **common)
+        still_old = provider.update(timestamp_seconds=91, **common)
+        self.assertIn('TIMESTAMP_NOT_NEWER', old.quality_reasons)
+        self.assertIn('TIMESTAMP_NOT_NEWER', still_old.quality_reasons)
+        self.assertEqual(provider.sample().elapsed_seconds, 100)
+
+    def test_native_measurement_age_and_stream_change_reset_continuity(self):
+        provider = ExternalPositionProvider()
+        common = dict(latitude=52.2, longitude=20.9, speed_mps=1,
+                      gps_accuracy_m=4, source='ANDROID_FUSED', device_id='phone', is_mock=False)
+        first = provider.update(timestamp_seconds=10, stream_id='one', sample_sequence=1,
+            elapsed_realtime_nanos=1_000_000_000, sent_elapsed_realtime_nanos=1_200_000_000, **common)
+        self.assertEqual(first.freshness_status, 'FRESH')
+        self.assertAlmostEqual(first.measurement_age_lower_bound_seconds, .2)
+        self.assertTrue(first.live_control_eligible)
+        provider.update(timestamp_seconds=11, stream_id='two', sample_sequence=1,
+            elapsed_realtime_nanos=2_000_000_000, sent_elapsed_realtime_nanos=2_100_000_000, **common)
+        self.assertTrue(provider.last_update_continuity_reset)
+
+    def test_buffered_native_measurement_is_not_live_control_eligible(self):
+        provider = ExternalPositionProvider()
+        sample = provider.update(timestamp_seconds=10, latitude=52.2, longitude=20.9,
+            speed_mps=1, gps_accuracy_m=4, source='ANDROID_FUSED', device_id='phone',
+            stream_id='drive', sample_sequence=1, elapsed_realtime_nanos=1_000_000_000,
+            sent_elapsed_realtime_nanos=7_000_000_000, is_mock=False)
+        self.assertEqual(sample.freshness_status, 'STALE')
+        self.assertFalse(sample.live_control_eligible)
+        self.assertEqual(provider.status()['state'], 'STALE')
     def test_latest_phone_sample_preserves_gnss_and_imu_fields(self):
         provider = ExternalPositionProvider()
         provider.update(timestamp_seconds=12.5, latitude=52.2, longitude=20.9,

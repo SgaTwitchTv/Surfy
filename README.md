@@ -101,7 +101,27 @@ browser transmitter remains available as a diagnostic fallback. The server
 evaluates quality, deduplicates retried native samples, calculates a fallback speed
 when needed and filters stationary GPS drift. See
 [docs/phone-gps.md](docs/phone-gps.md) for the complete setup and controlled-recording
-procedure. Projection onto a verified real-world corridor is the next M8 stage.
+procedure.
+
+M8 adds separate simulation, live-phone and GPS-replay views. A replay can display
+an arbitrary WGS84 trace on the bundled offline map. Selecting a versioned route
+enables a stateful local map matcher, direction and distance diagnostics, stop-line
+crossing events and a derived analysis report. The report runs in a background job
+and is written under `data/derived/` without changing the source recording.
+
+The **Historia świateł ze wszystkich przejazdów** panel imports completed road
+observations into a persistent local SQLite history. Reimporting does not duplicate
+records; routes and exact geometry versions remain separate. Select a GPS route
+to filter the history, then click **Importuj / odśwież nagrania**. See
+[docs/observation-history.md](docs/observation-history.md) for provenance and limits.
+
+Draft geometry never enables a live target speed. The solver bridge requires
+field-checked geometry, stop line and speed limit, plus verified phase data and a
+compatible prediction clock. The Żwirki i Wigury route is deliberately marked
+`DRAFT` and contains no invented stop lines. The Arkadia pilot from
+Reymonta/Maczka to Powązkowska/Okopowa is `DESK_CHECKED`; its ten OSM-derived
+control lines remain `DRAFT` until the controlled drive. Use
+[docs/m8-field-test.md](docs/m8-field-test.md) before the first controlled drive.
 
 ## Data and interpretation
 
@@ -111,6 +131,9 @@ procedure. Projection onto a verified real-world corridor is the next M8 stage.
 - `data/prediction/`: horizon, uncertainty, validity and explicit relationship
   settings.
 - `data/maps/warsaw.json`: a local OpenStreetMap geometry extract and road segment.
+- `data/maps/chomiczowka.json`: a local OSM extract used for sensor-log replay.
+- `data/maps/arkadia.json`: the offline road layer for the first Arkadia pilot.
+- `data/routes/`: versioned route geometries, verification states and control lines.
 - `data/solver.json`: vehicle dynamics, minimum speed, margins and stabilization.
 - `data/trajectory.json`: cost weights, horizon, signal count and M4 search width.
 
@@ -140,6 +163,7 @@ most recent observations.
 
 ```powershell
 python -m unittest discover -s tests -v
+node --check greenwave/web/app.js
 node tests/mobile_flow.cjs
 ```
 
@@ -158,6 +182,13 @@ Playwright must be available as a Node module or specified through
 a separate server. Screenshots are written to the Git-ignored
 `artifacts/web-check` directory.
 
+Android unit tests and the debug APK are built with:
+
+```powershell
+cd android/GreenWaveSensor
+.\gradlew.bat testDebugUnitTest assembleDebug
+```
+
 ## Documentation
 
 - Architecture: [docs/architecture.md](docs/architecture.md)
@@ -167,3 +198,6 @@ a separate server. Screenshots are written to the Git-ignored
 - L09 logger: [docs/m5.md](docs/m5.md)
 - Replay: [docs/m6.md](docs/m6.md)
 - M7 data analysis: [docs/m7.md](docs/m7.md)
+- M8 mapping plan: [docs/m8-mapping-plan.md](docs/m8-mapping-plan.md)
+- M8 implementation checklist: [docs/m8-mapping-implementation.md](docs/m8-mapping-implementation.md)
+- M8 stationary and road-test procedure: [docs/m8-field-test.md](docs/m8-field-test.md)

@@ -293,6 +293,7 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 data/runs/
+data/route_sources/
 
 # Android/Gradle generated and machine-specific files
 **/.gradle/
@@ -429,6 +430,7 @@ autom4te.cache/
 *.tar.gz
 tarballs/
 test-results/
+data/derived/
 
 # content below from: https://github.com/github/gitignore/blob/main/Global/macOS.gitignore
 # General
@@ -486,3 +488,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local isolated feature checkouts
+.worktrees/

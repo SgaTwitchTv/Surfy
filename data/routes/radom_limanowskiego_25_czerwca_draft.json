@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "route_id": "radom_limanowskiego_25_czerwca_draft",
+  "geometry_version": "gps-osm-draft-2026-09-23-v2",
+  "name": "Radom: Limanowskiego/Maratońska → rondo 25 Czerwca/Prażmowskiego",
+  "direction_description": "Od skrzyżowania Limanowskiego/Maratońska do ronda 25 Czerwca/Prażmowskiego.",
+  "coordinates": [
+    [
+      21.1285969,
+      51.3903917
+    ],
+    [
+      21.1299853,
+      51.3897222
+    ],
+    [
+      21.1311612,
+      51.3895865
+    ],
+    [
+      21.1403483,
+      51.3908338
+    ],
+    [
+      21.1481633,
+      51.3917331
+    ],
+    [
+      21.1487706,
+      51.3916993
+    ],
+    [
+      21.1514144,
+      51.391058
+    ],
+    [
+      21.1520749,
+      51.3910415
+    ],
+    [
+      21.158637,
+      51.3930934
+    ]
+  ],
+  "source": {
+    "kind": "LOCAL_GPS_TRACE",
+    "run_id": "7aa31a9922424dc4b2d6737581cc856d",
+    "obtained_on": "2026-09-22",
+    "attribution": "Prywatny pomiar GreenWave — Android Fused Location Provider",
+    "notes": "Mediana 5 punktów i uproszczenie 7 m; ślad nie jest osią jezdni ani geometrią pasa."
+  },
+  "geometry_verification": {
+    "status": "DRAFT",
+    "date": "2026-09-23",
+    "notes": "Do diagnostyki replay i map matchingu; wymaga porównania z podkładem ulic i sprawdzenia w terenie."
+  },
+  "speed_sections": [],
+  "stop_lines": [
+    {
+      "stop_line_id": "RD_LUKASIKA_OUT",
+      "signal_id": null,
+      "segment_index": 1,
+      "coordinates": [
+        [
+          21.130059712332184,
+          51.38964044716352
+        ],
+        [
+          21.130101645479193,
+          51.38978193920011
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/5316831070",
+        "obtained_on": "2026-09-23",
+        "label": "1905 Roku / Łukasika",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_OBRONCOW_OUT",
+      "signal_id": null,
+      "segment_index": 2,
+      "coordinates": [
+        [
+          21.13571533227315,
+          51.39013116960846
+        ],
+        [
+          21.13566630929828,
+          51.390271771505944
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/5316839131",
+        "obtained_on": "2026-09-23",
+        "label": "1905 Roku / Obrońców",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_MLODZIANOWSKA_OUT",
+      "signal_id": null,
+      "segment_index": 3,
+      "coordinates": [
+        [
+          21.142557266704454,
+          51.39101483497265
+        ],
+        [
+          21.142515448604012,
+          51.39115634026689
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/5316923129",
+        "obtained_on": "2026-09-23",
+        "label": "1905 Roku / Młodzianowska",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_DOWKONTTA_OUT",
+      "signal_id": null,
+      "segment_index": 4,
+      "coordinates": [
+        [
+          21.148253361031504,
+          51.39165585631901
+        ],
+        [
+          21.14827384637491,
+          51.39179917863844
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/1875023568",
+        "obtained_on": "2026-09-23",
+        "label": "1905 Roku / Dowkontta–Kościuszki",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_GRZECZNAROWSKIEGO_OUT",
+      "signal_id": null,
+      "segment_index": 5,
+      "coordinates": [
+        [
+          21.149887377286934,
+          51.391351215928545
+        ],
+        [
+          21.149970923240918,
+          51.391485330751046
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/1875023564",
+        "obtained_on": "2026-09-23",
+        "label": "Grzecznarowskiego / Dowkontta",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_DWORCOWY_OUT",
+      "signal_id": null,
+      "segment_index": 7,
+      "coordinates": [
+        [
+          21.153986766300974,
+          51.39155884761655
+        ],
+        [
+          21.15388346206027,
+          51.39168749139907
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/4062286643",
+        "obtained_on": "2026-09-23",
+        "label": "Poniatowskiego / plac Dworcowy",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    },
+    {
+      "stop_line_id": "RD_PRAZMOWSKIEGO_OUT",
+      "signal_id": null,
+      "segment_index": 7,
+      "coordinates": [
+        [
+          21.157021534959853,
+          51.39250778801843
+        ],
+        [
+          21.15691823071915,
+          51.392636431800945
+        ]
+      ],
+      "direction": "FORWARD",
+      "movement": "UNCONFIRMED",
+      "source": {
+        "kind": "OPENSTREETMAP_TRAFFIC_SIGNAL_NODE",
+        "url": "https://www.openstreetmap.org/node/4062286638",
+        "obtained_on": "2026-09-23",
+        "label": "Beliny-Prażmowskiego przed rondem",
+        "notes": "Prostopadła linia przez projekcję węzła OSM na roboczą trasę; to nie jest pomiar linii zatrzymania."
+      },
+      "verification": {
+        "status": "DESK_CHECKED",
+        "date": "2026-09-23",
+        "notes": "Użytkownik potwierdził zgodność położenia punktu na mapie dla tej trasy. Dokładna linia zatrzymania, właściwy sygnalizator i manewr wymagają sprawdzenia w terenie."
+      },
+      "position_uncertainty_m": 20
+    }
+  ]
+}

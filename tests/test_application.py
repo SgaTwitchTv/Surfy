@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 import json
+import csv
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -44,6 +47,51 @@ class ApplicationTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.app.observe(point,state,kind)
         self.assertEqual(self.app.prediction.version,0)
         self.assertEqual(len(self.app.observations.history),0)
+
+    def test_route_observation_is_scoped_and_recorded_without_changing_prediction(self):
+        with tempfile.TemporaryDirectory() as root:
+            app = GreenWaveApplication(runs_root=root)
+            app.select_route('radom_limanowskiego_25_czerwca_draft')
+            line = app.selected_route.stop_lines[0]
+            with self.assertRaises(ValueError):
+                app.observe_route(line.stop_line_id, 'RED', 'STATE_SEEN')
+            app.set_view_mode('LIVE')
+            with self.assertRaises(ValueError):
+                app.observe_route('S1', 'RED', 'STATE_SEEN')
+            app.recording('start')
+            version = app.prediction.version
+            event = app.observe_route(line.stop_line_id, 'RED', 'STATE_SEEN')
+            self.assertEqual(event['route_id'], app.selected_route.route_id)
+            self.assertEqual(event['line_verification'], line.verification['status'])
+            self.assertEqual(app.prediction.version, version)
+            run_id = app.logger.run_id
+            app.recording('stop')
+            with (Path(root) / run_id / 'raw.csv').open(encoding='utf-8', newline='') as source:
+                rows = list(csv.DictReader(source))
+            observations = [row for row in rows if row['event'] == 'ROUTE_OBSERVATION']
+            self.assertEqual(len(observations), 1)
+            self.assertEqual(json.loads(observations[0]['payload_json'])['stop_line_id'], line.stop_line_id)
+
+    def test_fresh_phone_and_selected_route_start_field_recording_in_live_view(self):
+        with tempfile.TemporaryDirectory() as root:
+            app = GreenWaveApplication(runs_root=root)
+            app.select_route('radom_25_czerwca_limanowskiego_draft')
+            app.ingest_external_position(timestamp_seconds=self.utc.timestamp(),
+                latitude=51.3938, longitude=21.1595, speed_mps=0, gps_accuracy_m=5,
+                source='ANDROID_FUSED', device_id='phone', stream_id='field',
+                sample_sequence=1, elapsed_realtime_nanos=1_000_000_000,
+                sent_elapsed_realtime_nanos=1_100_000_000, is_mock=False)
+            self.assertEqual(app.view_mode, 'SIMULATION')
+            app.recording('start')
+            self.assertEqual(app.view_mode, 'LIVE')
+            with self.assertRaises(ValueError):
+                app.observe('S2', 'GREEN', 'STATE_SEEN')
+            route_event = app.observe_route(app.selected_route.stop_lines[0].stop_line_id,
+                                            'GREEN', 'STATE_SEEN')
+            app.recording('stop')
+            metadata = json.loads((Path(root) / app.logger.run_id / 'metadata.json').read_text(encoding='utf-8'))
+            self.assertEqual(metadata['view_mode'], 'LIVE')
+            self.assertEqual(route_event['route_id'], app.selected_route.route_id)
 
     def test_reset_keeps_history_and_discards_predictions(self):
         self.app.observe('S3','GREEN','STATE_START')
@@ -117,6 +165,10 @@ class ApplicationTests(unittest.TestCase):
         self.assertGreater(data['demo_route'][0][1],data['demo_route'][-1][1])
         self.assertEqual(data['metadata']['marker_quality'],'PLACEHOLDER')
         self.assertIn('openstreetmap.org',data['metadata']['source_url'])
+        chomiczowka=json.loads((DATA/'maps/chomiczowka.json').read_text(encoding='utf-8'))
+        self.assertGreater(len(chomiczowka['features']),100)
+        self.assertEqual(chomiczowka['metadata']['bbox'],[20.913,52.269,20.929,52.279])
+        self.assertIn('openstreetmap.org',chomiczowka['metadata']['source_url'])
 
     def test_repeated_planning_does_not_restart_reaction_and_default_run_crosses_on_green(self):
         self.app.control(running=True)
@@ -147,3 +199,22 @@ class ApplicationTests(unittest.TestCase):
         other.snapshot()
         self.assertAlmostEqual(self.app.position.position,other.position.position)
         self.assertAlmostEqual(self.app.position.speed,other.position.speed)
+
+    def test_live_mapping_does_not_mutate_simulation_or_unlock_draft_route(self):
+        self.app.select_route('zwirki_wigury_draft')
+        simulation_before=self.app.position.position
+        common=dict(speed_mps=5,heading_deg=180,gps_accuracy_m=4,source='ANDROID_FUSED',
+                    device_id='phone',stream_id='drive',is_mock=False,heading_accuracy_deg=5)
+        self.app.ingest_external_position(timestamp_seconds=self.utc.timestamp(),
+            latitude=52.21545,longitude=20.98821,sample_sequence=1,
+            elapsed_realtime_nanos=1_000_000_000,sent_elapsed_realtime_nanos=1_100_000_000,**common)
+        self.app.ingest_external_position(timestamp_seconds=self.utc.timestamp()+1,
+            latitude=52.21530,longitude=20.98823,sample_sequence=2,
+            elapsed_realtime_nanos=2_000_000_000,sent_elapsed_realtime_nanos=2_100_000_000,**common)
+        mapping=self.app.mapping_snapshot()
+        self.assertEqual(mapping['result']['status'],'MATCHED')
+        self.assertFalse(mapping['recommendation_eligibility']['allowed'])
+        self.assertIsNone(mapping['live_recommendation'])
+        self.assertIn('GEOMETRY_NOT_FIELD_VERIFIED',
+                      mapping['recommendation_eligibility']['reason_codes'])
+        self.assertEqual(self.app.position.position,simulation_before)

@@ -1,12 +1,30 @@
 import http.client
 import json
 import threading
+import time
 import unittest
 
 from greenwave.server import LocalServer
 
 
 class ServerTests(unittest.TestCase):
+    def test_observation_history_requires_auth_and_sync_requires_session(self):
+        from unittest.mock import patch
+        self.assertEqual(self.request('GET','/api/observation-history')[0],403)
+        self.assertEqual(self.request('GET','/api/observation-history/completeness')[0],403)
+        headers={'X-GreenWave-Token':self.server.token}
+        with patch.object(self.server.observation_history,'read',return_value={'points':[]}) as read:
+            status,payload=self.request('GET','/api/observation-history?route_id=north',headers=headers)
+            self.assertEqual(status,200);read.assert_called_once_with('north')
+        with patch.object(self.server.observation_history,'completeness',return_value={'points':[]}) as report:
+            status,_=self.request('GET','/api/observation-history/completeness?route_id=north',headers=headers)
+            self.assertEqual(status,200);report.assert_called_once_with('north')
+        self.assertEqual(self.request('POST','/api/observation-history/sync',{},headers)[0],409)
+        with patch.object(self.server.observation_history,'sync',return_value={'observation_count':18}) as sync:
+            status,payload=self.request('POST','/api/observation-history/sync',
+                {'session_id':self.server.application.session_id},headers)
+            self.assertEqual(status,200);sync.assert_called_once()
+
     def test_phone_transmission_and_status(self):
         from unittest.mock import patch
         headers={'X-GreenWave-Token':self.server.token}
@@ -82,6 +100,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(result['last_change']['signal_ids'],['S3'])
         self.assertEqual(result['history_total'],1)
 
+    def test_radom_map_and_route_observation_api(self):
+        status, payload = self.request('GET', '/map-data/radom.json')
+        self.assertEqual(status, 200)
+        self.assertIn(b'OpenStreetMap contributors', payload)
+        app = self.server.application
+        headers = {'X-GreenWave-Token': self.server.token, 'Content-Type': 'application/json'}
+        common = {'session_id': app.session_id}
+        select = {**common, 'route_id': 'radom_limanowskiego_25_czerwca_draft'}
+        self.assertEqual(self.request('POST', '/api/mapping/select', select, headers)[0], 200)
+        line_id = app.selected_route.stop_lines[0].stop_line_id
+        body = {**common, 'stop_line_id': line_id, 'state': 'RED', 'event_type': 'STATE_SEEN'}
+        self.assertEqual(self.request('POST', '/api/observe-route', body, headers)[0], 400)
+        self.assertEqual(self.request('POST', '/api/view', {**common, 'mode': 'LIVE'}, headers)[0], 200)
+        status, payload = self.request('POST', '/api/observe-route', body, headers)
+        self.assertEqual(status, 200)
+        saved = json.loads(payload)['mapping']['route_observations'][-1]
+        self.assertEqual(saved['stop_line_id'], line_id)
+        self.assertEqual(saved['state'], 'RED')
+        self.assertEqual(saved['event_type'], 'STATE_SEEN')
+        self.assertEqual(self.request('POST', '/api/observe-route', {**body, 'stop_line_id': 'S1'}, headers)[0], 400)
+
     def test_unauthorized_cross_origin_and_old_sessions_are_rejected(self):
         app=self.server.application
         data=dict(session_id=app.session_id,running=True)
@@ -121,3 +160,52 @@ class ServerTests(unittest.TestCase):
         status,payload=self.request('GET','/api/replay/state')
         self.assertEqual(status,200)
         self.assertFalse(json.loads(payload)['loaded'])
+
+    def test_mapping_routes_view_and_gps_replay_endpoints(self):
+        routes=json.loads(self.request('GET','/api/routes')[1])
+        self.assertTrue(any(route['route_id']=='zwirki_wigury_draft' for route in routes))
+        arkadia=next(route for route in routes if route['route_id']=='arkadia_maczka_okopowa_v1')
+        self.assertEqual(arkadia['geometry_verification']['status'],'DESK_CHECKED')
+        self.assertEqual(arkadia['stop_line_count'],10)
+        status,payload=self.request('GET','/map-data/arkadia.json')
+        self.assertEqual(status,200)
+        self.assertIn(b'OpenStreetMap contributors',payload)
+        state=json.loads(self.request('GET','/api/state')[1])
+        headers={'X-GreenWave-Token':self.server.token,'Content-Type':'application/json'}
+        status,payload=self.request('POST','/api/mapping/select',
+            dict(session_id=state['session_id'],route_id='zwirki_wigury_draft'),headers)
+        self.assertEqual(status,200)
+        selected=json.loads(payload)
+        self.assertEqual(selected['mapping']['selected_route']['route_id'],'zwirki_wigury_draft')
+        status,payload=self.request('POST','/api/view',
+            dict(session_id=state['session_id'],mode='LIVE'),headers)
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(payload)['view_mode'],'LIVE')
+        self.assertEqual(self.request('GET','/api/gps-replay/state')[0],200)
+        self.assertEqual(self.request('POST','/api/mapping/select',
+            dict(session_id=state['session_id'],route_id='../bad'),headers)[0],400)
+
+    def test_mapping_analysis_is_an_authenticated_background_job(self):
+        state=json.loads(self.request('GET','/api/state')[1])
+        headers={'X-GreenWave-Token':self.server.token,'Content-Type':'application/json'}
+        session=state['session_id']
+        self.assertEqual(self.request('POST','/api/recording',
+            dict(session_id=session,command='start'),headers)[0],200)
+        self.assertEqual(self.request('POST','/api/position',dict(session_id=session,
+            timestamp_seconds=100,latitude=52.2,longitude=20.9,speed_mps=0,
+            gps_accuracy_m=4),headers)[0],200)
+        self.assertEqual(self.request('POST','/api/recording',
+            dict(session_id=session,command='stop'),headers)[0],200)
+        run_id=json.loads(self.request('GET','/api/runs')[1])[0]['run_id']
+        status,payload=self.request('POST','/api/mapping/analyze',
+            dict(session_id=session,run_id=run_id,write=False),headers)
+        self.assertEqual(status,202)
+        job=json.loads(payload)
+        job_path='/api/mapping/jobs/'+job['job_id']
+        self.assertEqual(self.request('GET',job_path)[0],403)
+        deadline=time.monotonic()+2
+        while job['status']=='RUNNING' and time.monotonic()<deadline:
+            time.sleep(.01)
+            job=json.loads(self.request('GET',job_path,headers={'X-GreenWave-Token':self.server.token})[1])
+        self.assertEqual(job['status'],'COMPLETED')
+        self.assertEqual(job['result']['sample_count'],1)

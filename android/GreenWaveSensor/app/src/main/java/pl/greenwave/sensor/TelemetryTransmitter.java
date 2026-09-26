@@ -43,7 +43,7 @@ final class TelemetryTransmitter {
         try {
             String base = ConfigStore.serverUrl(context);
             HttpJson.Response response = HttpJson.post(base + "/api/position",
-                    sample.toJson(ConfigStore.sessionId(context)), token);
+                    sample.toJson(ConfigStore.sessionId(context), SystemClock.elapsedRealtimeNanos()), token);
             if (response.status == 409 && refreshSession(base)) {
                 schedule(0);
                 return;
