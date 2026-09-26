@@ -1,0 +1,5 @@
+[
+  {"bbox_xyxy": [2365, 416, 2445, 615], "state": "RED"},
+  {"bbox_xyxy": [2870, 1000, 2965, 1215], "state": "RED"},
+  {"bbox_xyxy": [1055, 860, 1135, 1070], "state": "RED_YELLOW"}
+]
