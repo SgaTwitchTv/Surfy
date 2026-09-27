@@ -14,6 +14,7 @@ from greenwave.analysis import RunAnalysis
 from greenwave.gps_replay import GPSReplaySession
 from greenwave.mapping_analysis import MappingAnalysis, MappingAnalysisJobs
 from greenwave.observation_history import ObservationHistory
+from greenwave.vision_demos import all_vision_demos
 
 STATIC = Path(__file__).resolve().parent / 'web'
 
@@ -92,6 +93,8 @@ class Handler(BaseHTTPRequestHandler):
         route = self.path.split('?', 1)[0]
         if route == '/api/state':
             return self._send(200, self.server.application.snapshot())
+        if route == '/api/vision-demos':
+            return self._send(200, all_vision_demos())
         if route == '/api/routes':
             return self._send(200, self.server.application.routes.list())
         if route in ('/api/observation-history', '/api/observation-history/completeness'):
@@ -146,6 +149,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {'error':str(error)})
         files = {'/': ('index.html', 'text/html; charset=utf-8'),
                  '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                 '/driver-ui.js': ('driver-ui.js', 'text/javascript; charset=utf-8'),
                  '/style.css': ('style.css', 'text/css; charset=utf-8'),
                  '/mobile.js': ('mobile.js', 'text/javascript; charset=utf-8')}
         if route == '/map-data.json':

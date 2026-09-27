@@ -11,7 +11,7 @@ const reasonsText = values => (values||[]).map(value=>reasonLabels[value]||value
 const fmt = (value, digits=1) => value == null ? '—' : Number(value).toFixed(digits);
 const shortName = name => name.split(' × ').pop();
 
-function showError(message) { $('error').textContent = message; $('error').hidden = !message; if(message.startsWith('Brak połączenia'))$('phone-status').textContent='Brak połączenia z serwerem — pomiary nieaktualne'; }
+function showError(message) { $('error').textContent = message; $('error').hidden = !message; if(message.startsWith('Brak połączenia')){$('phone-status').textContent='Brak połączenia z serwerem — pomiary nieaktualne';DriverUI.disconnected();} }
 async function request(url, body) {
  const id = ++requestId;
  const response = await fetch(url, body === undefined ? {cache:'no-store',signal:AbortSignal.timeout(4000)} : {
@@ -21,7 +21,7 @@ async function request(url, body) {
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
- if (id >= displayedId) {displayedId = id; state = result; render();}
+ if (id >= displayedId) {displayedId = id; state = result; render();DriverUI.received();}
  return result;
 }
 function action(url, body, feedback) {
@@ -388,6 +388,7 @@ function demoLocation(fraction) {
 function drawMap() {
  if(!mapData)return;
  const w=$('map').clientWidth,h=$('map').clientHeight,dpr=window.devicePixelRatio||1;
+ if(!w||!h)return;
  if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
  ctx.setTransform(dpr,0,0,dpr,0,0);
  const css=getComputedStyle(document.documentElement),colour=name=>css.getPropertyValue(name).trim();
@@ -442,4 +443,10 @@ new ResizeObserver(drawMap).observe($('map'));
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',drawMap);
 async function initMap(){const responses=await Promise.all(['/map-data.json','/map-data/chomiczowka.json','/map-data/arkadia.json','/map-data/radom.json'].map(url=>fetch(url)));if(responses.some(response=>!response.ok))throw new Error('Nie udało się wczytać lokalnych map.');const maps=await Promise.all(responses.map(response=>response.json()));mapData=maps[0];mapData.features=maps.flatMap(item=>item.features);mapData.sources=maps.map(item=>item.metadata);mapData.features.forEach(f=>{f.projected=(f.geometry.type==='Polygon'?f.geometry.coordinates[0]:f.geometry.coordinates).map(project);});mapData.projectedRoute=mapData.demo_route.map(project);mapData.lengths=[0];for(let i=1;i<mapData.projectedRoute.length;i++){const a=mapData.projectedRoute[i-1],b=mapData.projectedRoute[i];mapData.lengths.push(mapData.lengths.at(-1)+Math.hypot(a[0]-b[0],a[1]-b[1]));}drawMap();}
 async function poll(){if(!busy){try{await request('/api/state');if(replayState?.running){const response=await fetch('/api/replay/state',{cache:'no-store'});if(response.ok){replayState=await response.json();renderReplay();}}if(gpsReplayState?.running){const response=await fetch('/api/gps-replay/state',{cache:'no-store'});if(response.ok){gpsReplayState=await response.json();renderGpsReplay();drawMap();}}}catch(error){showError('Brak połączenia z aplikacją: '+error.message);$('target-value').textContent='—';$('target-range').textContent='Dane niedostępne';$('driving-action').textContent='Rekomendacja wycofana';}}setTimeout(poll,250);}
-renderDisabled();initMap().catch(error=>showError(error.message));poll();
+DriverUI.mount({state:()=>state,replay:()=>gpsReplayState,map:()=>mapData,project,demoLocation,
+ selection:()=>state?.view_mode==='SIMULATION'?selected:selectedRouteStop,
+ select:id=>{if(state?.view_mode==='SIMULATION')selectSignal(id);else{selectedRouteStop=id;renderSignals();drawMap();}},
+ redraw:drawMap,
+ reason:c=>c.sim?(c.state.incident||c.recommendation?.reason||'Brak rekomendacji modelu'):('Brak rekomendacji live · '+reasonsText(c.state.mapping?.recommendation_eligibility?.reason_codes)),
+});
+renderDisabled();initMap().then(()=>DriverUI.render()).catch(error=>showError(error.message));poll();

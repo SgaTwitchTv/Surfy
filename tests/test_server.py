@@ -86,6 +86,19 @@ class ServerTests(unittest.TestCase):
         connection.close()
         return status,payload
 
+    def test_vision_ui_demos_are_read_only_and_independent_of_session(self):
+        before=self.server.application.snapshot()
+        status,payload=self.request('GET','/api/vision-demos')
+        demos=json.loads(payload)
+        self.assertEqual(status,200)
+        self.assertEqual(len(demos),9)
+        self.assertTrue(all(item['synthetic'] and not item['live_prediction_eligible'] for item in demos))
+        after=self.server.application.snapshot()
+        self.assertEqual(before['session_id'],after['session_id'])
+        self.assertEqual(before['model_version'],after['model_version'])
+        self.assertEqual(before['history_total'],after['history_total'])
+        self.assertEqual(self.request('GET','/driver-ui.js')[0],200)
+
     def test_local_ui_and_observation_api(self):
         status,html=self.request('GET','/')
         self.assertEqual(status,200)
