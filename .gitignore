@@ -491,3 +491,6 @@ $RECYCLE.BIN/
 
 # Local isolated feature checkouts
 .worktrees/
+
+# Optional CV runtime fallback configuration/cache
+/Ultralytics/

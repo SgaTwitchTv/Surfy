@@ -15,7 +15,12 @@ from greenwave.vision_contracts import CameraFrameRef
 def atomic_json(path, value):
     temporary=path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
-    temporary.replace(path)
+    # Windows readers can briefly hold the destination without delete sharing.
+    for attempt in range(20):
+        try:temporary.replace(path);return
+        except PermissionError:
+            if attempt==19:raise
+            time.sleep(.01)
 
 
 def sha256(path):
@@ -73,6 +78,20 @@ def run(directory):
     except (OSError,ValueError) as error:
         shared.update(status='FAILED',error=str(error));atomic_json(directory/'status.json',shared);return 1
     queue=Queue(maxsize=1);stop=threading.Event();finished=threading.Event();lock=threading.Lock()
+    detector=None;tracker=None;vision_stream=None
+    if config.get('detection'):
+        try:
+            from greenwave.vision_detector import YoloLampDetector
+            from greenwave.vision_tracking import LampTracker
+            detector=YoloLampDetector(config['weights'],directory);tracker=LampTracker()
+            manifest['detector']=detector.metadata
+            manifest['tracker']=dict(algorithm='MUTUAL_UNAMBIGUOUS_IOU_V1',min_iou=.25,ambiguity_margin=.15,
+                min_frames=tracker.min_frames,min_duration=tracker.min_duration,max_gap=tracker.max_gap,lifetime=tracker.lifetime)
+            atomic_json(directory/'manifest.json',manifest)
+            vision_stream=(directory/'vision.jsonl').open('w',encoding='utf-8')
+        except Exception as error:
+            shared.update(status='FAILED',error='Cannot initialize detector: '+str(error));atomic_json(directory/'status.json',shared);return 1
+    offline=not camera and not config['realtime'] and detector is not None
     def update(**fields):
         with lock:shared.update(fields)
     def produce():
@@ -105,7 +124,7 @@ def run(directory):
                             if camera:
                                 update(status='RECONNECTING',frame=None,error='Camera image lost; retrying')
                                 with lock:shared['reconnects']+=1
-                            else:update(status='ENDED',frame=None)
+                            else:update(status='DRAINING',frame=None)
                             break
                         height,width=image.shape[:2]
                         if camera and writer is None:
@@ -126,7 +145,12 @@ def run(directory):
                             clock_quality='HOST_READ_ESTIMATE_NOT_SENSOR_CAPTURE',synchronization_verified=False)
                         journal.write(json.dumps(row)+'\n');journal.flush()
                         with lock:shared.update(status='RUNNING',error=None,frames_captured=frame_id+1,capture_segment=segment)
-                        dropped=offer_latest(queue,(image,row))
+                        if offline:
+                            while not stop.is_set():
+                                try:queue.put((image,row),timeout=.1);break
+                                except Full:pass
+                            dropped=0
+                        else:dropped=offer_latest(queue,(image,row))
                         with lock:shared['preview_dropped']+=dropped
                         segment_index+=1;frame_id+=1;entry['frames']=segment_index
                     capture.release();capture=None
@@ -147,6 +171,29 @@ def run(directory):
             if (directory/'stop.flag').exists():stop.set()
             try:
                 image,row=queue.get(timeout=.1)
+                vision=None
+                if detector is not None:
+                    frame=CameraFrameRef(**row['frame']['data']);started_inference=time.perf_counter()
+                    detections=detector.detect(image,frame)
+                    # Media time remains authoritative during accelerated replay.
+                    clock=frame.captured_monotonic_ns/1e9 if camera else frame.pts_seconds
+                    if clock is None:
+                        tracker=LampTracker();tracks=[];events=[]
+                    else:tracks,events=tracker.update(frame,detections,clock)
+                    vision=dict(frame=row['frame'],detections=[d.to_dict() for d in detections],tracks=tracks,events=events,
+                        inference_ms=(time.perf_counter()-started_inference)*1000,time_basis='HOST_MONOTONIC' if camera else 'MEDIA_PTS',
+                        live_prediction_eligible=False,quality_validated=False)
+                    vision_stream.write(json.dumps(vision)+'\n');vision_stream.flush()
+                    with lock:
+                        shared['frames_analyzed']=shared.get('frames_analyzed',0)+1
+                        shared['events_detected']=shared.get('events_detected',0)+len(events)
+                    # Annotate a copy; original recording stays untouched.
+                    image=image.copy()
+                    for track in tracks:
+                        x1,y1,x2,y2=map(int,track['bbox_xyxy'])
+                        color={'RED':(0,0,255),'GREEN':(0,255,0),'YELLOW':(0,255,255)}.get(track['state'],(160,160,160))
+                        cv2.rectangle(image,(x1,y1),(x2,y2),color,2)
+                        cv2.putText(image,f"{track['track_id'].split(':')[-1]} {track['state']} / unassigned",(x1,max(15,y1-5)),cv2.FONT_HERSHEY_SIMPLEX,.5,color,1)
                 if time.monotonic()-last_preview>=.1:
                     ok,jpeg=cv2.imencode('.jpg',image,[cv2.IMWRITE_JPEG_QUALITY,75])
                     if not ok:raise ValueError('Cannot encode preview')
@@ -155,7 +202,7 @@ def run(directory):
                     previews.append(path)
                     if len(previews)>32:previews.pop(0).unlink(missing_ok=True)
                     with lock:
-                        if shared['status']=='RUNNING' and shared.get('capture_segment')==row['segment']:shared.update(frame=row['frame'],segment=row['segment'],preview_frame_id=frame_id)
+                        if shared['status']=='RUNNING' and shared.get('capture_segment')==row['segment']:shared.update(frame=row['frame'],segment=row['segment'],preview_frame_id=frame_id,vision=vision)
                     last_preview=time.monotonic()
                 else:
                     with lock:shared['preview_dropped']+=1
@@ -165,21 +212,27 @@ def run(directory):
                 atomic_json(directory/'status.json',status);last_publish=time.monotonic()
         thread.join(timeout=1)
         with lock:status=dict(shared)
-        if status['status']=='RUNNING':status['status']='ENDED'
+        if status['status'] in ('RUNNING','DRAINING'):status['status']='ENDED'
         final_status=status['status'];status['status']='FINALIZING';status['frame']=None
         atomic_json(directory/'status.json',status)
+        if vision_stream is not None:
+            vision_stream.close()
+            manifest['artifacts'].append(dict(kind='VISION_TIMELINE',filename='vision.jsonl'))
         for item in manifest['artifacts']:item['sha256']=sha256(directory/item['filename'])
         timeline=directory/'frames.jsonl'
         manifest['artifacts'].append(dict(kind='FRAME_TIMELINE',filename=timeline.name,sha256=sha256(timeline)))
         manifest.update(complete=final_status in ('STOPPED','ENDED'),status=final_status,
             finished_utc=datetime.now(timezone.utc).isoformat(),frames_captured=status['frames_captured'],
             preview_dropped=status['preview_dropped'],reconnects=status['reconnects'],error=status.get('error'))
+        manifest.update(frames_analyzed=status.get('frames_analyzed',0),events_detected=status.get('events_detected',0),analysis_mode='ALL_FRAMES' if offline else 'LATEST_FRAME')
         atomic_json(directory/'manifest.json',manifest)
         status['status']=final_status;atomic_json(directory/'status.json',status)
         return 0 if manifest['complete'] else 1
     except Exception as error:
         stop.set();update(status='FAILED',error=str(error),frame=None)
         atomic_json(directory/'status.json',shared);return 1
+    finally:
+        if vision_stream is not None:vision_stream.close()
 
 
 if __name__=='__main__':

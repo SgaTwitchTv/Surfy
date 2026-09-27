@@ -9,6 +9,18 @@ from greenwave.vision_capture_worker import offer_latest, atomic_json, sha256
 
 
 class CaptureTests(unittest.TestCase):
+    def test_atomic_status_recovers_from_transient_windows_file_lock(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'status.json';original=Path.replace;attempts=[]
+            def replace(source,target):
+                attempts.append(source)
+                if len(attempts)==1:raise PermissionError('temporary reader lock')
+                return original(source,target)
+            with patch.object(Path,'replace',replace):atomic_json(path,dict(status='RUNNING'))
+            self.assertEqual(json.loads(path.read_text())['status'],'RUNNING')
+            self.assertEqual(len(attempts),2)
+
     def test_latest_queue_is_bounded_and_replaces_old_frame(self):
         queue=Queue(maxsize=1)
         self.assertEqual(offer_latest(queue,'old'),0)

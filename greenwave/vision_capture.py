@@ -52,7 +52,7 @@ class CaptureController:
             result=read_json(self.directory/'status.json') or result
             if self.log is not None:self.log.close();self.log=None
             if self.forced or code!=0 or result.get('status') not in ('STOPPED','ENDED','FAILED'):
-                result.update(status='FAILED',error='Capture worker terminated; recording may be incomplete',forced_stop=self.forced)
+                result.update(status='FAILED',error=result.get('error') or 'Capture worker terminated; recording may be incomplete',forced_stop=self.forced)
                 manifest=read_json(self.directory/'manifest.json')
                 if manifest and manifest.get('complete'):
                     manifest.update(complete=False,status='FAILED',error=result['error'])
@@ -63,7 +63,7 @@ class CaptureController:
                       live_prediction_eligible=False)
         return result
 
-    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None):
+    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None, detection=False):
         if self.process is not None and self.process.poll() is None and self.status()['status'] in ('ENDED','STOPPED','FAILED'):
             try:self.process.wait(timeout=.3)
             except subprocess.TimeoutExpired:pass
@@ -73,10 +73,14 @@ class CaptureController:
         if any(type(value) is not int for value in (width,height,fps)) or not (160<=width<=3840 and 120<=height<=2160 and 1<=fps<=60):
             raise ValueError('Invalid requested dimensions or FPS')
         if type(realtime) is not bool:raise ValueError('realtime must be boolean')
+        if type(detection) is not bool:raise ValueError('detection must be boolean')
+        weights=Path(__file__).resolve().parents[1]/'data/derived/vision-probe/best_traffic_nano_yolo.pt'
+        if detection and not weights.is_file():raise ValueError('Local model missing; run tools/prepare_vision_probe.py first')
         session=uuid4().hex;self.root.mkdir(parents=True,exist_ok=True)
         directory=self.root/session;directory.mkdir()
         config=dict(session_id=session,source_type=source_type,source=source,width=width,height=height,fps=fps,
-                    realtime=realtime,run_id=run_id,replay_of=replay_of,expected_source_sha256=expected_source_sha256,clock_uncertainty_seconds=1.0)
+                    realtime=realtime,run_id=run_id,replay_of=replay_of,expected_source_sha256=expected_source_sha256,clock_uncertainty_seconds=1.0,
+                    detection=detection,weights=str(weights) if detection else None)
         (directory/'config.json').write_text(json.dumps(config),encoding='utf-8')
         if self.log is not None:self.log.close()
         self.log=(directory/'worker.log').open('wb')

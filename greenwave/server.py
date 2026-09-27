@@ -273,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                     if data:raise ValueError('Unknown capture fields')
                     result=self.server.vision_capture.stop()
                 elif command=='start':
-                    if set(data)-{'source_type','source','width','height','fps','realtime'}:raise ValueError('Unknown capture fields')
+                    if set(data)-{'source_type','source','width','height','fps','realtime','detection'}:raise ValueError('Unknown capture fields')
                     recording=app.logger.status()
                     result=self.server.vision_capture.start(**data,run_id=recording.get('run_id') if recording.get('active') else None)
                 elif command=='replay':
