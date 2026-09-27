@@ -78,7 +78,7 @@ def run(directory):
     except (OSError,ValueError) as error:
         shared.update(status='FAILED',error=str(error));atomic_json(directory/'status.json',shared);return 1
     queue=Queue(maxsize=1);stop=threading.Event();finished=threading.Event();lock=threading.Lock()
-    detector=None;tracker=None;vision_stream=None
+    detector=None;tracker=None;vision_stream=None;event_stream=None
     if config.get('detection'):
         try:
             from greenwave.vision_detector import YoloLampDetector
@@ -89,6 +89,7 @@ def run(directory):
                 min_frames=tracker.min_frames,min_duration=tracker.min_duration,max_gap=tracker.max_gap,lifetime=tracker.lifetime)
             atomic_json(directory/'manifest.json',manifest)
             vision_stream=(directory/'vision.jsonl').open('w',encoding='utf-8')
+            event_stream=(directory/'events.jsonl').open('w',encoding='utf-8')
         except Exception as error:
             shared.update(status='FAILED',error='Cannot initialize detector: '+str(error));atomic_json(directory/'status.json',shared);return 1
     offline=not camera and not config['realtime'] and detector is not None
@@ -108,6 +109,10 @@ def run(directory):
                     if camera:
                         capture.set(cv2.CAP_PROP_FRAME_WIDTH,config['width']);capture.set(cv2.CAP_PROP_FRAME_HEIGHT,config['height']);capture.set(cv2.CAP_PROP_FPS,config['fps'])
                     segment+=1;segment_index=0
+                    source_index=0
+                    if not camera and config.get('seek_seconds'):
+                        if not capture.set(cv2.CAP_PROP_POS_MSEC,config['seek_seconds']*1000):raise ValueError('Decoder does not support seeking')
+                        source_index=max(0,int(capture.get(cv2.CAP_PROP_POS_FRAMES)))
                     fps=capture.get(cv2.CAP_PROP_FPS)
                     if not 1<=fps<=120:fps=config['fps']
                     media=directory/f'camera-segment-{segment}.avi' if camera else Path(source)
@@ -140,7 +145,7 @@ def run(directory):
                         if pts_status=='UNAVAILABLE':pts=None
                         frame=CameraFrameRef(str(config['source']),f"{config['session_id']}:{segment}",frame_id,
                             monotonic,utc,config['clock_uncertainty_seconds'],width,height,str(media),pts)
-                        row=dict(frame=frame.to_dict(),segment=segment,encoded_frame_index=segment_index,
+                        row=dict(frame=frame.to_dict(),segment=segment,encoded_frame_index=source_index+segment_index,
                             pts_kind='ENCODED_CONSTANT_FPS' if camera else 'DECODER_PTS',pts_status=pts_status,
                             clock_quality='HOST_READ_ESTIMATE_NOT_SENSOR_CAPTURE',synchronization_verified=False)
                         journal.write(json.dumps(row)+'\n');journal.flush()
@@ -182,8 +187,12 @@ def run(directory):
                     else:tracks,events=tracker.update(frame,detections,clock)
                     vision=dict(frame=row['frame'],detections=[d.to_dict() for d in detections],tracks=tracks,events=events,
                         inference_ms=(time.perf_counter()-started_inference)*1000,time_basis='HOST_MONOTONIC' if camera else 'MEDIA_PTS',
+                        sampled_rss_mb=detector.process.memory_info().rss/1024**2,
+                        host_frame_age_ms=(time.monotonic_ns()-frame.captured_monotonic_ns)/1e6,
                         live_prediction_eligible=False,quality_validated=False)
                     vision_stream.write(json.dumps(vision)+'\n');vision_stream.flush()
+                    for event in events:event_stream.write(json.dumps(dict(events=[event]))+'\n')
+                    event_stream.flush()
                     with lock:
                         shared['frames_analyzed']=shared.get('frames_analyzed',0)+1
                         shared['events_detected']=shared.get('events_detected',0)+len(events)
@@ -218,6 +227,7 @@ def run(directory):
         if vision_stream is not None:
             vision_stream.close()
             manifest['artifacts'].append(dict(kind='VISION_TIMELINE',filename='vision.jsonl'))
+            event_stream.close();manifest['artifacts'].append(dict(kind='VISION_EVENTS',filename='events.jsonl'))
         for item in manifest['artifacts']:item['sha256']=sha256(directory/item['filename'])
         timeline=directory/'frames.jsonl'
         manifest['artifacts'].append(dict(kind='FRAME_TIMELINE',filename=timeline.name,sha256=sha256(timeline)))
@@ -233,6 +243,7 @@ def run(directory):
         atomic_json(directory/'status.json',shared);return 1
     finally:
         if vision_stream is not None:vision_stream.close()
+        if event_stream is not None:event_stream.close()
 
 
 if __name__=='__main__':

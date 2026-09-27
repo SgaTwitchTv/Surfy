@@ -32,7 +32,7 @@
  let bindings,screen='ui',zoom=1,command='HOLD',commandKey='',lastReceived=0,networkLost=true,bearing=0,bearingKey='',vision=[];
  let mapHits=[];
  const svg=(tag,attrs,text)=>{const node=document.createElementNS(NS,tag);for(const [key,value] of Object.entries(attrs))node.setAttribute(key,value);if(text!=null)node.textContent=text;return node;};
- const colourNames={RED:'czerwone',GREEN:'zielone',YELLOW:'żółte',RED_YELLOW:'czerwono-żółte',OFF:'zgaszone',UNKNOWN:'nieznane',UNCERTAIN:'niepewne'};
+ const colourNames={RED:'czerwone',GREEN:'zielone',YELLOW:'żółte',RED_YELLOW:'czerwono-żółte',OFF:'zgaszone',UNKNOWN:'nieznane',CONFLICT:'konflikt',UNCERTAIN:'niepewne'};
  function switchScreen(value) {
   screen=value;
   for(const name of ['ui','navigation','laboratory'])$('tab-'+name).setAttribute('aria-pressed',String(name===screen));
@@ -78,7 +78,7 @@
   return (c.route?.stop_lines||[]).filter(line=>!finite(c.match?.accepted_s_m)||line.s_m>=c.match.accepted_s_m).map(line=>{
    const last=(c.state.mapping?.route_observations||[]).findLast(event=>event.route_id===c.route.route_id&&event.stop_line_id===line.stop_line_id);
    return {id:line.stop_line_id,name:line.source?.label||line.stop_line_id,distance:finite(c.match?.accepted_s_m)?line.s_m-c.match.accepted_s_m:null,
-    state:'UNKNOWN',source:last?`Historia: ${colourNames[last.state]||last.state} · ${last.timestamp_utc||last.timestamp||'czas w historii'}`:'Brak aktualnego źródła stanu',verification:line.verification?.status};
+    state:(c.fresh&&c.match?.status==='MATCHED'&&c.match?.direction==='FORWARD'?root.VisionWorkbenchUI?.signal(line.stop_line_id,c.route)?.state:null)||'UNKNOWN',source:(c.fresh&&c.match?.status==='MATCHED'&&c.match?.direction==='FORWARD'&&root.VisionWorkbenchUI?.signal(line.stop_line_id,c.route))?'Kamera · przypisanie ręczne · bez sterowania prędkością':last?`Historia: ${colourNames[last.state]||last.state} · ${last.timestamp_utc||last.timestamp||'czas w historii'}`:'Brak aktualnego źródła stanu',verification:line.verification?.status};
   });
  }
  function renderSignals(c) {
@@ -86,7 +86,7 @@
   const rows=signalRows(c),selection=bindings.selection();
   $('driver-signals').replaceChildren(...rows.slice(0,5).map(row=>{
    const button=document.createElement('button');button.type='button';button.className='signal';button.setAttribute('aria-pressed',String(selection===row.id));
-   const dot=document.createElement('span');dot.className='dot';dot.dataset.state=row.state;dot.textContent=row.state==='UNKNOWN'?'?':'';
+   const dot=document.createElement('span');dot.className='dot';dot.dataset.state=row.state;dot.textContent=['UNKNOWN','CONFLICT'].includes(row.state)?'?':'';
    const content=document.createElement('span');content.className='signal-content';
    const heading=document.createElement('span');heading.className='signal-heading';
    const name=document.createElement('strong');name.textContent=row.name;const distance=document.createElement('span');distance.className='signal-distance';distance.textContent=number(row.distance)+' m';heading.append(name,distance);
@@ -148,8 +148,8 @@
     (()=>{const coordinates=c.route.stop_lines.find(line=>line.stop_line_id===row.id).coordinates;return project([(coordinates[0][0]+coordinates[1][0])/2,(coordinates[0][1]+coordinates[1][1])/2]);})();
    const point=screenPoint(raw);if(!point||point[0]<30||point[0]>w-30||point[1]<240||point[1]>h-90)continue;const [x,y]=point;mapHits.push({x,y,id:row.id});
    ctx.fillStyle=p.panel;ctx.fillRect(x-10,y-25,20,47);ctx.strokeStyle=row.id===bindings.selection()?p.green:p.line;ctx.lineWidth=2;ctx.strokeRect(x-10,y-25,20,47);
-   for(const [i,color] of ['RED','YELLOW','GREEN'].entries()){ctx.beginPath();ctx.arc(x,y-17+i*14,4,0,Math.PI*2);ctx.fillStyle=row.state===color?p[{RED:'red',YELLOW:'yellow',GREEN:'green'}[color]]:p.line;ctx.fill();}
-   if(['UNKNOWN','UNCERTAIN'].includes(row.state)){ctx.font='bold 14px Segoe UI';ctx.textAlign='center';ctx.fillStyle=p.text;ctx.fillText('?',x,y+6);}
+   for(const [i,color] of ['RED','YELLOW','GREEN'].entries()){ctx.beginPath();ctx.arc(x,y-17+i*14,4,0,Math.PI*2);ctx.fillStyle=(row.state===color||row.state==='RED_YELLOW'&&['RED','YELLOW'].includes(color))?p[{RED:'red',YELLOW:'yellow',GREEN:'green'}[color]]:p.line;ctx.fill();}
+   if(['UNKNOWN','UNCERTAIN','CONFLICT'].includes(row.state)){ctx.font='bold 14px Segoe UI';ctx.textAlign='center';ctx.fillStyle=p.text;ctx.fillText('?',x,y+6);}
    ctx.font='12px Segoe UI';ctx.textAlign=x>w/2?'right':'left';const labelX=x+(x>w/2?-17:17),available=x>w/2?labelX-10:w-labelX-10;
    let label=row.name;while(label.length>1&&ctx.measureText(label+'…').width>available)label=label.slice(0,-1);if(label!==row.name)label+='…';
    ctx.lineWidth=4;ctx.strokeStyle=p.bg;ctx.strokeText(label,labelX,y-9);ctx.fillStyle=p.text;ctx.fillText(label,labelX,y-9);

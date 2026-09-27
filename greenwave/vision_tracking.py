@@ -36,16 +36,17 @@ class LampTracker:
             proposals[j]=k
         used=set(proposals.values());output=[];events=[]
         for k,t in self.tracks.items():
-            if k not in used:t.update(stable='UNKNOWN',candidate=None,count=0,previous=None,visibility='OCCLUDED')
+            if k not in used:t.update(stable='UNKNOWN',candidate=None,count=0,previous=None,visibility='OCCLUDED',epoch=t.get('epoch',0)+1)
         for j,detection in enumerate(detections):
             k=proposals.get(j)
             if k is None:
                 self.counter+=1;k=f'{self.session}:lamp-{self.counter}'
-                self.tracks[k]=dict(stable='UNKNOWN',candidate=None,count=0,previous=None,time=timestamp,latest=detection,visibility='VISIBLE')
+                self.tracks[k]=dict(stable='UNKNOWN',candidate=None,count=0,previous=None,time=timestamp,latest=detection,visibility='VISIBLE',epoch=0)
             t=self.tracks[k];d=replace(detection,track_id=k)
-            if timestamp-t['time']>self.max_gap:t.update(stable='UNKNOWN',candidate=None,count=0,previous=None)
+            if timestamp-t['time']>self.max_gap:t.update(stable='UNKNOWN',candidate=None,count=0,previous=None,epoch=t['epoch']+1)
             t.update(latest=d,time=timestamp,visibility='VISIBLE')
             if d.state in ('UNKNOWN','OFF'):
+                if t['stable']!='UNKNOWN' or t['candidate'] is not None:t['epoch']+=1
                 t.update(stable='UNKNOWN',candidate=None,count=0,previous=None)
             elif d.state==t['stable']:
                 t.update(previous=d,candidate=None,count=0)
@@ -64,5 +65,5 @@ class LampTracker:
                     t.update(stable=d.state,previous=d,candidate=None,count=0)
             if t.get('previous') is d:t['previous_time']=timestamp
             output.append(dict(track_id=k,bbox_xyxy=d.bbox_xyxy,state=t['stable'] if d.state==t['stable'] else 'UNKNOWN',
-                raw_state=d.state,model_score=d.model_score,pictogram=d.pictogram,visibility='VISIBLE',assigned=False))
+                raw_state=d.state,model_score=d.model_score,pictogram=d.pictogram,visibility='VISIBLE',assigned=False,continuity_generation=t['epoch']))
         return output,events

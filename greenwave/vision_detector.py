@@ -1,5 +1,6 @@
 """Optional local CPU adapter. Imports ML only inside the capture worker."""
 import os
+import platform
 from pathlib import Path
 from greenwave.vision_probe import file_sha256, make_detection, class_semantics
 
@@ -12,15 +13,18 @@ class YoloLampDetector:
         os.environ['YOLO_AUTOINSTALL']='false'
         import torch
         import ultralytics
+        import psutil
         from ultralytics import YOLO
         torch.set_num_threads(4)
         ultralytics.settings.update({'sync':False,'hub':False})
         self.model=YOLO(str(weights));self.imgsz=imgsz
+        self.process=psutil.Process()
         self.hash=file_sha256(weights);self.name=Path(weights).name
         self.metadata=dict(model_id=self.name,sha256=self.hash,classes=self.model.names,
             supported_states=sorted({class_semantics(n)[0] for n in self.model.names.values()}),
             missing_states=sorted({'RED','GREEN','YELLOW','RED_YELLOW','OFF'}-{class_semantics(n)[0] for n in self.model.names.values()}),
             quality_validated=False,device='cpu',imgsz=imgsz,ultralytics=ultralytics.__version__,
+            python=platform.python_version(),runtime_arch=platform.machine(),torch=torch.__version__,threads=4,
             thresholds=dict(detection_score=.25,state_score=.5,min_height=12,min_width=4))
 
     def detect(self,image,frame):

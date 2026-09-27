@@ -8,6 +8,26 @@ from greenwave.server import LocalServer
 
 
 class ServerTests(unittest.TestCase):
+    def test_workbench_auth_session_and_range_media(self):
+        from unittest.mock import patch
+        from pathlib import Path
+        import tempfile
+        headers={'X-GreenWave-Token':self.server.token}
+        self.assertEqual(self.request('GET','/api/vision/history?capture_id=bad')[0],403)
+        self.assertEqual(self.request('GET','/api/vision/media?capture_id=x',headers={'Cookie':'gw_media=é','Range':'bytes=0-'})[0],403)
+        self.assertEqual(self.request('POST','/api/vision/workbench',dict(command='media-access'),headers)[0],409)
+        body=dict(command='media-access',session_id=self.server.application.session_id)
+        self.assertEqual(self.request('POST','/api/vision/workbench',body,headers)[0],200)
+        with tempfile.TemporaryDirectory() as temp:
+            video=Path(temp)/'clip.mp4';video.write_bytes(b'0123456789')
+            with patch.object(self.server.vision_workbench,'media',return_value=video):
+                self.assertEqual(self.request('GET','/api/vision/media?capture_id=x',headers=headers)[0],416)
+                status,payload=self.request('GET','/api/vision/media?capture_id=x',headers={**headers,'Range':'bytes=2-5'})
+                self.assertEqual((status,payload),(206,b'2345'))
+                self.assertEqual(self.request('GET','/api/vision/media?capture_id=x',headers={**headers,'Range':'bytes=99-'})[0],416)
+                status,_=self.request('GET','/api/vision/media?capture_id=x',headers={'Range':'bytes=0-','Cookie':'gw_media='+self.server.token})
+                self.assertEqual(status,206)
+
     def test_capture_auth_session_and_isolated_control(self):
         from unittest.mock import patch
         for path in ('/api/vision/status','/api/vision/recordings','/api/vision/frame'):

@@ -17,6 +17,7 @@ from greenwave.mapping_analysis import MappingAnalysis, MappingAnalysisJobs
 from greenwave.observation_history import ObservationHistory
 from greenwave.vision_demos import all_vision_demos
 from greenwave.vision_capture import CaptureController
+from greenwave.vision_workbench import VisionWorkbench
 
 STATIC = Path(__file__).resolve().parent / 'web'
 
@@ -27,6 +28,7 @@ class LocalServer(HTTPServer):
     def __init__(self, port=8765, application=None, host='127.0.0.1', vision_python=None):
         self.application = application if application is not None else GreenWaveApplication()
         self.vision_capture=CaptureController(DATA/'derived/vision-capture',python=vision_python)
+        self.vision_workbench=VisionWorkbench(self.vision_capture,self.application)
         self.token = secrets.token_hex(32)
         self.pairing_code = f'{secrets.randbelow(1_000_000):06d}'
         self.pairing_failures = 0
@@ -71,13 +73,14 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass
 
-    def _send(self, status, content, content_type='application/json; charset=utf-8', download=None):
+    def _send(self, status, content, content_type='application/json; charset=utf-8', download=None, headers=None):
         if not isinstance(content, bytes):
             content = json.dumps(content, ensure_ascii=False, allow_nan=False).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(content)))
         self.send_header('Cache-Control', 'no-store')
+        for key,value in (headers or {}).items():self.send_header(key,value)
         self.send_header('X-Content-Type-Options', 'nosniff')
         if download:
             self.send_header('Content-Disposition', f'attachment; filename="{download}"')
@@ -99,13 +102,31 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, self.server.application.snapshot())
         if route == '/api/vision-demos':
             return self._send(200, all_vision_demos())
-        if route in ('/api/vision/status','/api/vision/recordings','/api/vision/frame'):
-            if self.headers.get('X-GreenWave-Token')!=self.server.token:
+        if route in ('/api/vision/status','/api/vision/recordings','/api/vision/frame','/api/vision/history','/api/vision/export','/api/vision/media'):
+            from http.cookies import SimpleCookie,CookieError
+            cookie=SimpleCookie()
+            try:cookie.load(self.headers.get('Cookie',''))
+            except CookieError:cookie=SimpleCookie()
+            media_cookie=cookie.get('gw_media')
+            if self.headers.get('X-GreenWave-Token')!=self.server.token and not (route=='/api/vision/media' and media_cookie and secrets.compare_digest(media_cookie.value.encode('utf-8'),self.server.token.encode('ascii'))):
                 return self._send(403,{'error':'Unauthorized local request'})
             try:
-                if route=='/api/vision/status':return self._send(200,self.server.vision_capture.status())
+                if route=='/api/vision/status':return self._send(200,self.server.vision_workbench.status())
                 if route=='/api/vision/recordings':return self._send(200,self.server.vision_capture.recordings())
                 query=parse_qs(urlparse(self.path).query)
+                if route in ('/api/vision/history','/api/vision/export'):
+                    before=int(query['before'][0]) if 'before' in query else None
+                    return self._send(200,self.server.vision_workbench.history(query['capture_id'][0],before),download='cv-review.json' if route.endswith('/export') else None)
+                if route=='/api/vision/media':
+                    path=self.server.vision_workbench.media(query['capture_id'][0],int(query.get('segment',['0'])[0]));size=path.stat().st_size
+                    import re
+                    match=re.fullmatch(r'bytes=(\d+)-(\d*)',self.headers.get('Range',''))
+                    if not match:return self._send(416,{'error':'Single byte range required'},headers={'Content-Range':f'bytes */{size}'})
+                    start=int(match[1]);end=min(int(match[2]) if match[2] else size-1,size-1,start+1024*1024-1)
+                    if start>end:return self._send(416,{'error':'Range outside video'},headers={'Content-Range':f'bytes */{size}'})
+                    with path.open('rb') as stream:stream.seek(start);chunk=stream.read(end-start+1)
+                    mime={'.mp4':'video/mp4','.webm':'video/webm','.mov':'video/quicktime'}.get(path.suffix.lower(),'video/x-msvideo')
+                    return self._send(206,chunk,mime,headers={'Content-Range':f'bytes {start}-{end}/{size}','Accept-Ranges':'bytes'})
                 jpeg=self.server.vision_capture.preview(query['session_id'][0],int(query['frame_id'][0]))
                 return self._send(200,jpeg,'image/jpeg')
             except (ValueError,KeyError,OSError) as error:return self._send(409,{'error':str(error)})
@@ -162,6 +183,7 @@ class Handler(BaseHTTPRequestHandler):
         files = {'/': ('index.html', 'text/html; charset=utf-8'),
                  '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                  '/capture-ui.js': ('capture-ui.js', 'text/javascript; charset=utf-8'),
+                 '/vision-workbench-ui.js': ('vision-workbench-ui.js', 'text/javascript; charset=utf-8'),
                  '/driver-ui.js': ('driver-ui.js', 'text/javascript; charset=utf-8'),
                  '/style.css': ('style.css', 'text/css; charset=utf-8'),
                  '/mobile.js': ('mobile.js', 'text/javascript; charset=utf-8')}
@@ -277,13 +299,23 @@ class Handler(BaseHTTPRequestHandler):
                     recording=app.logger.status()
                     result=self.server.vision_capture.start(**data,run_id=recording.get('run_id') if recording.get('active') else None)
                 elif command=='replay':
-                    capture_id=data.pop('capture_id',None);segment=data.pop('segment',0)
+                    capture_id=data.pop('capture_id',None);segment=data.pop('segment',0);seek_seconds=data.pop('seek_seconds',0)
                     if data:raise ValueError('Unknown capture fields')
                     source,checksum=self.server.vision_capture.replay_source(capture_id,segment)
                     result=self.server.vision_capture.start(source_type='FILE',source=source,realtime=True,
-                        replay_of=capture_id,expected_source_sha256=checksum)
+                        replay_of=capture_id,expected_source_sha256=checksum,seek_seconds=seek_seconds)
                 else:raise ValueError('Unknown capture command')
                 self._send(202,result);return
+            elif self.path == '/api/vision/workbench':
+                command=data.pop('command',None)
+                if command=='assign':result=self.server.vision_workbench.assign(**data)
+                elif command=='unassign':result=self.server.vision_workbench.unassign(**data)
+                elif command=='review':result=self.server.vision_workbench.review(**data)
+                elif command=='media-access':
+                    if data:raise ValueError('Unknown media-access fields')
+                    return self._send(200,{'ready':True},headers={'Set-Cookie':f'gw_media={self.server.token}; HttpOnly; SameSite=Strict; Path=/api/vision/media; Max-Age=3600'})
+                else:raise ValueError('Unknown workbench command')
+                self._send(200,result);return
             else:
                 return self._send(404, {'error': 'Not found'})
             self._send(200, app.snapshot())

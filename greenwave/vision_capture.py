@@ -1,5 +1,6 @@
 """Non-blocking supervisor for an opt-in capture subprocess, without ML imports."""
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -63,7 +64,7 @@ class CaptureController:
                       live_prediction_eligible=False)
         return result
 
-    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None, detection=False):
+    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None, detection=False,seek_seconds=0):
         if self.process is not None and self.process.poll() is None and self.status()['status'] in ('ENDED','STOPPED','FAILED'):
             try:self.process.wait(timeout=.3)
             except subprocess.TimeoutExpired:pass
@@ -74,13 +75,14 @@ class CaptureController:
             raise ValueError('Invalid requested dimensions or FPS')
         if type(realtime) is not bool:raise ValueError('realtime must be boolean')
         if type(detection) is not bool:raise ValueError('detection must be boolean')
+        if isinstance(seek_seconds,bool) or not isinstance(seek_seconds,(int,float)) or not math.isfinite(seek_seconds) or not 0<=seek_seconds<=86400 or (source_type=='CAMERA' and seek_seconds):raise ValueError('Invalid video seek time')
         weights=Path(__file__).resolve().parents[1]/'data/derived/vision-probe/best_traffic_nano_yolo.pt'
         if detection and not weights.is_file():raise ValueError('Local model missing; run tools/prepare_vision_probe.py first')
         session=uuid4().hex;self.root.mkdir(parents=True,exist_ok=True)
         directory=self.root/session;directory.mkdir()
         config=dict(session_id=session,source_type=source_type,source=source,width=width,height=height,fps=fps,
                     realtime=realtime,run_id=run_id,replay_of=replay_of,expected_source_sha256=expected_source_sha256,clock_uncertainty_seconds=1.0,
-                    detection=detection,weights=str(weights) if detection else None)
+                    detection=detection,weights=str(weights) if detection else None,seek_seconds=seek_seconds)
         (directory/'config.json').write_text(json.dumps(config),encoding='utf-8')
         if self.log is not None:self.log.close()
         self.log=(directory/'worker.log').open('wb')

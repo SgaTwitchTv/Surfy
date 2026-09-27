@@ -43,11 +43,16 @@ with tempfile.TemporaryDirectory() as temp:
         with __import__('unittest').TestCase().assertRaises(ValueError):controller.start(source_type='CAMERA',source=0)
         controller.stop();await_status(controller,{'STOPPED'})
         assert read_json(controller.directory/'manifest.json')['complete']
+        controller.start(source_type='FILE',source=replay,expected_source_sha256=checksum,realtime=False,seek_seconds=1)
+        await_status(controller,{'ENDED'})
+        sought=[json.loads(line) for line in (controller.directory/'frames.jsonl').read_text().splitlines()]
+        assert len(sought)==30 and sought[0]['encoded_frame_index']==10
+        assert sought[0]['frame']['data']['pts_seconds']>=.99
         Path(replay).write_bytes(b'corrupted')
         controller.start(source_type='FILE',source=replay,expected_source_sha256=checksum)
         deadline=time.monotonic()+10
         while controller.status()['status']!='FAILED' and time.monotonic()<deadline:time.sleep(.05)
         assert controller.status()['status']=='FAILED'
         assert not read_json(controller.directory/'manifest.json')['complete']
-        print('PASS: 40 frames, artifact hashes, bounded preview, replay, stop and corrupted-source rejection')
+        print('PASS: 40 frames, artifact hashes, bounded preview, replay, positive seek, stop and corrupted-source rejection')
     finally:controller.close()
