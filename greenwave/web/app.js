@@ -449,4 +449,5 @@ DriverUI.mount({state:()=>state,replay:()=>gpsReplayState,map:()=>mapData,projec
  redraw:drawMap,
  reason:c=>c.sim?(c.state.incident||c.recommendation?.reason||'Brak rekomendacji modelu'):('Brak rekomendacji live · '+reasonsText(c.state.mapping?.recommendation_eligibility?.reason_codes)),
 });
+CaptureUI.mount({state:()=>state,token});
 renderDisabled();initMap().then(()=>DriverUI.render()).catch(error=>showError(error.message));poll();

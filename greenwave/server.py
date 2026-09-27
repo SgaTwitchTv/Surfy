@@ -7,6 +7,7 @@ from pathlib import Path
 import secrets
 import time
 import webbrowser
+from urllib.parse import parse_qs, urlparse
 
 from greenwave.application import DATA, GreenWaveApplication
 from greenwave.replay import ReplaySession
@@ -15,6 +16,7 @@ from greenwave.gps_replay import GPSReplaySession
 from greenwave.mapping_analysis import MappingAnalysis, MappingAnalysisJobs
 from greenwave.observation_history import ObservationHistory
 from greenwave.vision_demos import all_vision_demos
+from greenwave.vision_capture import CaptureController
 
 STATIC = Path(__file__).resolve().parent / 'web'
 
@@ -22,8 +24,9 @@ STATIC = Path(__file__).resolve().parent / 'web'
 class LocalServer(HTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, port=8765, application=None, host='127.0.0.1'):
+    def __init__(self, port=8765, application=None, host='127.0.0.1', vision_python=None):
         self.application = application if application is not None else GreenWaveApplication()
+        self.vision_capture=CaptureController(DATA/'derived/vision-capture',python=vision_python)
         self.token = secrets.token_hex(32)
         self.pairing_code = f'{secrets.randbelow(1_000_000):06d}'
         self.pairing_failures = 0
@@ -57,6 +60,7 @@ class LocalServer(HTTPServer):
 
     def server_close(self):
         try:
+            self.vision_capture.close()
             self.mapping_analysis_jobs.close()
             self.application.close()
         finally:
@@ -77,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         if download:
             self.send_header('Content-Disposition', f'attachment; filename="{download}"')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.end_headers()
         self.wfile.write(content)
 
@@ -95,12 +99,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, self.server.application.snapshot())
         if route == '/api/vision-demos':
             return self._send(200, all_vision_demos())
+        if route in ('/api/vision/status','/api/vision/recordings','/api/vision/frame'):
+            if self.headers.get('X-GreenWave-Token')!=self.server.token:
+                return self._send(403,{'error':'Unauthorized local request'})
+            try:
+                if route=='/api/vision/status':return self._send(200,self.server.vision_capture.status())
+                if route=='/api/vision/recordings':return self._send(200,self.server.vision_capture.recordings())
+                query=parse_qs(urlparse(self.path).query)
+                jpeg=self.server.vision_capture.preview(query['session_id'][0],int(query['frame_id'][0]))
+                return self._send(200,jpeg,'image/jpeg')
+            except (ValueError,KeyError,OSError) as error:return self._send(409,{'error':str(error)})
         if route == '/api/routes':
             return self._send(200, self.server.application.routes.list())
         if route in ('/api/observation-history', '/api/observation-history/completeness'):
             if self.headers.get('X-GreenWave-Token') != self.server.token:
                 return self._send(403, {'error': 'Unauthorized local request'})
-            from urllib.parse import parse_qs, urlparse
             query = parse_qs(urlparse(self.path).query)
             try:
                 method = self.server.observation_history.completeness if route.endswith('/completeness') else self.server.observation_history.read
@@ -130,7 +143,6 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 path=route.removeprefix('/api/analysis/')
                 if path=='compare':
-                    from urllib.parse import parse_qs, urlparse
                     query=parse_qs(urlparse(self.path).query)
                     return self._send(200,self.server.analysis.compare(query['baseline'][0],query['greenwave'][0]))
                 return self._send(200,self.server.analysis.analyze(path))
@@ -149,6 +161,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {'error':str(error)})
         files = {'/': ('index.html', 'text/html; charset=utf-8'),
                  '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                 '/capture-ui.js': ('capture-ui.js', 'text/javascript; charset=utf-8'),
                  '/driver-ui.js': ('driver-ui.js', 'text/javascript; charset=utf-8'),
                  '/style.css': ('style.css', 'text/css; charset=utf-8'),
                  '/mobile.js': ('mobile.js', 'text/javascript; charset=utf-8')}
@@ -254,6 +267,23 @@ class Handler(BaseHTTPRequestHandler):
                 command=data.pop('command',None); value=data.pop('value',None)
                 self.server.replay_tick=time.monotonic(); self.server.replay.command(command,value)
                 self._send(200,self.server.replay.state()); return
+            elif self.path == '/api/vision/control':
+                command=data.pop('command',None)
+                if command=='stop':
+                    if data:raise ValueError('Unknown capture fields')
+                    result=self.server.vision_capture.stop()
+                elif command=='start':
+                    if set(data)-{'source_type','source','width','height','fps','realtime'}:raise ValueError('Unknown capture fields')
+                    recording=app.logger.status()
+                    result=self.server.vision_capture.start(**data,run_id=recording.get('run_id') if recording.get('active') else None)
+                elif command=='replay':
+                    capture_id=data.pop('capture_id',None);segment=data.pop('segment',0)
+                    if data:raise ValueError('Unknown capture fields')
+                    source,checksum=self.server.vision_capture.replay_source(capture_id,segment)
+                    result=self.server.vision_capture.start(source_type='FILE',source=source,realtime=True,
+                        replay_of=capture_id,expected_source_sha256=checksum)
+                else:raise ValueError('Unknown capture command')
+                self._send(202,result);return
             else:
                 return self._send(404, {'error': 'Not found'})
             self._send(200, app.snapshot())
@@ -267,11 +297,12 @@ def main():
     parser.add_argument('--port', type=int, default=8765, help='Port (0 chooses a free port)')
     parser.add_argument('--host', default='127.0.0.1', help='Bind address; use 0.0.0.0 only on a trusted private network')
     parser.add_argument('--no-browser', action='store_true')
+    parser.add_argument('--vision-python', help='Python executable with OpenCV; defaults to local .venv-cv when present')
     args = parser.parse_args()
     if args.lab:
         from greenwave.ui import main as lab_main
         return lab_main()
-    with LocalServer(args.port, host=args.host) as server:
+    with LocalServer(args.port, host=args.host, vision_python=args.vision_python) as server:
         display_host = '127.0.0.1' if args.host in ('0.0.0.0', '') else args.host
         url = f'http://{display_host}:{server.server_port}'
         print(f'GreenWave M8: {url}\nAndroid pairing code: {server.pairing_code}\n'

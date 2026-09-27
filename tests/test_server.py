@@ -8,6 +8,20 @@ from greenwave.server import LocalServer
 
 
 class ServerTests(unittest.TestCase):
+    def test_capture_auth_session_and_isolated_control(self):
+        from unittest.mock import patch
+        for path in ('/api/vision/status','/api/vision/recordings','/api/vision/frame'):
+            self.assertEqual(self.request('GET',path)[0],403)
+        headers={'X-GreenWave-Token':self.server.token}
+        self.assertEqual(self.request('GET','/api/vision/status',headers=headers)[0],200)
+        self.assertEqual(self.request('POST','/api/vision/control',{'command':'stop'},headers)[0],409)
+        session=self.server.application.session_id
+        with patch.object(self.server.vision_capture,'start',return_value={'status':'STARTING'}) as start:
+            status,_=self.request('POST','/api/vision/control',dict(command='start',session_id=session,source_type='CAMERA',source=0),headers)
+            self.assertEqual(status,202);start.assert_called_once()
+        self.assertEqual(self.request('POST','/api/vision/control',dict(command='stop',session_id=session,extra=True),headers)[0],400)
+        self.assertEqual(self.request('GET','/api/vision/frame?session_id=wrong&frame_id=0',headers=headers)[0],409)
+
     def test_observation_history_requires_auth_and_sync_requires_session(self):
         from unittest.mock import patch
         self.assertEqual(self.request('GET','/api/observation-history')[0],403)
