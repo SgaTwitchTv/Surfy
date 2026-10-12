@@ -57,9 +57,15 @@ class Mailer:
                 # Never interpolate SMTP exception/message/token into logs or audit.
                 state='FAILED'
             finally:
-                with self.repo.database.transaction() as c:
-                    c.execute("UPDATE account_tokens SET delivery_state=?,revoked_at=CASE WHEN ?='FAILED' THEN COALESCE(revoked_at,?) ELSE revoked_at END WHERE id=?",(state,state,self.repo.clock(),token_id))
-                self.slots.release();self.queue.task_done()
+                try:
+                    with self.repo.database.transaction() as c:
+                        c.execute("UPDATE account_tokens SET delivery_state=?,revoked_at=CASE WHEN ?='FAILED' THEN COALESCE(revoked_at,?) ELSE revoked_at END WHERE id=?",(state,state,self.repo.clock(),token_id))
+                except Exception:
+                    # If DB is unavailable, leave PENDING for startup invalidation.
+                    # Never lose the worker or claim durable SENT without its commit.
+                    pass
+                finally:
+                    self.slots.release();self.queue.task_done()
                 raw=message=None
 
     def close(self):

@@ -15,6 +15,7 @@ class Limits:
         key=self.bucket(purpose,identity)
         with self.repo.database.transaction() as c:
             now=self.repo.clock()
+            c.execute('DELETE FROM auth_rate_limits WHERE expires_at<=?',(now,))
             row=c.execute('SELECT * FROM auth_rate_limits WHERE key_hash=?',(key,)).fetchone()
             active=row and now<row['window_start']+window_ms
             count=row['attempts'] if active else 0

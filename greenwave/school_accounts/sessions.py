@@ -39,6 +39,9 @@ class Sessions:
             now=self.repo.clock()
             if not row or row['status']!='ACTIVE' or row['security_version']!=row['current_version'] or row['revoked_at'] is not None or row['absolute_expiry']<=now or row['last_activity_at']+1800000<=now:
                 raise AuthError(401,'UNAUTHORIZED')
+            expected_hash=hashlib.sha256(csrf(self.key,raw,row['id'],'session').encode()).hexdigest()
+            if not hmac.compare_digest(row['csrf_hash'],expected_hash):
+                raise AuthError(401,'UNAUTHORIZED')
             if touch and now-row['last_activity_at']>=60000:
                 c.execute('UPDATE browser_sessions SET last_activity_at=? WHERE id=?',(now,row['id']))
             return dict(row),Actor(row['user_id'],row['authenticated_at'])
