@@ -93,6 +93,36 @@ class SchoolHTTPTests(unittest.TestCase):
         self.assertEqual(snapshot['external_position']['speed_mps'], 4)
         self.assertFalse(snapshot['mapping']['recommendation_eligibility']['allowed'])
 
+    def test_observation_correction_and_role_mutation(self):
+        cookie, csrf = self.login()
+        trip = self.call('/school/api/trips', dict(title='Evidence', route_id='synthetic_s1_s5'), cookie, csrf)[1]
+        status, observation, _ = self.call('/school/api/observations', dict(trip_id=trip['id'], signal='S1', state='GREEN', kind='STATE_SEEN'), cookie, csrf)
+        self.assertEqual(status, 201)
+        other, other_csrf = self.login('other')
+        self.assertEqual(self.call('/school/api/corrections', dict(id=observation['id'], state='RED', reason='Other account'), other, other_csrf)[0], 404)
+        analyst, analyst_csrf = self.login('analyst')
+        self.assertEqual(self.call('/school/api/corrections', dict(id=observation['id'], state='RED', reason='Verified correction'), analyst, analyst_csrf)[0], 201)
+        history = self.call('/school/api/corrections?id='+observation['id'], cookie=cookie)[1]
+        self.assertEqual(history[0]['actor'], 'Analityk Demo')
+        self.assertEqual(self.call('/school/api/observations?state=RED', cookie=cookie)[1][0]['state'], 'GREEN')
+        admin, admin_csrf = self.login('admin')
+        users = self.call('/school/api/users', cookie=admin)[1]
+        target = next(u for u in users if u['email']=='other@demo.local')
+        self.assertEqual(self.call('/school/api/users', dict(id=target['id'], role='ANALYST', active=True), admin, admin_csrf)[0], 200)
+        self.assertEqual(self.call('/school/api/me', cookie=other)[0], 401)
+        self.call('/school/api/users', dict(id=target['id'], role='DRIVER', active=True), admin, admin_csrf)
+
+    def test_host_and_android_session_refresh(self):
+        self.assertEqual(self.call('/health', headers={'Host':'evil.local:'+str(self.server.server_port)})[0], 403)
+        cookie, csrf = self.login('other')
+        code = self.call('/school/api/pair-code', {}, cookie, csrf)[1]['code']
+        device = self.call('/api/pair', {'code':code})[1]
+        status, state, _ = self.call('/api/state', headers={'X-GreenWave-Token':device['token']})
+        self.assertEqual(status, 200)
+        self.assertEqual(set(state), {'session_id'})
+        self.assertEqual(state['session_id'], device['session_id'])
+        self.assertEqual(self.call('/school/api/export?id=missing', cookie=cookie)[0], 404)
+
     def test_bad_json_fields_reset_and_logout(self):
         self.assertEqual(self.call('/school/api/register', [1])[0], 400)
         self.assertEqual(self.call('/school/api/register', dict(email='bad'))[0], 400)

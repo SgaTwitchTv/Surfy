@@ -1,0 +1,9 @@
+[run]
+branch = True
+source = greenwave.school,greenwave.school_store
+
+[report]
+show_missing = True
+fail_under = 70
+exclude_also =
+    if __name__ == .__main__.:

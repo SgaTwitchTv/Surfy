@@ -3,7 +3,7 @@
 function schoolGuidance(speed, limit, recommendation, eligible) {
  const r = recommendation;
  const finite = x => typeof x === 'number' && Number.isFinite(x);
- if (!eligible || !finite(speed) || !finite(limit) || limit <= 0 || r?.status !== 'READY' ||
+ if (!eligible || !finite(speed) || speed < 0 || !finite(limit) || limit <= 0 || r?.status !== 'READY' || !['HOLD','ACCELERATE','BRAKE','COAST','ENGINE_BRAKE','STOP'].includes(r.action) ||
      ![r.target_kmh,r.range_min_kmh,r.range_max_kmh].every(finite) ||
      r.range_min_kmh < 0 || r.range_min_kmh > r.range_max_kmh || r.range_max_kmh > limit ||
      r.target_kmh < r.range_min_kmh || r.target_kmh > r.range_max_kmh) return null;
@@ -52,7 +52,7 @@ if (typeof document !== 'undefined') {
  }
  function renderTrips(){
   const body=$('trip-rows');body.replaceChildren();
-  for(const t of trips){const row=el('tr');cell(row,t.title,t.owner);cell(row,t.route_id);cell(row,date(t.created));cell(row,names[t.status]||t.status);const actions=cell(row,'');
+  for(const t of trips){const row=el('tr');cell(row,t.title,t.owner);cell(row,t.route_id);cell(row,date(t.created));cell(row,t.interrupted?'Przerwany zapis':names[t.status]||t.status);const actions=cell(row,'');
    if(t.owner_id===user.id||user.role==='ADMIN')button(actions,'Edytuj',()=>edit('Opis przejazdu',[{name:'title',label:'Nazwa',value:t.title,max:120},{name:'note',label:'Notatka',value:t.note,max:1000,optional:true}],async data=>{await api('/school/api/trips/update',{id:t.id,...data});await refresh();}));
    if(t.status==='COMPLETE'&&t.run_id){const a=el('a','Eksport ZIP');a.href='/school/api/export?id='+encodeURIComponent(t.id);actions.append(a);}
    body.append(row);
@@ -60,7 +60,7 @@ if (typeof document !== 'undefined') {
   // Navigation selector must not inherit table filters or other users' trips.
   refreshTripSelector();
  }
- async function refreshTripSelector(){try{const own=await api('/school/api/trips');const value=$('active-trip').value;$('active-trip').replaceChildren();for(const t of own.filter(t=>t.owner_id===user.id))option($('active-trip'),t.id,t.title+' • '+(names[t.status]||t.status));if(own.some(t=>t.id===value&&t.owner_id===user.id))$('active-trip').value=value;await renderNavSignals();}catch(e){notice(e.message,true);}}
+ async function refreshTripSelector(){try{const own=await api('/school/api/trips');const value=$('active-trip').value;$('active-trip').replaceChildren();for(const t of own.filter(t=>t.owner_id===user.id))option($('active-trip'),t.id,t.title+' • '+(t.interrupted?'Przerwany zapis':names[t.status]||t.status));if(own.some(t=>t.id===value&&t.owner_id===user.id))$('active-trip').value=value;await renderNavSignals();}catch(e){notice(e.message,true);}}
  function renderObservations(){
   const body=$('observation-rows');body.replaceChildren();
   for(const o of observations){const row=el('tr');cell(row,o.signal,o.trip);cell(row,o.owner,date(o.created));cell(row,names[o.state]);cell(row,names[o.effective_state],o.correction_count+' korekt');cell(row,o.kind==='STATE_START'?'Początek fazy':'Widziany kolor');const actions=cell(row,'');
@@ -106,6 +106,7 @@ if (typeof document !== 'undefined') {
  async function init(){const result=await api('/school/api/me');user=result.user;csrf=user.csrf;authView();$('who').textContent=user.name+' • '+names[user.role];$('scope').textContent=user.role==='DRIVER'?'Widoczne są wyłącznie Twoje dane.':'Wgląd we wszystkie dane • korekty z audytem';$('admin-tab').hidden=user.role!=='ADMIN';$('lab-link').hidden=user.role!=='ADMIN';$('mode-label').textContent=result.demo?'DEMO • WYŁĄCZNIE DANE SYNTETYCZNE':'TWÓJ PANEL';document.querySelector('.demo-hint').hidden=!result.demo;routes=await api('/school/api/routes');$('new-route').replaceChildren();for(const r of routes.filter(r=>r.status!=='DAMAGED'))option($('new-route'),r.route_id,r.name);map=await api('/school/api/map');await refresh();await poll();}
  setInterval(()=>{if(user&&view==='navigation')poll();},750);setInterval(()=>{if(user&&view==='navigation'&&performance.now()-lastUpdate>2000)navigation(true);},500);window.addEventListener('resize',drawMap);
  const reset=location.hash.startsWith('#reset=')?location.hash.slice(7):'';if(reset){authTab('reset');$('reset-form').elements.token.value=reset;history.replaceState(null,'','/');}
+ api('/health').then(r=>document.querySelector('.demo-hint').hidden=!r.demo).catch(()=>{});
  init().catch(e=>{if(!e.message.includes('Zaloguj'))notice(e.message,true);authView();});
 }
 

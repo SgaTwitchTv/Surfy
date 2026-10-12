@@ -19,6 +19,8 @@ class SchoolServer(LocalServer):
     def __init__(self, port=8765, host='127.0.0.1', root='runtime/school', demo=False, secure=False, public_origin=None):
         self.root = Path(root)
         self.store = SchoolStore(self.root / 'school.sqlite3')
+        with self.store.db() as db:
+            db.execute("UPDATE trips SET interrupted=1 WHERE status='RECORDING'")
         self.apps = {}
         self.pair_codes = {}
         self.secure = secure
@@ -50,12 +52,24 @@ class SchoolServer(LocalServer):
             self.store.add_observation(user, dict(trip_id=trip['id'], signal='S1', state='GREEN', kind='STATE_SEEN'), ['S1'])
 
     def server_close(self):
-        for app in self.apps.values():
+        for uid, app in self.apps.items():
+            tid = getattr(app, 'school_trip', None)
             app.close()
+            if tid and app.logger.run_id:
+                with self.store.db() as db:
+                    complete = (app.logger.root / app.logger.run_id / 'complete.json').exists()
+                    db.execute('UPDATE trips SET status=?,interrupted=? WHERE id=? AND owner_id=?',
+                               ('COMPLETE' if complete else 'RECORDING', not complete, tid, uid))
         super().server_close()
 
 
 class SchoolHandler(Handler):
+    def _valid_host(self):
+        allowed = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
+        if self.server.public_origin:
+            allowed.add(urlsplit(self.server.public_origin).netloc)
+        return self.headers.get('Host', '') in allowed
+
     def cookie(self):
         cookie = SimpleCookie()
         try:
@@ -230,7 +244,15 @@ class SchoolHandler(Handler):
                 trip = store.get_trip(user, data.get('trip_id', ''))
                 app = self.server.app_for(user)
                 signals = ['S1', 'S2', 'S3', 'S4', 'S5'] if trip['route_id'] == 'synthetic_s1_s5' else [line.stop_line_id for line in app.routes.load(trip['route_id']).stop_lines]
-                return self._send(201, store.add_observation(user, data, signals))
+                result = store.add_observation(user, data, signals)
+                # Append manual evidence to the active raw journal too. Corrections
+                # remain in SQLite and never replay themselves into the phase model.
+                if getattr(app, 'school_trip', None) == trip['id'] and app.logger.active:
+                    if trip['route_id'] == 'synthetic_s1_s5':
+                        app.observe(data['signal'], data['state'], data['kind']) if data['state'] != 'UNKNOWN' else None
+                    elif data['state'] != 'UNKNOWN':
+                        app.observe_route(data['signal'], data['state'], data['kind'])
+                return self._send(201, result)
             if path == '/school/api/corrections':
                 return self._send(201, store.correct(user, data))
             if path == '/school/api/users':

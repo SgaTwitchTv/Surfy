@@ -75,7 +75,7 @@ class SchoolStore:
     def migrate(self):
         with self.db() as db:
             version = db.execute('PRAGMA user_version').fetchone()[0]
-            if version > 1:
+            if version > 2:
                 raise ValueError('Baza danych wymaga nowszej wersji aplikacji')
             if version == 0:
                 db.executescript('''
@@ -104,6 +104,10 @@ class SchoolStore:
                     PRAGMA user_version=1;
                     COMMIT;
                 ''')
+
+            if version < 2:
+                db.execute('ALTER TABLE trips ADD COLUMN interrupted INTEGER NOT NULL DEFAULT 0')
+                db.execute('PRAGMA user_version=2')
 
     def register(self, payload, role='DRIVER'):
         if set(payload) != {'email', 'name', 'password'} or role not in ROLES:
@@ -255,7 +259,7 @@ class SchoolStore:
         if row['owner_id'] != user['id'] or status not in ('RECORDING', 'COMPLETE'):
             raise AccessError()
         with self.db() as db:
-            db.execute('UPDATE trips SET run_id=?,status=? WHERE id=?', (run_id, status, tid))
+            db.execute('UPDATE trips SET run_id=?,status=?,interrupted=0 WHERE id=?', (run_id, status, tid))
 
     def add_observation(self, user, payload, signals):
         if set(payload) != {'trip_id', 'signal', 'state', 'kind'}:
