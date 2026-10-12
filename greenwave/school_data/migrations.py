@@ -1,5 +1,6 @@
 """Checksummed migrations executed statement by statement in one transaction."""
 import hashlib
+import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -63,14 +64,36 @@ def statements(sql):
         for char in line:
             buffer += char
             if char == ";" and sqlite3.complete_statement(buffer):
-                head = buffer.strip().split(None, 1)[0].rstrip(";").upper()
-                if head in {"BEGIN", "COMMIT", "ROLLBACK", "END", "VACUUM", "ATTACH", "DETACH", "PRAGMA"}:
-                    raise SchemaError("Migration cannot control transactions or connection pragmas")
                 yield buffer
                 buffer = ""
     if buffer.strip():
         raise SchemaError("Incomplete migration statement")
 
+
+
+def execute_migration_statement(connection, statement):
+    """SQLite authorizes actual operations, independent of comments/SQL spelling.
+    Trigger BEGIN/END belongs to CREATE_TRIGGER, not SQLITE_TRANSACTION.
+    Runner BEGIN/COMMIT/PRAGMAs execute outside this temporary authorization scope.
+    """
+    forbidden = {sqlite3.SQLITE_TRANSACTION, sqlite3.SQLITE_SAVEPOINT,
+                 sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH, sqlite3.SQLITE_PRAGMA}
+    def authorize(action, arg1, arg2, database, source):
+        return sqlite3.SQLITE_DENY if action in forbidden else sqlite3.SQLITE_OK
+    # VACUUM fails before SQLite's ATTACH authorizer event inside a transaction.
+    # Strip leading comments only; literal/trigger content must remain untouched.
+    leading = re.sub(r"\A(?:\s+|--[^\n]*(?:\n|$)|/\*.*?\*/)*", "", statement, flags=re.S)
+    if re.match(r"VACUUM\b", leading, flags=re.I):
+        raise SchemaError("VACUUM is forbidden inside a migration")
+    connection.set_authorizer(authorize)
+    try:
+        connection.execute(statement)
+    except sqlite3.DatabaseError as exc:
+        if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_AUTH:
+            raise SchemaError("Migration cannot control transactions, attachments or pragmas") from exc
+        raise
+    finally:
+        connection.set_authorizer(None)
 
 def migrate(storage, migrations=None, clock=time.time):
     from .backup import snapshot
@@ -90,7 +113,7 @@ def migrate(storage, migrations=None, clock=time.time):
             try:
                 for migration in migrations[status["version"]:]:
                     for statement in statements(migration.sql):
-                        connection.execute(statement)
+                        execute_migration_statement(connection, statement)
                     connection.execute("INSERT INTO schema_migrations VALUES (?,?,?,?)",
                                        (migration.version, migration.checksum, clock(), "school-data-v1"))
                     connection.execute("PRAGMA user_version=" + str(migration.version))
