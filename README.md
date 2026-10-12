@@ -7,6 +7,14 @@ vehicle dynamics, a cost model for stops, braking, acceleration changes, travel
 time and risk, an append-only raw trip logger, and diagnostic GPS reception from
 a phone.
 
+## School extension (work in stages)
+
+The previous school portal prototype was removed; this branch currently runs
+baseline GreenWave M8/CV. See [the current run instructions](docs/school-app/run.md),
+[the v1 contract](docs/school-app/contract.md), and [stage status](docs/school-app/stages.md).
+The contract describes planned features, not an implemented account-protected portal.
+AI prompts and verification are recorded in [AI usage](docs/school-app/ai-usage.md).
+
 ## Running the application
 
 GreenWave requires Python 3.11 or newer and has no pip dependencies:

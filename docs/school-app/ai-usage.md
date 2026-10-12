@@ -268,3 +268,195 @@ Techniczna przeszkoda przy zapisie: Windows odrzucił zbyt długą pojedynczą
 komendę (os error206). Podzielono zapis dokumentu na krótsze komendy; to nie
 błąd kodu aplikacji i nie zmieniło zakresu etapu. Kontrola tabel/diff wykonana
 po zakończeniu zapisu i doprecyzowaniu spójności.
+
+## Prompt końcowego doprecyzowania etapu 2 (2026-10-12)
+
+Treść otrzymanego promptu, z ujednoliconym formatowaniem list i końców linii:
+
+```text
+Teraz dokończmy i sprecyzujmy etap 2 — poprawki, doprecyzowanie zakresu i końcowy odbiór kontraktu.
+Kontynuuj w istniejącym worktree na codex/school-app. Nie zaczynaj etapu 3. Nie zmieniaj main ani codex/vision-camera. Przeczytaj obowiązujące AGENTS.md, dokumenty docs/school-app oraz aktualny stan Git.
+
+Kontekst przeglądu:
+* 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0 zawiera dokumentację kontraktu.
+* Późniejszy commit 3476d133006a948887899e8b75dcc210ce084248 usunął wcześniejszy prototyp i część reguł .gitignore oraz dodał runtime/school/school.sqlite3 i pliki nagrań.
+* Usunięcie prototypu było moją decyzją. Nie odtwarzaj go automatycznie.
+* Zawartość runtime nie jest materiałem do audytu. Nie czytaj bazy, logów, mediów ani prywatnych data/runs/.
+* Kontrakt jest dobrym punktem wyjścia, ale wymaga ograniczenia zakresu i usunięcia niezatwierdzonych propozycji.
+W tym etapie wolno zmieniać dokumentację, .gitignore i śledzenie wskazanych plików runtime. Nie implementuj backendu, migracji, formularzy ani UI.
+
+A. UPORZĄDKUJ GIT BEZ UTRATY LOKALNYCH DANYCH
+1. Sprawdź HEAD, status, staging i listę śledzonych ścieżek. Nie nadpisuj niezwiązanych zmian.
+2. Przywróć reguły ignorowania odpowiednie dla projektu:
+/runtime/
+/artifacts/
+.coverage
+.coverage.*
+/htmlcov/
+/.venv-school/
+oraz inne rzeczywiście używane katalogi środowiska i raportów.
+Zachowaj wszystkie pozostałe istniejące reguły.
+3. Usuń runtime/ wyłącznie ze śledzenia Git, zachowując lokalne pliki.
+Użyj operacji równoważnej git rm -r --cached -- runtime.
+Nie wykonuj usunięcia z dysku, git clean ani reset --hard.
+4. Sprawdź pozostałe śledzone ścieżki pod kątem przypadkowego dodania DB, WAL/SHM, nagrań, środowisk i raportów. Korzystaj z nazw i metadanych Git; nie otwieraj danych użytkownika.
+5. Wykaż, że wskazane ścieżki runtime pozostają lokalnie, a nie będą obecne w drzewie nowego commita. Sprawdź reguły przez git check-ignore --no-index na konkretnych ścieżkach.
+6. Zapisz w dokumentacji, że poprzedni publiczny commit nadal zawiera te pliki. Nie twierdź, że nowy commit usuwa je z historii.
+7. Nie przepisuj opublikowanej historii i nie wykonuj force push. Bez czytania danych nie zakładaj, że są syntetyczne. Jeśli kwestia ich wcześniejszej publikacji pozostaje nierozstrzygnięta, zapisz ją jako osobny otwarty problem wraz z opcjami dalszego działania, bez ujawniania zawartości.
+
+B. ZATWIERDZONY ZAKRES PIERWSZEJ WERSJI
+Poniższe decyzje zastępują propozycje D1–D7. Zaktualizuj kontrakt, macierz ról, model danych, API, formularze i scenariusze odbioru tak, aby wszystkie były z nimi zgodne.
+
+1. Role
+* DRIVER, ANALYST, ADMIN.
+* Rejestracja tworzy wyłącznie DRIVER.
+* Wszystkie role mogą mieć własne przejazdy i obserwacje.
+* DRIVER ma dostęp wyłącznie do własnych danych.
+* ANALYST może analizować własne oraz jawnie udostępnione mu ukończone przejazdy. Może tworzyć robocze wersje wspólnych konfiguracji.
+* ADMIN zarządza kontami, rolami oraz publikowaniem konfiguracji.
+* ADMIN nie otrzymuje automatycznego dostępu do cudzych GPS, filmów ani przejazdów.
+
+2. Proste udostępnianie
+* Właściciel udostępnia jeden ukończony przejazd jednemu aktywnemu analitykowi przez dokładny email.
+* Jedno uprawnienie READ_ANALYZE: metadane, obserwacje, historia korekt, GPS replay i wynik analizy.
+* Formularz jasno informuje, że udostępnia przebieg GPS.
+* Analityk nie zmienia oryginałów, korekt ani metadanych właściciela.
+* Udostępnienie można cofnąć; dostęp jest sprawdzany także przy kolejnych odczytach i wykonywaniu zadań.
+* Eksport i surowe media CV pozostają wyłącznie dla właściciela w v1.
+* Nie implementujemy oddzielnych scopes EXPORT/CV_MEDIA, grup, projektów ani wielostopniowych zgód.
+* Brak automatycznego dziedziczenia dostępu do nowych przejazdów.
+
+3. Administrator
+* Usuń z obowiązkowego v1 mechanizm admin_access, break-glass i związane endpointy, formularze oraz powiadomienia.
+* Administrator może zarządzać kontami i unieważniać ich dostęp, bez odczytu prywatnych danych.
+* Operacje administracyjne mają audyt i wymagają odpowiedniego ponownego potwierdzenia tożsamości.
+* Nie wolno zablokować lub zdegradować ostatniego aktywnego administratora.
+* Ewentualne przyszłe awaryjne udostępnianie danych opisz wyłącznie poza zakresem v1.
+
+4. Konta i poczta
+* Zachowaj bezpieczny login, logout, zmianę hasła, sesje, CSRF, limity prób i jednorazowy reset.
+* Zachowaj aktywację email, korzystając ze wspólnego mechanizmu tokenów i SMTP.
+* Docker demo korzysta z Mailpit i syntetycznych adresów; wdrożenie z prawdziwymi danymi z poprawnie skonfigurowanej poczty i HTTPS.
+* Tokeny resetu i aktywacji nie są ujawniane przez publiczne API ani logi.
+* Bootstrap administratora przez CLI bez stałych publicznych haseł.
+* Parametry hashowania opisz jako wymagające pomiaru na docelowym sprzęcie; zachowaj bezpieczne wartości początkowe i limit kosztownych równoległych operacji.
+
+5. Nawigacja i telefon
+* Akceptujemy jedną aktywną sesję nawigacji/nagrywania na cały deployment v1.
+* Drugi użytkownik może przeglądać swoje dane i replay, lecz start jazdy dostaje jasne 409 bez ujawnienia właściciela aktywnej sesji.
+* Token telefonu jest odrębny od sesji przeglądarki i związany z właścicielem oraz sesją parowania.
+* Logout sesji nadrzędnej kończy związany z nią dostęp telefonu i nagrywanie.
+* Restart wymaga ponownego parowania; zmiana hasła, blokada konta i zmiana roli unieważniają odpowiednie credentials.
+* Uwzględnij konieczne późniejsze zmiany Androida.
+* Nie zmieniaj warunków dopuszczenia rekomendacji live.
+
+6. Rekordy
+* Właściciel może edytować tytuł/notatkę przejazdu i archiwizować zamknięty przejazd.
+* Oryginały GPS i obserwacji pozostają niezmienne.
+* Korekty obserwacji są osobnymi wpisami z autorem, czasem, powodem i poprzednią/nową wartością.
+* Nie realizujemy fizycznego usuwania surowych danych przez API v1.
+* Stare nieprzypisane dane nie trafiają automatycznie do nowych kont. Import operatorski jest przyszłym, osobno zlecanym działaniem, a nie warunkiem ukończenia szkolnego demo.
+
+7. CV i konfiguracja
+* Zachowaj istniejącą diagnostykę CV oraz ochronę jej zasobów.
+* Nie buduj nowych rozbudowanych procesów udostępniania filmów, uploadu czy biblioteki mediów na potrzeby szkolnej wersji.
+* Publikacja konfiguracji nie oznacza weryfikacji terenowej. UI kont i role nie nadają wiarygodności fazom, liniom ani wynikom YOLO.
+* Demo działa bez telefonu, ADB, kamery i YOLO.
+
+C. UPROŚĆ ARCHITEKTURĘ BEZ UKRYWANIA WYMAGAŃ
+1. Przejrzyj dotychczasowe 74 endpointy i model tabel.
+2. Usuń elementy wynikające z odrzuconych funkcji. Nie redukuj liczby tabel lub endpointów sztucznie kosztem uprawnień i integralności.
+3. Podziel zakres na:
+* obowiązkowe v1;
+* zachowane funkcje M8/CV wymagające bezpiecznej integracji;
+* funkcje poza v1.
+4. Każda tabela i endpoint obowiązkowego v1 musi mieć powiązanie z konkretnym scenariuszem.
+5. Oddziel trwałe dane domenowe od odtwarzalnego stanu runtime. Uzasadnij, które sesje/replay/jobs wymagają tabel, a które wystarczą w pamięci z poprawnym recovery.
+6. Zachowaj wersjonowane migracje, transakcje, audyt, poprawne korzenie storage, recovery i walidację wszystkich formularzy.
+7. Sprawdź spójność między modelami, DTO, polityką dostępu, formularzami i scenariuszami. Usuń martwe odwołania do admin_access oraz wycofanych scopes.
+8. Wyjaśnij, jak ograniczony namespace szkolny ochroni odziedziczone endpointy, eksporty i media bez przypadkowego publicznego dostępu.
+9. Zachowaj ustalony szeroki zakres coverage i osobny pomiar istotnej logiki JS.
+
+D. INSTRUKCJA URUCHOMIENIA I STATUS
+1. Utwórz docs/school-app/run.md:
+* jak wejść do worktree i sprawdzić gałąź;
+* jak uruchomić obecnie działające bazowe GreenWave;
+* jak zatrzymać serwer;
+* jakie testy są obecnie dostępne;
+* wyraźna informacja, że portal szkolny został usunięty i nie jest jeszcze zaimplementowany według nowego kontraktu.
+2. Zweryfikuj opisane komendy na bieżącym kodzie. Do smoke testów użyj izolowanego eksportu lub jawnego katalogu danych syntetycznych. Nie uruchamiaj prób zapisujących w prywatnym data/runs/.
+3. Nie podawaj przyszłego polecenia python -m greenwave.school jako już działającego.
+4. Dodaj w README krótki odnośnik do instrukcji i dokumentacji szkolnego rozszerzenia.
+5. Zaktualizuj stages.md:
+* wpisz literalny hash dokumentacyjnego etapu 2: 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0;
+* etap 2 po tych poprawkach oznacz „Przygotowany do końcowego odbioru”;
+* etapy 3–12 pozostają „Do zrobienia”.
+6. Zaktualizuj ai-usage.md o ten prompt i faktycznie wykonane działania.
+7. Dopisz do kontraktu, że wyżej wymienione decyzje produktowe są ustalone tym promptem. Nie proś ponownie o wybór D1–D7; pytaj tylko o rzeczywistą sprzeczność, której nie można rozwiązać na podstawie polecenia.
+
+E. SPRAWDZENIA I COMMIT
+* Wykonaj kontrolę zgodności dokumentacji i staged diff.
+* Sprawdź, że staged changes nie zawierają nowych DB, nagrań, sekretów ani niezwiązanych zmian.
+* Przy zmianach dokumentacji nie powtarzaj pełnej regresji bez powodu; wykonaj kontrole właściwe dla zakresu.
+* Zrób dwa małe commity:
+1. reguły ignorowania i usunięcie runtime wyłącznie ze śledzenia;
+2. poprawiony kontrakt, instrukcja, README i rejestry.
+* Nie pushuj automatycznie, nie przepisuj historii i nie scalaj z main.
+
+Na końcu podaj:
+1. Hashe obu commitów i git status.
+2. Końcową macierz ról.
+3. Zakres v1 oraz funkcje wyłączone z pierwszej wersji.
+4. Liczbę i krótkie uzasadnienie obowiązkowych tabel oraz endpointów.
+5. Wyniki kontroli dokumentacji i smoke testów.
+6. Dowód usunięcia runtime z nowego drzewa Git przy zachowaniu lokalnych plików.
+7. Informację o wcześniejszej publikacji runtime i ewentualnym nierozstrzygniętym problemie.
+8. Dokładne komendy uruchomienia aktualnej aplikacji.
+9. Krótką checklistę pozwalającą nam zatwierdzić etap 2.
+Zatrzymaj się po tym etapie. Nie implementuj etapu 3 i nie deklaruj jeszcze spełnienia wymagań przez działający portal.
+```
+
+## Faktyczne działania i dowody końcowego doprecyzowania etapu 2
+
+- Na wejściu HEAD3476d133006a948887899e8b75dcc210ce084248, status i staging
+  puste. Odczytano instrukcje, dokumenty szkolne i aktualne źródła uruchomienia;
+  prototyp pozostaje usunięty. Nie przywracano żadnej jego funkcji.
+- git ls-files wskazał 7 ścieżek runtime (DB i manifesty/CSV). Odczytano jedynie
+  nazwy/Git metadata oraz filesystem stat (is_file,size,mtime), nie zawartość.
+  Dopisano ignore bez usuwania wcześniejszych reguł;git rm -r --cached -- runtime
+  zachował pliki. Pierwszy commit 7a2899770075cc6ac12c826234f620f1de97a380:
+  tylko .gitignore i 7 usunięć indeksu. Testy metadata/ignore/tree PASS.
+- Kontrola nazw pozostałych śledzonych plików obejmowała DB/WAL/SHM,CSV,
+  raw/metadata/complete,filmy/modelweights,env/reportdirs. Brak pozostałych
+  podejrzanych ścieżek w sprawdzonym zbiorze nazw;nie jest to badanie zawartości
+  ani gwarancja,że historia nie ma wrażliwych danych.
+- Lokalny origin/codex/school-app zawiera3476d13. Zachowana historia nadal
+  zawiera runtime;użytkownik wskazał publikację. PUBLISH-01 otwarte:charakter
+  danych niebadany,bez założenia synthetic;opcje dalszej oceny w contract§1.
+  Nie force-pushowano,nie przepisano historii,nie kontaktowano się z hostingiem.
+- Przepisano kontrakt według zatwierdzonych decyzji:READ_ANALYZE na jeden trip,
+  admin bez prywatnego read,owner-only export/CV,brak nowych mediów/importworkflow,
+  Mailpit/SMTP,14 nowych trwałych tabel i37 APIcore+26 adapterówM8/CV. Runtime
+  preauth/nav/replay/jobs w pamięci,domain/recordintents/reports trwałe. Decyzje
+  nie są ponownie proponowane do wyboru D1–D7. Każdy element ma scenariusz.
+- Dodano run.md i krótki READMElink. Baza uruchamia się przez python -m greenwave,
+  portal school.py nie istnieje. Polecenia sprawdzono kodem/CLI i izolowanym
+  exportem źródeł bez runtime/data/runs/data/derived. Smoke:runs source tylko
+  w tym eksporcie;HTTP HTML/map/state PASS,syntheticrecord start/pause/finish/ZIP
+  PASS,livebezverifieddata BLOCKED. Token testowy tylko w pamięci,nie w logach.
+- Sprawdzenia właściwe zakresowi:python -m greenwave --help OK;
+  python -m unittest discover -s tests -p test_live_navigation.py -q:
+  2 testy OK;node --check greenwave/web/app.js OK;node --test tests/driver_ui.cjs
+  tests/vision_workbench_ui.cjs:7 PASS;node tests/mobile_flow.cjs PASS.
+  Nie powtarzano pełnej226regresji/Androidbuild/Playwright/YOLO ani pomiaru coverage.
+- Kontrola dokumentacyjna:metody/ścieżki unique,14tabel/37core/26integration,
+  scenariusze iCSRF,brak martwych mechanizmów odrzuconych w normatywnym kontrakcie,
+  Markdownlinks/fences i statusy3–12. Nie mylić tej kontroli z testami nowego API.
+- Drugi commit obejmuje wyłącznie contract.md,run.md,stages.md,ai-usage.md,README.
+  Żadnych nowych DB/nagrań/sekretów/backendu;nie ma implementacji migracji/UI.
+  Dokładny hash w odpowiedzi końcowej i resolverze rejestru. Etap2 pozostaje
+  „Przygotowany do końcowego odbioru”,etapy3–12 „Do zrobienia”. STOP po tym etapie.
+
+Historia wcześniejszych promptów powyżej pozostaje niezmieniona jako zapis
+wycofanych propozycji;nie jest aktywnym kontraktem. Bieżące wymagania wyłącznie
+w nowej wersji contract.md i niniejszym prompcie.
