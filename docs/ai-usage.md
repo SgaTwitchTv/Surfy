@@ -18,3 +18,10 @@ Test HTTP obejmuje zapis prawdziwego syntetycznego raw.csv i eksport ZIP,
 izolację kont, parowanie Android z właścicielem i brak rekomendacji live.
 Jedna poprawka po teście: odczyt ciała odrzucanego POST przed odpowiedzią,
 aby Windows nie zrywał połączenia przy nieodczytanych bajtach.
+
+Etap UI: rzeczywisty Playwright/Edge potwierdził logowanie, tworzenie/edycję
+przejazdu, zapis i zakończenie, obserwację, korektę i filtry. Układ: 1440 px,
+390x844, 320x740, 844x390; brak poziomego overflow całej strony. Utrata sieci
+usuwa bieżącą prędkość i poradę. Zrzuty: artifacts/school (ignorowane w Git).
+Poprawiono nagłówek po wykryciu overflow przy 390 px. Wynik pierwszego pomiaru:
+82% linii+gałęzi dla school.py i school_store.py; pomiar końcowy nastąpi później.

@@ -91,6 +91,11 @@ class SchoolHandler(Handler):
                 return self._send(200, (STATIC / file).read_bytes(), content_type)
             if path == '/health':
                 return self._send(200, {'ok': True, 'demo': self.server.demo})
+            if path == '/api/state' and self.headers.get('X-GreenWave-Token'):
+                device = self.server.store.session(self.headers['X-GreenWave-Token'])
+                if device['csrf'] != 'DEVICE':
+                    raise AccessError()
+                return self._send(200, {'session_id': self.server.app_for(device).session_id})
             user = self.user()
             store = self.server.store
             query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query, keep_blank_values=True).items()}
@@ -127,8 +132,13 @@ class SchoolHandler(Handler):
             # All pre-existing laboratory APIs/assets require ADMIN session.
             if user['role'] != 'ADMIN':
                 raise AccessError()
+            if path == '/school-lab-bridge.js':
+                script = "const originalFetch=window.fetch;window.fetch=(url,options={})=>originalFetch(url,{...options,headers:{...options.headers,'X-CSRF-Token':" + json.dumps(user['csrf']) + "}});"
+                return self._send(200, script.encode(), 'text/javascript; charset=utf-8')
             if path == '/lab':
-                self.path = '/'
+                content = (STATIC / 'index.html').read_bytes().replace(b'__GREENWAVE_TOKEN__', self.server.token.encode()).replace(b'__GREENWAVE_PAIRING_CODE__', b'portal: Sparuj Android')
+                content = content.replace(b'<head>', b'<head><script src="/school-lab-bridge.js"></script>')
+                return self._send(200, content, 'text/html; charset=utf-8')
             return super().do_GET()
         except AccessError as error:
             self._send(error.status, {'error': str(error)})
@@ -249,6 +259,8 @@ class SchoolHandler(Handler):
                         raise ValueError('GPS wymaga rzeczywistej trasy')
                     if command == 'start' and trip['route_id'] != 'synthetic_s1_s5':
                         raise ValueError('Symulacja wymaga trasy S1–S5')
+                    if command == 'start':
+                        app.reset()
                     app.select_route(None if command == 'start' else trip['route_id'])
                     app.set_view_mode('SIMULATION' if command == 'start' else 'LIVE')
                     app.school_trip = trip['id']
