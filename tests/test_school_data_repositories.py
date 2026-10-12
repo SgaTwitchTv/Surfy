@@ -200,3 +200,17 @@ class RepositoryTests(RepositoryFixture):
             trip=self.repo.transition_trip(self.actor,trip['id'],trip['revision'],state,**({'run_id':'b'*32} if state=='STARTING' else {}))
         with self.assertRaises(Invalid):self.repo.transition_trip(self.actor,trip['id'],trip['revision'],'COMPLETE',raw_ref='other/gps.jsonl',raw_hash=HASH,manifest_hash=HASH)
         self.assertEqual(self.repo.get_trip(self.actor,trip['id'])['status'],'FINALIZING')
+
+    def test_global_recording_reservation_and_durable_intents(self):
+        started=self.repo.transition_trip(self.actor,self.trip['id'],1,'STARTING',run_id='b'*32)
+        other_trip=self.repo.create_trip(self.oa,'Second driver')
+        with self.assertRaisesRegex(Conflict,'already active'):
+            self.repo.transition_trip(self.oa,other_trip['id'],1,'STARTING',run_id='c'*32)
+        self.repo.transition_trip(self.actor,self.trip['id'],started['revision'],'INTERRUPTED')
+        self.repo.transition_trip(self.oa,other_trip['id'],1,'STARTING',run_id='c'*32)
+        intent=self.repo.recording_intent(self.actor,self.trip['id'],'FINISH',KEY,HASH)
+        with self.assertRaises(Denied):self.repo.pending_intents(self.oa,self.trip['id'])
+        self.db.close()
+        with Database(self.storage) as reopened:
+            repo=Repository(reopened,clock=lambda:self.now)
+            self.assertEqual(repo.pending_intents(self.actor,self.trip['id'])[0]['id'],intent['id'])

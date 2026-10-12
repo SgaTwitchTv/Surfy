@@ -145,3 +145,15 @@ class MigrationTests(unittest.TestCase):
     def test_no_implicit_init(self):
         with self.assertRaises(SchemaError):Database(self.storage).__enter__()
         self.assertFalse(self.storage.database.exists())
+
+    def test_foreign_key_postcheck_and_missing_history_version(self):
+        migrate(self.storage)
+        c=connect(self.storage.database)
+        try:
+            c.execute('PRAGMA foreign_keys=OFF')
+            c.execute("INSERT INTO trips(id,owner_id,title,mode,status,created_at) VALUES (?,?,'Orphan','SIMULATION','PLANNED',1)",('a'*32,'b'*32))
+            with self.assertRaises(SchemaError):validate(c,load())
+            c.execute('DELETE FROM trips')
+            c.execute('DELETE FROM schema_migrations')
+            with self.assertRaises(SchemaError):validate(c,load())
+        finally:c.close()

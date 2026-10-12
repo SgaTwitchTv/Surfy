@@ -64,6 +64,8 @@ class Trips:
             if trip["archived_at"] or status not in allowed.get(trip["status"],set()): raise Conflict("Invalid trip transition")
             now=self.clock()
             if status=="STARTING":
+                if c.execute("SELECT 1 FROM trips WHERE status IN ('STARTING','RECORDING','FINALIZING') LIMIT 1").fetchone():
+                    raise Conflict("Navigation or recording is already active")
                 identifier(run_id)
                 c.execute("UPDATE trips SET status=?,run_id=?,started_at=?,revision=revision+1 WHERE id=?",(status,run_id,now,trip_id))
             elif status=="COMPLETE":
@@ -139,3 +141,9 @@ class Trips:
                 if row["state"]!=state or row["result_ref"]!=result_ref: raise Conflict("Intent already finalized")
                 return
             c.execute("UPDATE recording_operations SET state=?,result_ref=? WHERE id=?",(state,result_ref,operation_id))
+
+    def pending_intents(self, actor, trip_id):
+        """Owned durable intents for a future recording recovery coordinator."""
+        with self.database.transaction(False) as c:
+            self.own_trip(c,actor,trip_id)
+            return [dict(r) for r in c.execute("SELECT * FROM recording_operations WHERE trip_id=? AND state='PENDING' ORDER BY created_at,id",(trip_id,))]
