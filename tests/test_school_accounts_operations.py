@@ -136,3 +136,11 @@ class OperationsTests(Fixture):
         self.assertEqual(result['n'],131072);self.assertEqual(result['max_parallel'],2)
         self.assertGreater(result['median_seconds'],0)
         self.assertNotIn('scrypt$',output.getvalue());self.assertNotIn(PASS,output.getvalue())
+
+    def test_kdf_capacity_does_not_consume_wrong_password_budget(self):
+        self.active()
+        self.service.passwords.slots.acquire();self.service.passwords.slots.acquire()
+        try:
+            for _ in range(6):self.assertEqual(self.login()[0],503)
+        finally:self.service.passwords.slots.release();self.service.passwords.slots.release()
+        self.assertEqual(self.login()[0],200)

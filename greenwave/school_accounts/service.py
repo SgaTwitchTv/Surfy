@@ -115,11 +115,15 @@ class AccountsService:
         address=self.address(body['email'])
         if not isinstance(body['password'],str):raise AuthError(422,'VALIDATION',{'password':'Podaj hasło.'})
         self.limits.take('LOGIN_IP',ip,30,900000)
-        self.limits.take('LOGIN_EMAIL',address,5,900000)
+        ticket=self.limits.take('LOGIN_EMAIL',address,5,900000)
         user=self.find(address)
-        good,rehash=self.passwords.verify(body['password'],user['password_hash'] if user else self.passwords.dummy)
+        try:
+            good,rehash=self.passwords.verify(body['password'],user['password_hash'] if user else self.passwords.dummy)
+            replacement=self.passwords.hash(body['password']) if good and user and user['status']=='ACTIVE' and rehash else None
+        except AuthError as error:
+            if error.status==503:self.limits.refund('LOGIN_EMAIL',address,ticket)
+            raise
         if not good or not user or user['status']!='ACTIVE':raise AuthError(401,'UNAUTHORIZED')
-        replacement=self.passwords.hash(body['password']) if rehash else None
         with self.repo.database.transaction() as c:
             fresh=c.execute('SELECT * FROM users WHERE id=?',(user['id'],)).fetchone()
             if fresh['status']!='ACTIVE' or fresh['security_version']!=user['security_version'] or fresh['password_hash']!=user['password_hash']:
