@@ -460,3 +460,202 @@ Zatrzymaj się po tym etapie. Nie implementuj etapu 3 i nie deklaruj jeszcze spe
 Historia wcześniejszych promptów powyżej pozostaje niezmieniona jako zapis
 wycofanych propozycji;nie jest aktywnym kontraktem. Bieżące wymagania wyłącznie
 w nowej wersji contract.md i niniejszym prompcie.
+
+
+## Prompt etapu 3 (2026-10-12)
+
+Treść polecenia użytkownika; pominięto wyłącznie puste linie/formatowanie interfejsu.
+Ścieżka w prompcie ma konra.codex; użyto istniejącego, zweryfikowanego konra/.codex,
+bez tworzenia nowego worktree.
+
+```text
+Etap 2 został zaakceptowany dokumentacyjnie. Teraz IMPLEMENTUJ etap 3, nie kończ na planie: Etap 3 — baza danych, migracje i warstwa dostępu do danych GreenWave School.
+Pracuj w istniejącym worktree na codex/school-app:
+C:\Users\konra.codex\worktrees\school-app\Surfy
+Przeczytaj obowiązujące AGENTS.md oraz:
+* docs/school-app/contract.md;
+* docs/school-app/audit.md;
+* docs/school-app/stages.md;
+* docs/school-app/run.md;
+* docs/school-app/ai-usage.md.
+Zaakceptowany kontrakt znajduje się w commicie:
+77c074cdc24eb14795eb8eb593167945d74eead4.
+
+ZASADY
+* Nie zmieniaj main ani codex/vision-camera.
+* Sprawdź HEAD, git status i staging. Zachowaj niezwiązane zmiany.
+* Nie odtwarzaj automatycznie usuniętego prototypu. Możesz korzystać z jego historii jako materiału, ale implementacja musi odpowiadać aktualnemu kontraktowi.
+* Nie czytaj ani nie modyfikuj prywatnego data/runs/ i starego runtime/school/.
+* Wszystkie testy wykonuj na nowych danych syntetycznych w TemporaryDirectory lub osobnym ignorowanym katalogu.
+* Nie importuj starej bazy ani nie przypisuj starych nagrań nowym kontom.
+* Nie zmieniaj solvera, predykcji ani warunków dopuszczenia rekomendacji live.
+* PUBLISH-01 pozostaje osobnym problemem. Nie przepisuj historii ani nie wykonuj force push.
+* Nie implementuj jeszcze serwera kont, SMTP, UI ani integracji telefonu z nowymi kontami.
+
+CEL
+Działająca warstwa persistence zgodna z kontraktem v1:
+14 tabel, wersjonowane migracje, integralność danych, transakcje, backup/restore, jawny runtime root oraz testy.
+
+1. ARCHITEKTURA WARSTWY DANYCH
+Podziel kod na czytelne moduły: połączenie i transakcje, migracje, repozytoria oraz konfiguracja storage. Dobierz prostą strukturę do istniejącego projektu; unikaj jednego ogromnego modułu.
+Ustal:
+* jawny katalog danych szkolnego portalu;
+* lokalizację school.sqlite3;
+* brak automatycznego fallbacku do DATA/runs, DATA/derived lub starego runtime;
+* konfigurację SQLite: foreign_keys, busy_timeout, WAL i synchronous zgodnie z kontraktem;
+* poprawne zamykanie połączeń, rollback i obsługę błędów;
+* wstrzykiwany zegar oraz generator ID, jeśli ułatwiają rzeczywiste testy.
+Zachowaj działanie bazowego python -m greenwave. Nowa warstwa nie może uruchamiać migracji ani tworzyć kont przy samym imporcie modułu.
+
+2. SCHEMAT I MIGRACJE
+Implementuj 14 tabel z zaakceptowanego contract.md:
+* schema_migrations;
+* users;
+* browser_sessions;
+* account_tokens;
+* auth_rate_limits;
+* devices;
+* pairing_challenges;
+* trips;
+* observations;
+* observation_corrections;
+* trip_shares;
+* audit_events;
+* config_versions;
+* recording_operations.
+Doprecyzuj SQL typy, nullability, klucze obce, CHECK, UNIQUE i indeksy. Odzwierciedl wszystkie istotne ograniczenia kontraktu. Nie twórz tabel odrzuconych w etapie 2.
+Ograniczenia zależne od wielu rekordów lub aktualnego czasu egzekwuj atomowo w warstwie danych; opisz, czego nie da się wyrazić samym CHECK.
+Migracje:
+* numerowane pliki SQL/Python oraz stabilne checksumy;
+* schema_migrations jest źródłem wersji, PRAGMA user_version jej zgodnym odzwierciedleniem;
+* brak zmian checksumów już zastosowanych migracji;
+* transakcyjne wykonanie bez niejawnych commitów rozrywających migrację;
+* kontrola foreign_key_check i integrity_check;
+* ponowne uruchomienie bez zmian jest bezpieczne;
+* nowsza baza, niespójne wersje i niezgodny checksum powodują odmowę;
+* awaria pozostawia bazę w określonym, sprawdzonym stanie.
+Nie rozbijaj arbitralnie tabel na wiele migracji tylko po to, aby stworzyć historię. Test aktualizacji może wykorzystywać kontrolowaną syntetyczną migrację kolejnej wersji.
+
+3. BACKUP, RESTORE I BLOKADA
+Dodaj udokumentowane narzędzie CLI do:
+* inicjalizacji/migracji nowej szkolnej bazy;
+* odczytu statusu schematu;
+* utworzenia backupu przez SQLite backup API;
+* kontrolowanego odtworzenia backupu.
+CLI nie służy jeszcze do logowania ani tworzenia rzeczywistych kont.
+Zapewnij wyłączność operacji maintenance i odmowę konfliktującego dostępu zgodnie z architekturą v1. Rozróżnij blokadę procesu/runtime od transakcyjnej blokady SQLite. Rozwiązanie ma działać na Windows oraz w przyszłym kontenerze Linux.
+Przed zmianą istniejącej bazy przygotuj backup. Restore:
+* waliduje backup i zgodność schematu;
+* nie nadpisuje aktywnie używanej bazy;
+* zachowuje możliwość odzyskania poprzedniego stanu;
+* nie udaje backupu surowych GPS i mediów.
+Nie stosuj zwykłego kopiowania aktywnego pliku DB jako backupu przy WAL. Nie dodawaj backupów do Gita.
+
+4. REPOZYTORIA I INTEGRALNOŚĆ DOMENOWA
+Implementuj operacje warstwy danych potrzebne kolejnym etapom. To wewnętrzne API, nie publiczne endpointy.
+Uwzględnij:
+* tworzenie i odczyt kont z unikalnym znormalizowanym emailem;
+* przechowywanie wyłącznie hashów sekretów sesji, tokenów kont i urządzeń;
+* relacje sesji/urządzenia/kodu parowania z właścicielem;
+* tworzenie przejazdu z właścicielem dostarczonym przez przyszły zaufany kontekst serwera;
+* odczyty przejazdów i obserwacji ograniczone do właściciela;
+* osobną ścieżkę odczytu jawnie udostępnionego przejazdu dla aktywnego ANALYST;
+* brak globalnego odczytu prywatnych danych przez ADMIN;
+* jedno aktywne udostępnienie ukończonego niearchiwalnego przejazdu;
+* cofnięcie udostępnienia;
+* modyfikację dozwolonych metadanych z expected_revision;
+* oryginalne obserwacje i osobne korekty z autorem, czasem, powodem oraz before/after;
+* append-only audyt;
+* wersje konfiguracji;
+* trwałe intencje operacji nagrywania.
+Nie implementuj jeszcze pełnego workflow nagrywania, SMTP ani kryptografii logowania. Jeśli test potrzebuje password_hash lub token_hash, użyj jawnych fikstur, które nie udają gotowego mechanizmu uwierzytelniania.
+Wewnętrzne API musi jasno rozróżniać zaufany actor/context od danych formularza. Testy repozytorium nie zastępują późniejszych testów autoryzacji HTTP.
+Zapewnij ochronę niezmiennych pól i atomowe korekty:
+* zwykły UPDATE/DELETE nie zmienia oryginałów obserwacji, korekt ani audytu;
+* techniczna aktualizacja journaling_state/raw_sequence nie może przy okazji zmienić faktów obserwacji;
+* dwie korekty z tą samą revision nie mogą obie przejść;
+* powtórzenie tej samej operacji nie tworzy duplikatu;
+* niezgodna treść pod tym samym kluczem operacji jest konfliktem.
+
+5. STORAGE I GRANICE IMPLEMENTACJI
+Dodaj resolver ścieżek szkolnego runtime zgodny z układem kontraktu. Ścieżki wynikają z kontrolowanych identyfikatorów i kontekstu, nie dowolnego path użytkownika.
+Sprawdź containment i ucieczki przez symlinki lub Windows reparse points odpowiednio do dostępnego środowiska. Obsłuż przypadek braku możliwości wykonania takiego testu jawnie.
+Nie podłączaj jeszcze istniejących loggerów, CV i replay do nowych kont. Przygotuj jawny interfejs oraz testy ścieżek, żeby integracja w kolejnych etapach nie dziedziczyła globalnych katalogów.
+Nie deklaruj pełnego recovery nagrywania na podstawie samej tabeli recording_operations. W tym etapie sprawdzamy trwałość intencji; integracja DB–raw–manifest zostaje na etap 6.
+
+6. TESTY
+Dodaj znaczące testy jednostkowe i integracyjne na prawdziwej tymczasowej SQLite:
+* fresh init, status i ponowna migracja bez zmian;
+* aktualizacja syntetycznej starszej wersji;
+* błąd w środku migracji i rollback;
+* niezgodny checksum, nowsza wersja i rozbieżny user_version;
+* backup oraz restore, również przy istniejącym WAL;
+* konflikt maintenance/runtime lock;
+* FK, CHECK, UNIQUE i indeksy potrzebne dla filtrów;
+* dwa konta i odmowa odczytu cudzych rekordów;
+* ADMIN bez automatycznego dostępu do cudzych danych;
+* ANALYST przed udostępnieniem, po nim i po cofnięciu;
+* udostępnienie niewłaściwemu odbiorcy lub nieukończonego przejazdu;
+* trwałość rekordów po zamknięciu i ponownym otwarciu bazy;
+* niezmienność oryginałów, korekt i audytu;
+* konkurencyjne revision oraz idempotency;
+* bezpieczne ścieżki i odrzucenie prób wyjścia z runtime root.
+Uruchom nowe testy oraz odpowiednią regresję istniejącego GreenWave. Raportuj dokładne polecenia, wyniki i pominięcia.
+Zmierz coverage nowej warstwy danych z branch=True i pokaż raport per moduł, linii oraz gałęzi. To wynik etapu 3, nie końcowe pokrycie aplikacji. Nie wprowadzaj wąskiej konfiguracji jako zastępstwa zaakceptowanego szerokiego zakresu końcowego.
+
+7. DOKUMENTACJA I COMMITY
+* Dodaj docs/school-app/stage3.md: implementacja, granice, schema, migracje, backup/restore i wyniki sprawdzeń.
+* Aktualizuj run.md o dokładne komendy CLI bazy oraz testów. Wyraźnie zaznacz, że nowa baza nie oznacza jeszcze działającego loginu.
+* Uzupełnij ai-usage.md o prompt, działania i weryfikację.
+* Aktualizuj stages.md: etap 2 zaakceptowany, literalny hash 77c074cdc24eb14795eb8eb593167945d74eead4; etap 3 przygotowany do odbioru po wykonaniu sprawdzeń.
+* Etapy 4–12 pozostają Do zrobienia.
+* Dziel implementację na małe sensowne commity, np. migracje/backup, repozytoria/integralność, dokumentacja i odbiór. Nie wymuszaj liczby commitów kosztem spójności.
+* Staging wyłącznie konkretnych plików. Żadnych DB, runtime, nagrań, środowisk ani raportów zawierających lokalne dane.
+* Nie pushuj automatycznie i nie scalaj z main.
+
+NA KOŃCU PODAJ
+1. Podsumowanie zaimplementowanych funkcji i granic etapu.
+2. Listę 14 tabel oraz wersję schematu.
+3. Wyniki migracji, backup/restore i testów izolacji.
+4. Dokładne wyniki testów i pomiar coverage.
+5. Komendy PowerShell do stworzenia świeżej bazy testowej, sprawdzenia schematu, backupu, restore i testów.
+6. Komendę uruchomienia aktualnego bazowego GreenWave.
+7. Hash końcowego commita, listę commitów tego etapu i git status.
+8. Checklistę ręcznego odbioru oraz ewentualne blokady.
+Doprowadź etap 3 do działającego i sprawdzonego końca. Nie zaczynaj etapu 4.
+```
+
+### Faktycznie wykonana pomoc AI
+
+Codex samodzielnie napisał pakiet school_data, SQL v1, repozytoria, CLI i trzy
+moduły testowe. Nie delegowano pracy do innych agentów/czatów. Przeczytano AGENTS
+(pusty), dokumenty szkolne i aktualne punkty integracji; stan wejściowy Git był
+czysty, HEAD77c074c. Nie czytano danych starego runtime/private runs ani nie
+importowano kont/nagrań. Nie odtworzono starego prototypu, nie zmieniono rdzenia/UI.
+Zegar/ID są wstrzykiwane; wszystkie fixtures są nowe i syntetyczne.
+
+Weryfikacja: wykonane testy prawdziwej SQLite TemporaryDirectory, subprocess lease,
+WAL backup, restore previous snapshot, SQL trigger odmowy, stale revision i dwie
+równoległe korekty, idempotency, role/share revoke, hash-only i token callback rollback.
+Windows junction test PASS; zwykły symlink skip WinError1314 jawnie opisany.
+Kod POSIX flock istnieje, lecz rzeczywisty Linux/Docker nie był tu uruchamiany.
+Przegląd znalazł błąd zakazu COMMIT; poprawiono parser i test przeszedł. Przegląd
+containment znalazł akceptację ../ między tripami; poprawiono resolved containment,
+dodano odrzucenie i ponowiono wszystkie 34 testy danych.
+
+34 testy: OK,1skip,7.822s. Izolowany eksport c6fd304:260 testów OK,1skip,31.127s;
+po ostatniej poprawce ścieżki ponowiono 34 testy danych, bez zmian rdzenia.
+7Node PASS,mobile_flow PASS; rzeczywiste CLI GreenWave +HTML/state200 PASS.
+PowerShell school_data init/status/migrate/backup/restore/status na nowym
+runtime/stage3-cli-<GUID> PASS. Nie testowano loginu/SMTP/telefonu, bo są poza etapem3.
+Coverage7.13.1 branch=True:807/821linie98.2948%,218/274gałęzie79.5620%,combined93.6073%.
+Per-module raport i dokładne komendy w stage3.md/run.md. Wynik nie zastępuje
+szerokiego backend/M8/CV i osobnego JS pomiaru końcowego. Nie dodano wąskiej .coveragerc.
+
+Commity implementacji:2af534f84fe766dd982d6d69beeafb9eb660fe85,
+37de1cd491650aed75e3c593c4e0cfccfb8fce7f,c6fd304dc4e6965da19dd431773b3dfb8e8dc691,
+a64adff4c14d1475422f1abd4270df14472b34ec; dokumentacja: commit dodający stage3.md
+(`git log -1 --diff-filter=A --format=%H -- docs/school-app/stage3.md`).
+Staging konkretnych źródeł/testów/dokumentów, bez DB/runtime/coverage/logów.
+PUBLISH-01 nadal osobny; nie zmieniono historii, nie pushowano/mergowano.
+Etap3 przygotowany do ręcznego odbioru; etap4 nie rozpoczęty.

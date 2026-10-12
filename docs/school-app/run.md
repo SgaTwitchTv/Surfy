@@ -1,6 +1,6 @@
 # Uruchomienie aktualnej gałęzi GreenWave
 
-Stan po doprecyzowaniu etapu 2: działa **bazowe GreenWave M8/CV** z kodem
+Stan po implementacji warstwy danych etapu 3: działa **bazowe GreenWave M8/CV** z kodem
 7ece859. Portal szkolny został usunięty decyzją użytkownika i nie jest jeszcze
 zaimplementowany według [kontraktu v1](contract.md). Nie ma obecnie kont,
 SMTP/resetu ani ról portalu; poniższa komenda nie udaje ich uruchomienia.
@@ -140,8 +140,66 @@ Androida,Playwright E2E ani YOLO/hardware. Nie mierzono nowego coverage.
 
 ## 6. Stan etapu szkolnego
 
-[contract.md](contract.md): ustalony zakres do końcowego odbioru.
-[stages.md](stages.md): etap2 „Przygotowany do końcowego odbioru”,etapy3–12
-„Do zrobienia”. [ai-usage.md](ai-usage.md): prompty i rzeczywiste działania.
+[contract.md](contract.md): etap 2 zaakceptowany w 77c074cdc24eb14795eb8eb593167945d74eead4.
+[stages.md](stages.md): etap 3 przygotowany do odbioru, etapy 4–12 Do zrobienia.
 Nie istnieje działająca komenda uruchomienia portalu szkolnego według v1.
-Przejście do migracji/backendu wymaga kolejnego promptu użytkownika.
+Migracje i repozytoria są zaimplementowane; login/SMTP/HTTP/UI wymagają kolejnych etapów.
+
+## 7. Nowa szkolna baza — maintenance CLI (etap 3)
+
+To działa już teraz i nie uruchamia loginu ani serwera portalu. Jawny nowy root
+jest obowiązkowy; poniżej wyłącznie nowa baza syntetyczna, bez importu starego runtime:
+
+```powershell
+cd C:\Users\konra\.codex\worktrees\school-app\Surfy
+$schoolStage3Root = Join-Path (Get-Location) ('runtime\stage3-cli-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolStage3Root" init
+python -m greenwave.school_data --root "$schoolStage3Root" status
+python -m greenwave.school_data --root "$schoolStage3Root" migrate
+python -m greenwave.school_data --root "$schoolStage3Root" backup "$schoolStage3Root\backups\manual.sqlite3"
+python -m greenwave.school_data --root "$schoolStage3Root" restore "$schoolStage3Root\backups\manual.sqlite3"
+python -m greenwave.school_data --root "$schoolStage3Root" status
+```
+
+Komendy sprawdzono: version/latest=1,current=true; ponowna migracja no-op;
+restore pozostawił backups/before-restore-<time>.sqlite3 z poprzednim stanem.
+DB w root/school.sqlite3; WAL/SHM i .school.lock są runtime, nie źródłami.
+Backup nie nadpisuje istniejącej ścieżki; do kolejnego użyj innej nazwy.
+Maintenance wymaga zamknięcia Database i dzierżawy; konflikt daje Busy/exit1,
+sukces JSON/exit0. Nie usuwaj .school.lock w celu obchodzenia blokady.
+
+Backup obejmuje tylko SQLite przez backup API (także zatwierdzony WAL), bez GPS,
+manifestów czy CV. Restore waliduje wersję/checksum/integrity/FK, utrwala previous
+snapshot i odmawia aktywnemu runtime. Poprzedni stan można przywrócić kolejnym
+restore ze ścieżką previous. Wszystkie procesy dostępu do DB muszą respektować
+Lease; nie zapisuj aktywnej DB z zewnętrznego narzędzia. Katalog operatora musi
+mieć odpowiednie ACL. Publiczny portal jeszcze nie istnieje.
+
+Testy danych można wykonać bez eksportu, używają tylko TemporaryDirectory:
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_data*.py' -v
+```
+
+Coverage (istniejące środowisko .venv-school z coverage.py):
+
+```powershell
+New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_data --data-file=artifacts/stage3.coverage -m unittest discover -s tests -p 'test_school_data*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage3.coverage -m
+.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage3.coverage -o artifacts/stage3-coverage.json
+```
+
+Na nowym komputerze do opcjonalnego pomiaru (persistence nie wymaga pip):
+
+```powershell
+python -m venv .venv-school
+.venv-school/Scripts/python.exe -m pip install coverage==7.13.1
+```
+
+Wynik: 34 testy, 1 jawny skip symlinka Windows; junction test wykonany PASS.
+Coverage branch=True 93.6073% combined, linie98.2948%,gałęzie79.5620%.
+To pomiar danych etapu 3, nie szeroki końcowy wynik aplikacji/JS.
+Szczegóły i ograniczenia: [stage3.md](stage3.md). Pełną regresję wykonuj z
+izolowanego eksportu sekcji3: `python -m unittest discover -s tests -v`.
+Rdzeń nadal uruchamia się `python -m greenwave --no-browser --port 8767`.
