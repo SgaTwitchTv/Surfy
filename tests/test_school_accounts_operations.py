@@ -144,3 +144,14 @@ class OperationsTests(Fixture):
             for _ in range(6):self.assertEqual(self.login()[0],503)
         finally:self.service.passwords.slots.release();self.service.passwords.slots.release()
         self.assertEqual(self.login()[0],200)
+
+    def test_mail_budget_shared_between_register_and_reset_without_existence_leak(self):
+        self.register('shared@example.test')
+        self.assertEqual(self.service.request_reset({'email':'shared@example.test'},'fixture-ip')['message'],self.service.request_reset({'email':'shared@example.test'},'fixture-ip')['message'])
+        with self.assertRaises(AuthError) as caught:
+            self.service.register({'email':'shared@example.test','display_name':'Shared','password':PASS,'password_confirmation':PASS},'fixture-ip')
+        self.assertEqual(caught.exception.status,429)
+        # Same three-message policy applies to missing addresses too.
+        for _ in range(3):self.service.request_reset({'email':'missing@example.test'},'other-fixture-ip')
+        with self.assertRaises(AuthError) as caught:self.service.request_reset({'email':'missing@example.test'},'other-fixture-ip')
+        self.assertEqual(caught.exception.status,429)

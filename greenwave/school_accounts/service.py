@@ -48,8 +48,8 @@ class AccountsService:
         except Invalid:raise AuthError(422,'VALIDATION',{'display_name':'Nazwa: 1–80 znaków, bez znaków sterujących.'}) from None
         password(body['password'],body['password_confirmation'])
         self.limits.take('REGISTER_IP',ip,5,3600000)
-        self.limits.take('ACTIVATE_EMAIL',address,3,3600000)
-        self.limits.take('ACTIVATE_IP',ip,10,3600000)
+        self.limits.take('MAIL_EMAIL',address,3,3600000)
+        self.limits.take('MAIL_IP',ip,10,3600000)
         # Always hash valid registration input, also for an existing address.
         encoded=self.passwords.hash(body['password'])
         reserved=self.mailer.reserve();job=None
@@ -71,8 +71,8 @@ class AccountsService:
 
     def request_reset(self,body,ip):
         address=self.address(body['email'])
-        self.limits.take('RESET_EMAIL',address,3,3600000)
-        self.limits.take('RESET_IP',ip,10,3600000)
+        self.limits.take('MAIL_EMAIL',address,3,3600000)
+        self.limits.take('MAIL_IP',ip,10,3600000)
         reserved=self.mailer.reserve();job=None
         try:
             with self.repo.database.transaction() as c:

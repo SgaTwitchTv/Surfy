@@ -50,7 +50,7 @@ class AccountsHTTPServer(ThreadingHTTPServer):
 
     def process_request(self,request,address):
         if not self.request_slots.acquire(blocking=False):
-            try:request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+            try:request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src \'none\'\r\n\r\n')
             except OSError:pass
             self.shutdown_request(request);return
         try:super().process_request(request,address)
