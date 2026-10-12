@@ -494,3 +494,9 @@ $RECYCLE.BIN/
 
 # Optional CV runtime fallback configuration/cache
 /Ultralytics/
+
+runtime/
+artifacts/
+.coverage
+htmlcov/
+.venv-school/

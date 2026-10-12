@@ -12,3 +12,9 @@ Wyniki są sprawdzane rzeczywistymi testami, pomiarem pokrycia i scenariuszami
 przeglądarkowymi. Testy syntetyczne nie potwierdzają bezpieczeństwa drogowego CV.
 Nie wykonano weryfikacji terenowej faz, linii, limitów ani skuteczności YOLO.
 Dalsze prompty i dowody weryfikacji należy dopisywać w kolejnych etapach.
+
+Etap backend: test_school_store (7) oraz test_school_http (5) przechodzą.
+Test HTTP obejmuje zapis prawdziwego syntetycznego raw.csv i eksport ZIP,
+izolację kont, parowanie Android z właścicielem i brak rekomendacji live.
+Jedna poprawka po teście: odczyt ciała odrzucanego POST przed odpowiedzią,
+aby Windows nie zrywał połączenia przy nieodczytanych bajtach.
