@@ -659,3 +659,181 @@ a64adff4c14d1475422f1abd4270df14472b34ec; dokumentacja: commit dodający stage3.
 Staging konkretnych źródeł/testów/dokumentów, bez DB/runtime/coverage/logów.
 PUBLISH-01 nadal osobny; nie zmieniono historii, nie pushowano/mergowano.
 Etap3 przygotowany do ręcznego odbioru; etap4 nie rozpoczęty.
+
+
+## Prompt poprawek etapu 3 po niezależnym przeglądzie (2026-10-12)
+
+Pełna treść polecenia; wyłącznie puste linie/formatowanie rozmowy uproszczone.
+
+```text
+Nie skończylismy jescze. Etap 3 — poprawki po niezależnym przeglądzie i końcowy odbiór warstwy danych.
+Kontynuuj w istniejącym worktree codex/school-app. Nie rozpoczynaj etapu 4. Przeczytaj obowiązujące AGENTS.md oraz contract.md, stage3.md, stages.md, run.md i ai-usage.md w docs/school-app.
+Przegląd dotyczył commita:
+6c3364997bd26cd8a0a0a67ee7505371bf93feef.
+Niezależnie uruchomiono testy na Linuxie:
+* 33 testy warstwy danych PASS;
+* Windows junction test pominięty, POSIX symlink test PASS;
+* pełna regresja: 260 testów, jeden błąd importu Tkinter wynikający z brakującej biblioteki środowiska.
+Znaleziono cztery problemy. Napraw je, dodaj testy regresyjne i ponownie sprawdź etap. Nie kończ na propozycji.
+
+ZASADY
+* Nie zmieniaj main ani codex/vision-camera.
+* Zachowaj niezwiązane zmiany użytkownika.
+* Nie czytaj prywatnego data/runs/ ani starego runtime/school/.
+* Testy i migracje wykonuj wyłącznie na nowych danych syntetycznych.
+* Nie zmieniaj istniejącego loggera GPS, solvera ani warunków rekomendacji live.
+* Nie odtwarzaj starego portalu.
+* Nie przepisuj opublikowanej historii, nie wykonuj force push ani automatycznego merge.
+* Nie edytuj zastosowanej migracji 0001_initial.sql. Jeśli zmienia się schema, dodaj kolejną numerowaną migrację.
+* Zachowaj 14 tabel aplikacji.
+
+1. BLOKUJĄCY BŁĄD MIGRACJI
+Obecny parser statements() rozpoznaje pierwsze słowo przez split(). Komentarz poprzedzający komendę powoduje ominięcie zakazu COMMIT.
+Odtworzony przypadek:
+CREATE TABLE schema_migrations(
+version INTEGER PRIMARY KEY,
+checksum TEXT,
+applied_at REAL,
+app_version TEXT
+);
+CREATE TABLE proof_marker(id INTEGER);
+-- transaction command hidden behind comment
+COMMIT;
+THIS IS INVALID;
+W tym przypadku migracja kończy się błędem, lecz schema_migrations i proof_marker pozostają w bazie. Złamana zostaje gwarancja atomowości.
+Wprowadź skuteczną kontrolę operacji wykonywanych przez migracje. Nie polegaj wyłącznie na pierwszym słowie tekstu SQL. Rozważ sqlite3.set_authorizer jako dodatkową ochronę rzeczywiście wykonywanych komend. Operacje transakcyjne runnera muszą nadal działać, a SQL migracji nie może samodzielnie sterować transakcją.
+Uwzględnij:
+* komentarze -- i /* ... */, również wieloliniowe;
+* białe znaki i wielkość liter;
+* COMMIT, END, ROLLBACK, BEGIN, SAVEPOINT i RELEASE;
+* ATTACH, DETACH, VACUUM oraz niedozwolone PRAGMA;
+* teksty SQL zawierające średniki i słowa COMMIT w literałach;
+* legalne CREATE TRIGGER ... BEGIN ... END, których nie można odrzucić jako sterowania transakcją.
+Dodaj testy:
+* świeża migracja z komentarzem przed COMMIT zostaje odrzucona i nie pozostawia tabel aplikacji;
+* nieudany upgrade pozostawia poprzedni schemat, dane i wersję;
+* komentarze blokowe i alternatywne komendy nie obchodzą zabezpieczenia;
+* legalne triggery nadal działają;
+* po błędzie connection nie pozostaje w nieokreślonym stanie transakcji.
+Zweryfikuj dokładnie powyższy przypadek, nie tylko nowy uproszczony wariant.
+
+2. JEDNOSTKI CZASU: MILISEKUNDY INTEGER
+Zaakceptowany contract.md określa UTC jako integer milisekundy. Obecna schema i repozytoria używają REAL sekund.
+Zachowaj kontrakt: trwałe czasy domenowe, sesji, tokenów, limitów i audytu przechowuj jako INTEGER UTC epoch milliseconds.
+Zrób to spójnie:
+* dodaj migrację kolejnej wersji dla istniejącej szkolnej bazy v1;
+* nie zmieniaj checksumu migracji 0001;
+* zachowaj identyfikatory, dane, relacje, indeksy, triggery i ograniczenia;
+* jawnie określ regułę konwersji sekund REAL do milisekund;
+* sprawdź NULL, granice oraz wartości niedopuszczalne;
+* dopasuj repozytoria, clock adapter i testy;
+* wszystkie TTL, idle, absolute expiry i reauth muszą używać prawidłowych jednostek.
+Możesz pozostawić time.time() jako źródło zegara, lecz konwersja na integer ms musi być centralna i jednoznaczna. Nie mieszaj sekund i milisekund w zaufanym Actor ani między modułami.
+Backup/restore muszą działać także dla wspieranej starszej wersji:
+* backup v1 ma być walidowany według jego historii migracji;
+* restore v1 nie może po cichu udawać bieżącej wersji;
+* po restore status pokazuje wymagany upgrade, a runtime odmawia startu do migracji;
+* nowsza, obca lub uszkodzona baza nadal jest odrzucana.
+Testy muszą potwierdzić aktualizację v1→bieżąca wersja z zachowaniem danych, rollback i backup/restore. Testy v1 twórz z historycznej, niezmienionej migracji w TemporaryDirectory. Nie używaj starego lokalnego runtime.
+
+3. ZGODNOŚĆ Z LOGGEREM: RAW.CSV
+transition_trip() wymaga teraz ścieżki kończącej się gps.jsonl, lecz istniejący RunLogger zapisuje raw.csv, metadata.json i complete.json.
+Napraw nową warstwę danych tak, żeby odpowiadała istniejącemu formatowi:
+* prawidłowy raw_ref wskazuje raw.csv we właściwym run-root właściciela i przejazdu;
+* nie zmieniaj formatu istniejących nagrań ani RunLogger;
+* gps.jsonl nie może być nieudokumentowanym wymaganiem;
+* zachowaj kontrolę containment i odrzucanie cudzych ścieżek;
+* usuń niespójne przykłady z dokumentacji oraz testów.
+Dodaj test:
+* syntetyczny run utworzony istniejącym RunLogger w nowym tymczasowym root;
+* poprawna ścieżka raw.csv jest akceptowana przez warstwę danych;
+* ścieżka do cudzej trasy/przejazdu i obejście przez ../ są odrzucane.
+Nie deklaruj pełnego DB–raw–manifest recovery. Weryfikacja plików i koordynacja zapisu nadal należą do integracji etapu 6.
+
+4. ZAKRES DAT: FROM INCLUSIVE, TO EXCLUSIVE
+Kontrakt określa przedział [from, to). list_trips() i list_observations() używają teraz <= before.
+Popraw obie listy:
+* after/from: >=;
+* before/to: <;
+* from >= to jest błędnym przedziałem;
+* odrzuć nieprawidłowe typy, bool jako czas i wartości niefinitywne;
+* używaj jednostek zgodnych z poprawioną warstwą danych;
+* zachowaj parametryzowane SQL.
+Dodaj testy rekordów:
+* tuż przed początkiem;
+* dokładnie na początku;
+* wewnątrz;
+* dokładnie na końcu;
+* tuż po końcu.
+Dla obserwacji sprawdź, że filtrowany czas to server_received_at. Dla przejazdów created_at, zgodnie z kontraktem.
+Offset w wewnętrznym repozytorium nie oznacza jeszcze docelowej paginacji HTTP. Zachowaj w dokumentacji informację, że keyset cursor oraz pozostałe filtry UI zostaną domknięte w etapie 6.
+
+5. PONOWNY PRZEGLĄD I TESTY
+Po poprawkach:
+* uruchom wszystkie testy school_data;
+* uruchom pełną regresję Python w izolowanym eksporcie;
+* wykonaj odpowiednie testy Node i smoke bazowego GreenWave;
+* sprawdź CLI init/status/migrate/backup/restore na świeżej syntetycznej bazie;
+* sprawdź v1→bieżąca wersja, no-op, niezgodny checksum i odmowę nowszej wersji;
+* ponownie zmierz coverage całej greenwave.school_data z branch=True, bez wyłączania nowych trudnych ścieżek.
+Przejrzyj powiązane jednostki czasu, ścieżki i kontrole migracji, aby znaleźć podobne problemy. Nie poszerzaj zakresu o nowe funkcje.
+Nie „naprawiaj” brakującego Tkinter przez ukrywanie testu lub zmianę rdzenia. Jeśli zależność środowiska blokuje pełną regresję, podaj dokładny błąd oraz oddziel wyniki wykonanych testów od blokady.
+Nie deklaruj wykonania Linux/Windows testów, jeśli pracujesz tylko w jednym środowisku. Zapisz niezależny wynik Linux jako dowód z przeglądu użytkownika/ChatGPT, a własne wyniki jako osobne wykonanie.
+
+6. DOKUMENTACJA I COMMITY
+Zaktualizuj:
+* stage3.md: problemy, rozwiązania, aktualna wersja schematu, jednostki czasu i wyniki;
+* run.md: działające komendy init/upgrade/backup/restore/testów;
+* contract.md: doprecyzuj techniczne szczegóły bez zmiany ustalonych ról i zakresu v1;
+* stages.md: etap 3 „Przygotowany do ponownego odbioru”, etapy 4–12 nadal „Do zrobienia”;
+* ai-usage.md: ten prompt, działania i rzeczywiste wyniki.
+Wpisz literalny hash wcześniejszego etapu:
+6c3364997bd26cd8a0a0a67ee7505371bf93feef.
+Podziel poprawki na małe, sensowne commity. Staging wyłącznie konkretnych plików. Żadnych DB, runtime, nagrań, środowisk ani lokalnych raportów.
+Nie pushuj automatycznie i nie scalaj z main.
+
+NA KOŃCU PODAJ
+1. Dla każdego z czterech problemów: przyczynę, poprawkę i test regresyjny.
+2. Wynik dokładnego reproduktora komentarz + COMMIT + błędny SQL.
+3. Aktualną wersję schematu i dowód zachowania danych przy upgrade.
+4. Wyniki backup/restore, CLI i testu raw.csv.
+5. Wyniki wszystkich uruchomionych testów, pominięcia i blokady.
+6. Nowy raport coverage: linie, gałęzie, combined i per moduł.
+7. Hashe commitów, końcowy git status oraz komendy ręcznego odbioru.
+8. Jawne ograniczenia: brak loginu/SMTP/UI i brak pełnej integracji recovery.
+Doprowadź poprawki etapu 3 do sprawdzonego końca i zatrzymaj się przed etapem 4.
+```
+
+### Działania i weryfikacja AI w tej poprawce
+
+Codex bez subagentów zmienił wyłącznie school_data/testy i dokumentację szkolną.
+Naprawa authorizer i rzeczywisty reproduktor:fb80ef609632a78fd268ce864ede713c2b98df71.
+Migracja0002,centralny czas,raw.csv,[from,to),legacy backup i regresje:
+023198ae149b4953e2311be7c9729ac128d6e405. Zastosowana0001 niezmieniona,checksum
+3341933b714ccf9fcd01add836ff395541a5d4e8a99baa39143cccc5c0723156,
+porównana z Git6c33649. Etap4 nie rozpoczęty,bez authserver/SMTP/UI/zmian loggera/solvera.
+
+Własne Windows wyniki:48 testów danych OK,1skip,15.752s;pełna regresja274 OK,
+1skip,39.289s;7Node PASS,mobile_flow PASS;actualCLI GreenWave HTML/state200 PASS.
+Tkinter działał,nie wyłączano testu. Skip Windows symlink WinError1314;junction PASS.
+Linux33PASS/POSIXsymlinkPASS/junctionskip i Tkinter import error dotyczą niezależnego
+przeglądu6c33649,przekazanego przez użytkownika/ChatGPT;nie własnego wykonania Linux
+ani sprawdzenia obecnego kodu. Pełnego tracebacku nie otrzymano.
+
+Dane wyłącznie TemporaryDirectory lub nowe ignorowane runtime/stage3-review i
+stage3-legacy GUID roots. Rekordy wszystkich14tabel z v1 zachowane po v2 z konwersją
+UTCfloorDecimalms i NULL,FK/indeksy/triggery/auditsequence preserved. Invalid legacy
+values/SQL failure rollback. Backup v1 przyWAL/restorependingupgrade/ponownyupgrade PASS.
+Dokładny SQLreproduktor kończy się SchemaError przedCOMMIT,zero tabel/user_version0.
+Legalne triggery i literalCOMMIT PASS. PrawdziwyRunLogger tworzyraw.csv,hashniezmieniony;
+ownref accepted,cudze/../ denied. Pięć granic datefilters i invalidtypes PASS.
+Początkowa nowa fixture RunLogger.finish miała brak wymaganych argumentówcontext;
+poprawiono sam test zgodnie z istniejącymAPI i ponowiono testy,bez zmianRunLogger.
+
+Coverage całegoschool_data branch=True,bezomit/exclude:linie870/883=98.5277%,
+gałęzie245/298=82.2148%,combined94.4115%;time_units100%,migrations98.7097%combined.
+Nie zastępuje końcowego szerokiego backend/M8/CV i oddzielnegoJS. Komendy i per-module
+raport stage3.md/run.md. Dokumenty sprawdzone pod kątem wersji,jednostek,ACL,linków,
+staged paths i braku zmian0001/rdzenia/main/CV. Commity tylko wskazane źródła/testy/docs,
+bezDB/nagrań/runtime/coverage. Nie pushowano,nie przepisywano historii,nie mergowano.
+PUBLISH-01 pozostaje osobno. Etap3 Przygotowany do ponownego odbioru;4–12 Do zrobienia.

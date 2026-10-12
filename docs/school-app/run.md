@@ -87,7 +87,7 @@ node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs
 node tests/mobile_flow.cjs
 ```
 
-Pełna regresja istnieje, ale nie była powtarzana przy tym doprecyzowaniu dokumentów:
+Pełna regresja (aktualny wynik etapu 3: 274 testy OK, 1 jawny skip):
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -124,7 +124,7 @@ Dostosuj ANDROID_HOME do lokalnego SDK. Tkinter/loopback mogą być pomijane gdy
 Wąska usunięta konfiguracja coverage prototypu nie jest aktualnym kryterium;
 szeroki plan i wyniki historycznego audytu: [audit.md](audit.md).
 
-## 5. Faktyczny smoke tego przeglądu
+## 5. Historyczny smoke przeglądu etapu 2
 
 Izolowany eksport pod artifacts/stage2-final-review/source, bez runtime i
 prywatnych nagrań. Uruchomiono rzeczywiste CLI `python -m greenwave --no-browser
@@ -134,14 +134,14 @@ danych (rekomendacja null,eligibility.allowed=false). Po finish zakończono
 proces testowy. Wynik PASS;school.py nie istnieje. Metadane wyniku lokalnie
 artifacts/stage2-final-review/smoke-result.json, bez tokenów/danych użytkownika.
 
-Sprawdzenia bieżące: --help OK;2 live_navigation tests OK;7 Node tests OK;
+Historyczne sprawdzenia etapu 2: --help OK;2 live_navigation tests OK;7 Node tests OK;
 mobile_flow PASS;node --check app.js OK. Nie powtarzano pełnej regresji,builda
 Androida,Playwright E2E ani YOLO/hardware. Nie mierzono nowego coverage.
 
 ## 6. Stan etapu szkolnego
 
 [contract.md](contract.md): etap 2 zaakceptowany w 77c074cdc24eb14795eb8eb593167945d74eead4.
-[stages.md](stages.md): etap 3 przygotowany do odbioru, etapy 4–12 Do zrobienia.
+[stages.md](stages.md): etap 3 przygotowany do ponownego odbioru, etapy 4–12 Do zrobienia.
 Nie istnieje działająca komenda uruchomienia portalu szkolnego według v1.
 Migracje i repozytoria są zaimplementowane; login/SMTP/HTTP/UI wymagają kolejnych etapów.
 
@@ -161,7 +161,7 @@ python -m greenwave.school_data --root "$schoolStage3Root" restore "$schoolStage
 python -m greenwave.school_data --root "$schoolStage3Root" status
 ```
 
-Komendy sprawdzono: version/latest=1,current=true; ponowna migracja no-op;
+Komendy sprawdzono: version/latest=2,current=true; ponowna migracja no-op;
 restore pozostawił backups/before-restore-<time>.sqlite3 z poprzednim stanem.
 DB w root/school.sqlite3; WAL/SHM i .school.lock są runtime, nie źródłami.
 Backup nie nadpisuje istniejącej ścieżki; do kolejnego użyj innej nazwy.
@@ -185,9 +185,9 @@ Coverage (istniejące środowisko .venv-school z coverage.py):
 
 ```powershell
 New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_data --data-file=artifacts/stage3.coverage -m unittest discover -s tests -p 'test_school_data*.py' -v
-.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage3.coverage -m
-.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage3.coverage -o artifacts/stage3-coverage.json
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_data --data-file=artifacts/stage3-review.coverage -m unittest discover -s tests -p 'test_school_data*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage3-review.coverage -m
+.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage3-review.coverage -o artifacts/stage3-review-coverage.json
 ```
 
 Na nowym komputerze do opcjonalnego pomiaru (persistence nie wymaga pip):
@@ -197,9 +197,51 @@ python -m venv .venv-school
 .venv-school/Scripts/python.exe -m pip install coverage==7.13.1
 ```
 
-Wynik: 34 testy, 1 jawny skip symlinka Windows; junction test wykonany PASS.
-Coverage branch=True 93.6073% combined, linie98.2948%,gałęzie79.5620%.
+Wynik: 48 testów, 1 jawny skip symlinka Windows; junction test wykonany PASS.
+Coverage branch=True 94.4115% combined, linie98.5277%,gałęzie82.2148%.
 To pomiar danych etapu 3, nie szeroki końcowy wynik aplikacji/JS.
 Szczegóły i ograniczenia: [stage3.md](stage3.md). Pełną regresję wykonuj z
 izolowanego eksportu sekcji3: `python -m unittest discover -s tests -v`.
 Rdzeń nadal uruchamia się `python -m greenwave --no-browser --port 8767`.
+
+
+## 8. Odbiór upgrade i restore starszej v1
+
+Wyłącznie nowa syntetyczna historyczna baza, tworzona z niezmienionego SQL0001;
+nie wskazuj starego runtime/school ani prywatnych danych:
+
+```powershell
+$schoolLegacyRoot = Join-Path (Get-Location) ('runtime\stage3-legacy-' + [guid]::NewGuid().ToString('N'))
+python -c "import sys; from greenwave.school_data import Storage; from greenwave.school_data.migrations import migrate,load; migrate(Storage(sys.argv[1]),load()[:1])" "$schoolLegacyRoot"
+python -m greenwave.school_data --root "$schoolLegacyRoot" status
+python -m greenwave.school_data --root "$schoolLegacyRoot" backup "$schoolLegacyRoot\backups\v1.sqlite3"
+python -m greenwave.school_data --root "$schoolLegacyRoot" migrate
+python -m greenwave.school_data --root "$schoolLegacyRoot" restore "$schoolLegacyRoot\backups\v1.sqlite3"
+python -m greenwave.school_data --root "$schoolLegacyRoot" status
+python -m greenwave.school_data --root "$schoolLegacyRoot" migrate
+python -m greenwave.school_data --root "$schoolLegacyRoot" status
+```
+
+Sprawdzono dokładnie te komendy: pierwszy status1/latest2/currentfalse; upgrade2;
+restore zwraca schema.version1,currentfalse,po nim runtime odmawia startu aż do
+migrate. Backup i restore respektują ciągłą historię/checksum/FK/integrity v1/v2,
+odrzucają empty/unknown/future/corrupt DB. Before-migration i previous snapshots
+pozostają do odzyskania wcześniejszego stanu. Nie migracja w trakcie importu/startu.
+
+Bieżące czasy DB i zaufanego Actor są **integer UTC ms**, default now_ms adaptuje
+time.time(); wstrzyknięty clock musi już zwracać integer ms. Migracja odcina sub-ms:
+floor(Decimal(str(seconds))*1000),NULL zachowuje,invalid values rollback. Nie zmienia
+GPS CSV ani formatu loggera: właściwy owned run-root/raw.csv. Filtry dat są [from,to)
+w ms. Offset repozytorium to nie końcowy HTTP keyset cursor (etap6).
+
+Regresje czterech napraw są częścią wszystkich school_data tests; można wybrać:
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_data_migration_guard.py' -v
+python -m unittest discover -s tests -p 'test_school_data_epoch_upgrade.py' -v
+python -m unittest discover -s tests -p 'test_school_data_contract_boundaries.py' -v
+```
+
+Własna pełna Windows regresja274 OK,1skip. Niezależne Linux wyniki dla6c33649
+zostały dostarczone przez użytkownika; brak Tkinter tam jest osobną zależnością,
+nie usunięciem testu. Szczegóły [stage3.md](stage3.md).

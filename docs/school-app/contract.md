@@ -676,3 +676,29 @@ opisanej implementacji nastąpi w następnych etapach,nie na podstawie pliku.
 - Index CV pozostaje dodatkową istniejącą bazą z właściwym root i autorem z sesji;
   nie trzeba tworzyć centralnej biblioteki filmów. Shared ObservationDTO nie
   ujawnia ścieżek/klatek; permission READ_ANALYZE nie rozszerza się na endpointy CV.
+
+
+### Techniczne doprecyzowanie po przeglądzie etapu 3
+
+Bez zmian ról,polityki i zakresu v1. Aktualna schema2 ma nadal14 tabel. Historyczna
+0001 REAL seconds jest niezmienna;0002 przebudowuje kolumny czasu do INTEGER UTC
+ms, zachowując ID/FK/indeksy/triggery/dane. Wszystkie repo clock,Actor reauth,
+verified_at,measured_at i granice dat są integer ms (bool,float,NaN,inf odrzucone).
+Centralny now_ms adaptuje time.time();konwersja legacy to floor(Decimal(str(seconds))*1000),
+NULL pozostaje NULL;zakres epoch0..253402300799999 (rok9999);invalid legacy rollback,
+nie zgadywanie jednostek. TTL także ms:reset900000,verify86400000,pairing/reauth300000,
+idle1800000,absolute28800000. Metadane applied_at także ms od schema2.
+
+Runner wykonuje SQL z authorizer zabraniającym rzeczywistych TRANSACTION/SAVEPOINT/
+ATTACH/DETACH/PRAGMA;VACUUM jest zakazany po usunięciu leading comments. CREATE TRIGGER
+BEGIN/END i literały ze średnikami są legalne. Operacje runnera poza authorizer scope.
+Backup/restore znanej v1 jest wspierany, walidowany przez jego historię/checksum;
+restore nie migruje po cichu,zwraca schema.version/current,status wymaga jawnego upgrade,
+runtime odmawia do migrate. Nie backup GPS/media.
+
+RunLogger pozostaje bez zmian:owned run-root/raw.csv,metadata.json,complete.json.
+Szkolne raw_ref wskazuje raw.csv,z własnym owner/trip/run i containment;nie wymagamy
+gps.jsonl. Spójność fizycznych plików/manifestu/recovery pozostaje etap6.
+Filtry repo używają created_at trip i server_received_at obserwacji:>=from i <to,
+from>=to jest błędem. HTTP parsowanie RFC3339 do integer ms,keyset cursor i reszta
+filtrów UI nadal wymagane w etapie6;wewnętrzny offset ich nie zastępuje.

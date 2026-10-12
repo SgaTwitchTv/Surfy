@@ -31,7 +31,7 @@ Portal HTTP nie jest zaimplementowany; etap 3 dodaje tylko persistence.
 |---|---|---|---|---|---|
 |1|Audyt i worktree|Zweryfikowany i zaakceptowany przez użytkownika|bb99de3d808db8898426b42203e6c5e979e527be|Baza/status;226 Python;7 Node+mobile_flow;2 browser E2E;capture smoke;4 Android+APK;bazowe coverage85.9985%;audit.md|Docker CLI brak;YOLO/telefon/droga nieodebrane;wynik tylko bazy|
 |2|Kontrakt aplikacji|Zaakceptowany przez użytkownika|77c074cdc24eb14795eb8eb593167945d74eead4; pierwotny 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0; cleanup 7a2899770075cc6ac12c826234f620f1de97a380|14 tabel,37 API+26 adapterów; kontrola dokumentów i syntetyczny smoke opisane w contract/run|PUBLISH-01 osobno; zaakceptowany zakres v1|
-|3|Baza danych i migracje|Przygotowany do odbioru|2af534f84fe766dd982d6d69beeafb9eb660fe85;37de1cd491650aed75e3c593c4e0cfccfb8fce7f;c6fd304dc4e6965da19dd431773b3dfb8e8dc691;a64adff4c14d1475422f1abd4270df14472b34ec; dokumentacja: commit dodający stage3.md|14 tabel v1;34 testy danych 1skip;260 regresji 1skip;7Node+mobileflow;CLI/HTTP smoke;coverage93.6073%,linie98.2948%,gałęzie79.5620%;stage3.md|Symlink WinError1314,junction PASS;Linux do etapu11;brak HTTP auth/SMTP i recovery DB–raw–manifest;STOP przed4|
+|3|Baza danych i migracje|Przygotowany do ponownego odbioru|wcześniejszy 6c3364997bd26cd8a0a0a67ee7505371bf93feef;fb80ef609632a78fd268ce864ede713c2b98df71;023198ae149b4953e2311be7c9729ac128d6e405; dokumentacja: ostatni commit stage3.md|14 tabel/v2;immutable0001;exact COMMIT reproducer rollback;v1 upgrade/legacy restore;raw.csv RunLogger;[from,to);48 testów 1skip;274 regresja 1skip;7Node+mobileflow;CLI/HTTP smoke;coverage94.4115%,linie98.5277%,gałęzie82.2148%|Win symlink1314,junctionPASS;niezależny Linux wynik6c33649 osobno;login/SMTP/UI/recovery nadal później;STOP przed4|
 |4|Konta i sesje|Do zrobienia|—|—|Implementacja ustalonego SMTP/aktywacji/resetu i session policy|
 |5|Uprawnienia i ochrona API|Do zrobienia|—|—|Jawna macierz ról i wszystkie odziedziczone endpointy|
 |6|Przejazdy i obserwacje|Do zrobienia|—|—|Niezmienny raw, audyt korekt, spójność i recovery|
@@ -51,3 +51,9 @@ Hash dokumentacji etapu 3 do odczytu:
 `git log -1 --diff-filter=A --format=%H -- docs/school-app/stage3.md`.
 Hash końcowy w odpowiedzi; literalny wpis przy następnej aktualizacji,
 żeby commit nie zawierał odwołania do własnego przyszłego hasha.
+
+Ponowny przegląd etapu3: wcześniejszy literalny hash
+6c3364997bd26cd8a0a0a67ee7505371bf93feef. Błędy poprzedniej implementacji
+naprawione i opisane w stage3.md; nie traktujemy wcześniejszego odbioru jako
+potwierdzenia atomowości parsera ani zgodności sekund z kontraktem.
+Hash bieżącej dokumentacji: `git log -1 --format=%H -- docs/school-app/stage3.md`.
