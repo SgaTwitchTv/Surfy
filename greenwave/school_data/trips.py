@@ -134,7 +134,7 @@ class Trips:
                     raise Invalid("Invalid result reference")
                 path=self.database.storage._safe(self.database.storage.root/result_ref)
                 try:
-                    path.relative_to(self.database.storage.trip(actor.user_id,row["trip_id"]))
+                    path.resolve().relative_to(self.database.storage.trip(actor.user_id,row["trip_id"]).resolve())
                 except ValueError as exc:
                     raise Invalid("Result reference belongs to a different trip") from exc
             if row["state"]!='PENDING':

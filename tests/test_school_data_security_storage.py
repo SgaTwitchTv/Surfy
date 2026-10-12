@@ -125,6 +125,8 @@ class SecurityTests(RepositoryFixture):
         with self.assertRaises(Invalid):self.repo.finish_intent(self.actor,intent['id'],'APPLIED','C:/escape')
         with self.assertRaises(Invalid):self.repo.finish_intent(self.actor,intent['id'],'APPLIED','owners/'+self.other['id']+'/trips/'+self.trip['id']+'/result')
         reference=self.storage.derived(self.driver['id'],self.trip['id']).relative_to(self.storage.root).as_posix()+'/result.json'
+        escape=reference.rsplit('/',2)[0]+'/../'+'f'*32+'/result.json'
+        with self.assertRaises(Invalid):self.repo.finish_intent(self.actor,intent['id'],'APPLIED',escape)
         self.repo.finish_intent(self.actor,intent['id'],'APPLIED',reference)
 
 
