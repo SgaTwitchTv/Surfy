@@ -1,9 +1,9 @@
 # Uruchomienie aktualnej gałęzi GreenWave
 
-Stan po implementacji warstwy danych etapu 3: działa **bazowe GreenWave M8/CV** z kodem
-7ece859. Portal szkolny został usunięty decyzją użytkownika i nie jest jeszcze
-zaimplementowany według [kontraktu v1](contract.md). Nie ma obecnie kont,
-SMTP/resetu ani ról portalu; poniższa komenda nie udaje ich uruchomienia.
+Stan po etapie 4: działa bazowe GreenWave M8/CV oraz **osobny portal kont**.
+Stary prototyp został usunięty; nowa implementacja kont ma SMTP, aktywację,
+sesje i reset hasła. Przejazdy/GPS/CV nie są jeszcze podłączone do kont.
+Bazowe polecenie z sekcji 2 uruchamia M8/CV, portal uruchamia sekcja 9.
 
 ## 1. Worktree i gałąź
 
@@ -45,8 +45,8 @@ Nie uruchamiają się samodzielnie. Native Android i USB opisuje istniejące
 [phone-gps.md](../phone-gps.md); nie wykonywano fizycznego odbioru w tym etapie.
 Rekomendacje live nadal wymagają zweryfikowanych danych niezależnie od UI.
 
-Normalny checkout używa własnego data/runs i data/derived. To lokalna aplikacja
-badawcza bez kont szkolnych, nie gotowy chroniony portal ani polecenie Docker.
+Normalny checkout używa własnego data/runs i data/derived. To osobna lokalna aplikacja
+badawcza; jej API nie jest serwerem kont z sekcji 9 ani wdrożeniem Docker.
 Do prób/testów nagrywania używaj świeżego izolowanego eksportu opisanego poniżej.
 
 Zatrzymanie: Ctrl+C w terminalu uruchomionego serwera; główny kod obsługuje
@@ -141,13 +141,13 @@ Androida,Playwright E2E ani YOLO/hardware. Nie mierzono nowego coverage.
 ## 6. Stan etapu szkolnego
 
 [contract.md](contract.md): etap 2 zaakceptowany w 77c074cdc24eb14795eb8eb593167945d74eead4.
-[stages.md](stages.md): etap 3 przygotowany do ponownego odbioru, etapy 4–12 Do zrobienia.
-Nie istnieje działająca komenda uruchomienia portalu szkolnego według v1.
-Migracje i repozytoria są zaimplementowane; login/SMTP/HTTP/UI wymagają kolejnych etapów.
+[stages.md](stages.md): etap 3 zaakceptowany (2020b84d68ef3720c1b2d2345cf381c98a2a603b),
+etap 4 przygotowany do odbioru. Etapy 5–12 Do zrobienia.
+Działa portal kont (sekcja 9); pełna integracja domeny i M8/CV pozostaje na kolejne etapy.
 
-## 7. Nowa szkolna baza — maintenance CLI (etap 3)
+## 7. Szkolna baza — maintenance CLI (etap 3)
 
-To działa już teraz i nie uruchamia loginu ani serwera portalu. Jawny nowy root
+Maintenance CLI przygotowuje bazę; serwer kont uruchamia osobne polecenie sekcji 9. Jawny nowy root
 jest obowiązkowy; poniżej wyłącznie nowa baza syntetyczna, bez importu starego runtime:
 
 ```powershell
@@ -245,3 +245,128 @@ python -m unittest discover -s tests -p 'test_school_data_contract_boundaries.py
 Własna pełna Windows regresja274 OK,1skip. Niezależne Linux wyniki dla6c33649
 zostały dostarczone przez użytkownika; brak Tkinter tam jest osobną zależnością,
 nie usunięciem testu. Szczegóły [stage3.md](stage3.md).
+
+
+## 9. Portal kont i lokalna poczta demo — etap 4
+
+Portal używa nowego jawnego runtime root. Profile demo jest wyłącznie lokalny
+(HTTP/127.0.0.1) i dopuszcza adresy @example.test. Potrzebny Python>=3.11 ze scrypt;
+bez pip dla aplikacji. Docker nie jest potrzebny; Mailpit/Docker deployment to etap 11.
+
+**Terminal 1 — lokalny odbiornik SMTP i skrzynka operatora:**
+
+```powershell
+cd C:\Users\konra\.codex\worktrees\school-app\Surfy
+python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771
+```
+
+Otwórz http://127.0.0.1:8771. Odświeżaj stronę i kopiuj pełny link z wiadomości.
+Skrzynka jest tylko w RAM, znika po restarcie, nie służy prawdziwym danym. Nie jest
+publicznym endpointem portalu; wiadomość musi najpierw dotrzeć przez SMTP.
+Zatrzymanie: Ctrl+C. Używaj tylko własnych adresów syntetycznych @example.test.
+
+**Terminal 2 — przygotowanie nowej bazy i konfiguracji:**
+
+```powershell
+cd C:\Users\konra\.codex\worktrees\school-app\Surfy
+$schoolAccountRoot = Join-Path (Get-Location) ('runtime\stage4-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolAccountRoot" init
+python -m greenwave.school_data --root "$schoolAccountRoot" migrate
+python -m greenwave.school_accounts secrets --output "$schoolAccountRoot\deployment-keys.json"
+
+$env:SCHOOL_SECRET_FILE = "$schoolAccountRoot\deployment-keys.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SCHOOL_SMTP_HOST = '127.0.0.1'
+$env:SCHOOL_SMTP_PORT = '1025'
+$env:SCHOOL_SMTP_MODE = 'plain'
+$env:SCHOOL_SMTP_SENDER = 'greenwave@example.test'
+$env:SCHOOL_SMTP_USER = ''
+$env:SCHOOL_SMTP_PASSWORD = ''
+```
+
+Zachowaj wartość $schoolAccountRoot do kolejnych uruchomień. Nie generuj ponownie
+kluczy nad istniejącym plikiem; polecenie odmawia nadpisania. Nowe GUID oznacza nową
+bazę, a nie import wcześniejszych danych. Runtime/klucze/DB/mailbox nie trafiają do Git.
+Public base URL, przeglądarka, Host i Origin muszą wskazywać ten sam adres.
+Jeśli port zajęty, zmień jednocześnie port, PUBLIC_BASE_URL i ALLOWED_HOSTS.
+
+**Opcjonalny pierwszy administrator, przed uruchomieniem serwera:**
+
+```powershell
+python -m greenwave.school_accounts bootstrap-admin --root "$schoolAccountRoot" --email admin@example.test --name "Administrator demo" --confirm-email-ownership
+```
+
+Wprowadź hasło dwukrotnie przez getpass (12–128 znaków,<=512B UTF-8). Nie podawaj
+hasła w argv. Flagą potwierdzasz operatorsko własność adresu: konto ADMIN jest od
+razu ACTIVE/verified. Drugi aktywny administrator nie zostanie zbootstrapowany.
+Nie ma publicznego bootstrap API. Panel ról i innych kont pozostaje na etap 8.
+Przy aktywnym portalu maintenance/bootstrap odmawia Busy — najpierw zatrzymaj swój serwer.
+
+**Uruchomienie kont w tym samym terminalu:**
+
+```powershell
+python -m greenwave.school_accounts serve --root "$schoolAccountRoot" --host 127.0.0.1 --port 8770
+```
+
+Otwórz http://127.0.0.1:8770. Zatrzymanie Ctrl+C. Nie uruchamia migracji po cichu.
+Restart używa tych samych kluczy i root; preauth trzeba odświeżyć, niewysłane
+PENDING tokeny są unieważnione. Sesje mają idle30min/absolute8h; role/status/version
+sprawdzane na żądaniach, brak auto-login po zmianie/resecie hasła.
+
+### Ręczny przebieg bez zgadywania
+
+1. Rejestracja: np. kierowca@example.test, nazwa, hasło12–128 Unicode i powtórzenie.
+   Nie używaj realnego adresu. Odpowiedź jest neutralna również dla istniejącego email.
+2. W skrzynce8771 odśwież, skopiuj link VERIFY do portalu. Adres po otwarciu traci
+   fragment; samo GET nie aktywuje konta. Kliknij „Potwierdź aktywację”.
+3. Zaloguj się wybranym hasłem; konto pokazuje własny email/nazwę/rolę, bez tabel,
+   które nie zostały jeszcze podłączone. „Potwierdź tożsamość” wykonuje reauth.
+4. „Wyloguj” kończy bieżącą sesję; „Wyloguj wszystkie sesje” kończy wszystkie.
+5. Reset: „Reset hasła”, ten sam email, sprawdź nową wiadomość RESET w skrzynce.
+   Otwórz link, podaj i powtórz nowe hasło, potwierdź. Zaloguj się ponownie nowym hasłem.
+   Link jest jednorazowy, RESET15min/VERIFY24h; po ponownym żądaniu stary jest cofnięty.
+6. „Zmień hasło”: obecne hasło, nowe i potwierdzenie. Sukces odcina wszystkie
+   credentials; musisz zalogować się ponownie. Możesz wrócić do konta przyciskiem.
+
+Limity: register5/IP/h; wspólny budżet aktywacji/resetu3/email/h i10/IP/h;
+login5 błędów/email/15min i30 prób/IP/15min; reauth5/session/15min; tokenuse10/IP/15min.
+429 ma Retry-After. Pełna kolejka lub błąd SMTP nie stanowi dowodu wysłania; startup
+unieważnia utracone PENDING. Użytkownik może ponowić po cooldown; nie ma trwałego raw outbox.
+
+### Profil z prawdziwymi danymi
+
+Oddzielny root i sekret; SCHOOL_PROFILE=real, PUBLIC_BASE_URL=https://własna-domena,
+exact ALLOWED_HOSTS, SMTP starttls/smtps z certverify i rzeczywisty nadawca/credentials
+poza Git. Secure cookie jest obowiązkowe. DirectTLS: SCHOOL_TLS_CERT/SCHOOL_TLS_KEY;
+albo jawny SCHOOL_TRUSTED_PROXY (IP lokalnego proxy), bind127.0.0.1 i HTTPS na proxy.
+Proxy musi nadpisywać Host oraz Forwarded headers, nie przekazywać wartości klienta.
+Bez zaufanego peer/proto w takim profilu odmowa; Forwarded od innych peer ignorowane.
+Nie używaj lokalnego demo mailbox do realnych danych. To konfiguracja warstwy kont,
+nie dowód wdrożenia realnego TLS/SMTP/Dockera — odbiór deploymentu pozostaje później.
+
+### Testy etapu 4
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_accounts*.py' -v
+python -m unittest discover -s tests -p 'test_school_passwords.py' -v
+python -m unittest discover -s tests -p 'test_school_data*.py' -v
+New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_accounts,greenwave.school_data --data-file=artifacts/stage4.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage4.coverage -m
+python -m greenwave.school_accounts benchmark
+```
+
+Przeglądarka (Playwright i Edge; harness sam tworzy nową SQLite,SMTP i portal,
+z produkcyjnym KDF, nie używa Twojej działającej instancji):
+
+```powershell
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_accounts.cjs
+```
+
+Na innym komputerze dostosuj ścieżkę zainstalowanego Playwright lub pomiń zmienną,
+jeśli moduł jest rozwiązywany jako playwright. Skrypt wymaga Edge headless.
+Dowody, coverage per moduł i ograniczenia: [stage4.md](stage4.md).
+Pełną regresję nadal uruchamiaj w izolowanym Git eksporcie z sekcji 3.

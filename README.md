@@ -209,3 +209,19 @@ cd android/GreenWaveSensor
 - M8 mapping plan: [docs/m8-mapping-plan.md](docs/m8-mapping-plan.md)
 - M8 implementation checklist: [docs/m8-mapping-implementation.md](docs/m8-mapping-implementation.md)
 - M8 stationary and road-test procedure: [docs/m8-field-test.md](docs/m8-field-test.md)
+
+
+## GreenWave School — accounts (stage 4)
+
+A separate account portal now supports registration, email verification, login,
+sessions, password changes and one-time reset through SMTP. It does not expose
+legacy M8/CV endpoints or connect trips/GPS to accounts yet. Use a NEW explicit
+storage root; prepare it with `python -m greenwave.school_data --root <absolute-root> init`.
+
+Local synthetic mail: `python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771`.
+Account portal: `python -m greenwave.school_accounts serve --root <absolute-root> --host 127.0.0.1 --port 8770`.
+The portal requires explicit secrets, profile, PUBLIC_BASE_URL, Host allowlist and
+SMTP configuration; it never migrates silently. Follow the complete PowerShell
+setup, administrator bootstrap and register/reset walkthrough in
+[school runbook](docs/school-app/run.md#9-portal-kont-i-lokalna-poczta-demo--etap-4).
+Results and boundaries: [stage 4](docs/school-app/stage4.md).

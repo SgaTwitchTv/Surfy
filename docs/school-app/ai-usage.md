@@ -837,3 +837,248 @@ raport stage3.md/run.md. Dokumenty sprawdzone pod kątem wersji,jednostek,ACL,li
 staged paths i braku zmian0001/rdzenia/main/CV. Commity tylko wskazane źródła/testy/docs,
 bezDB/nagrań/runtime/coverage. Nie pushowano,nie przepisywano historii,nie mergowano.
 PUBLISH-01 pozostaje osobno. Etap3 Przygotowany do ponownego odbioru;4–12 Do zrobienia.
+
+
+## Prompt etapu 4 (2026-10-12)
+
+Pełna treść polecenia użytkownika, z uproszczonymi pustymi liniami formatowania.
+
+```text
+Dobra to lecimy etap 4 — konta, sesje, aktywacja email i bezpieczny reset hasła.
+Etap 3 zaakceptowany po niezależnym przeglądzie kodu i testów. Kontynuuj w istniejącym worktree na codex/school-app. IMPLEMENTUJ etap 4 do działającego, sprawdzalnego końca.
+Najpierw sprawdź aktualny HEAD i status. Zaakceptowany commit etapu 3 ma skrót 2020b84; ustal i zapisz pełny hash.
+Przeczytaj obowiązujące AGENTS.md oraz docs/school-app:
+contract.md, stage3.md, stages.md, run.md, ai-usage.md.
+
+ZASADY
+* Nie zmieniaj main ani codex/vision-camera.
+* Zachowaj niezwiązane zmiany.
+* Nie czytaj prywatnego data/runs/ ani starego runtime/school/.
+* Nowy portal używa wyłącznie jawnego, nowego runtime root.
+* Nie importuj starych kont, baz ani nagrań.
+* Nie zmieniaj zastosowanych migracji. Zmiana schematu wymaga następnej migracji.
+* Wszystkie trwałe czasy i zaufany Actor używają INTEGER UTC epoch milliseconds.
+* Nie zmieniaj solvera, predykcji ani warunków rekomendacji live.
+* Nie wystawiaj odziedziczonych endpointów GreenWave przez nowy serwer.
+* Nie odtwarzaj usuniętego prototypu jako gotowego rozwiązania.
+* Nie przepisuj historii, nie pushuj i nie scalaj automatycznie.
+
+ZAKRES ETAPU
+Implementujemy cały przepływ kont i HTTP API uwierzytelniania, transport SMTP, bootstrap administratora oraz minimalny działający interfejs kont.
+Nie implementujemy jeszcze tabel przejazdów, nowych widoków analityka/admina, integracji GPS/CV ani pełnej ochrony wszystkich endpointów M8 — to kolejne etapy. Nowy serwer nie może jednak umożliwiać obejścia logowania przez przekazanie żądania do starego Handlera.
+
+1. ARCHITEKTURA I KONFIGURACJA
+Zbuduj osobne, czytelne moduły:
+* hasła i tokeny;
+* usługa kont;
+* sesje i preauth/CSRF;
+* rate limits;
+* SMTP i kolejka dostarczania;
+* konfiguracja oraz HTTP adapter.
+Wykorzystaj greenwave.school_data. Uzupełnij jego wewnętrzne API tam, gdzie potrzebne, zachowując atomowość i istniejące testy.
+Dodaj udokumentowaną komendę uruchomienia serwera kont z:
+* jawnym runtime root;
+* host/port;
+* publicznym base URL i dokładną allowlistą Host/Origin;
+* ustawieniami cookie i SMTP;
+* sekretami konfiguracji poza Gitem.
+Nie uruchamiaj migracji po cichu. Serwer wymaga aktualnej, wcześniej przygotowanej bazy. Import modułów nie wykonuje I/O.
+Tryb localhost/demo HTTP musi być jawny. Dla wdrożenia sieciowego z prawdziwymi danymi wymagaj HTTPS oraz Secure cookies. Nie ufaj X-Forwarded-For/Proto bez jawnie skonfigurowanego zaufanego proxy.
+
+2. HASŁA
+Implementuj zgodnie z kontraktem:
+* 12–128 znaków Unicode, maksymalnie 512 bajtów UTF-8;
+* bez trim i normalizacji hasła;
+* scrypt z losową solą i wersjonowanym formatem parametrów;
+* początkowe parametry kontraktu, jawny pomiar czasu i kosztu na obecnym sprzęcie;
+* stałoczasowe porównanie wyniku;
+* dummy verification dla nieistniejącego konta;
+* rehash obsługiwanej starszej wersji po poprawnym loginie;
+* ograniczenie równoległych kosztownych operacji.
+Nie stosuj słabszego KDF w działającym demo. Testy jednostkowe mogą używać wstrzykniętego tańszego KDF, ale test integracyjny musi sprawdzić rzeczywistą konfigurację.
+Przy odczycie zapisanego formatu ogranicz dopuszczalne parametry, żeby uszkodzony hash nie wymuszał nieograniczonego RAM/CPU.
+
+3. REJESTRACJA I AKTYWACJA
+* Rejestracja tworzy wyłącznie DRIVER/PENDING_VERIFICATION.
+* Waliduj email, display_name, password i confirmation na kliencie i serwerze.
+* Odrzucaj niedozwolone pola role/status/owner/verified.
+* Zachowaj normalizację i UNIQUE email.
+* Prawidłowe żądanie dla nowego lub istniejącego email ma neutralne 202.
+* Dostarcz SMTP jednorazowy token VERIFY_EMAIL, przechowując tylko jego hash.
+* Token ma właściwy purpose, TTL i security_version.
+* GET linku nie zużywa tokenu.
+* POST aktywacji zużywa token i aktywuje konto atomowo.
+* Zablokowane konto nie może odzyskać dostępu przez aktywację.
+* Ponowienie aktywacji działa według kontraktu bez osobnego rozbudowanego workflow.
+
+4. SESJE, LOGIN I LOGOUT
+Implementuj:
+* login z jednolitym 401 dla błędnego hasła, braku konta, blokady i braku aktywacji;
+* nowy losowy sekret sesji przy loginie;
+* przechowywanie wyłącznie hasha sekretu;
+* cookie HttpOnly, SameSite=Strict, Path=/, bez Domain, Secure według profilu;
+* idle 30 minut i absolute 8 godzin;
+* kontrolę statusu konta i security_version przy każdym chronionym żądaniu;
+* ograniczenie częstotliwości zapisu last_activity;
+* /auth/me z bezpiecznym DTO bez hashów i sekretów;
+* logout bieżącej sesji i logout wszystkich sesji;
+* reauth z rzeczywistą weryfikacją hasła i rotacją sekretu oraz CSRF;
+* odmowę wykorzystania starego sekretu po rotacji;
+* zmianę hasła z current password, CSRF i atomową revokacją sesji/tokenów/urządzeń;
+* brak auto-login po zmianie lub resecie hasła.
+Actor jest konstruowany wyłącznie na podstawie uwierzytelnionej sesji. Timestamp reauth nie może pochodzić z body ani nagłówka użytkownika.
+Istniejące repository change_account nie jest automatycznie publicznym endpointem. W tym etapie dodaj tylko operacje konieczne dla własnej zmiany hasła; panel zarządzania rolami pozostaje na etap 8.
+
+5. CSRF, PREAUTH I HTTP
+Zaimplementuj endpointy kont zgodnie z contract.md, bez wymyślania konkurencyjnego namespace.
+* Preauth cookie i CSRF dla login/register/reset/verify.
+* Oddziel preauth od sesji użytkownika.
+* CSRF powiązany z aktualnym sekretem cookie; rotacja unieważnia stary token.
+* Wszystkie odpowiednie mutacje wymagają CSRF i dokładnego Origin.
+* GET nie zmienia haseł, nie aktywuje konta i nie zużywa tokenu.
+* Walidacja JSON: object, poprawny Content-Type, limit body, brak duplikowanych i nieznanych pól, NaN/Infinity oraz nieprawidłowych typów.
+* Neutralne błędy bez stacktrace, SQL, ścieżek i sekretów.
+* no-store, nosniff, Referrer-Policy oraz CSP bez unsafe-inline dla nowego UI.
+* Publiczne zasoby ograniczone do jawnej allowlisty shell/static/health/auth.
+* Brak dostępu do runtime, DB, backupów i starych endpointów M8.
+* Health nie ujawnia konfiguracji poczty, ścieżek ani kont.
+Serwer musi umożliwiać postęp niezależnych żądań przy hashowaniu i wysyłce poczty, zgodnie z blokadami warstwy danych. Nie blokuj całej aplikacji synchroniczną wysyłką SMTP.
+
+6. RESET HASŁA I SMTP
+Implementuj kompletny przepływ:
+* request-reset z neutralnym 202 i limitami niezależnymi od istnienia konta;
+* token RESET losowy >=32 bajty, hash w DB, TTL 15 minut;
+* cofnięcie poprzednich niewykorzystanych resetów;
+* link wyłącznie z zaufanego PUBLIC_BASE_URL;
+* token we fragmencie URL, przejęty do pamięci i usunięty z adresu przez klienta;
+* brak linku/tokenu w publicznym API, logach i trwałym outboxie;
+* POST reset z confirmation i preauth CSRF;
+* atomowa zmiana hasła, zużycie tokenu i revokacja credentials;
+* równoległe użycie: najwyżej jeden sukces;
+* invalid/expired/used token ma neutralny wspólny błąd;
+* po sukcesie użytkownik loguje się ponownie.
+SMTP:
+* ograniczona kolejka w pamięci i worker z timeout;
+* walidacja konfiguracji;
+* STARTTLS/SMTPS z weryfikacją certyfikatu dla realnego profilu;
+* lokalny odbiornik wyłącznie dla danych syntetycznych w profilu demo;
+* poprawne delivery_state i zachowanie po błędzie/restart;
+* przy pełnej kolejce lub awarii nie twórz fałszywego dowodu wysłania;
+* sekret tokenu nie może trafić do wyjątku, logu ani audytu.
+Nie wykonuj testowych wysyłek do rzeczywistych osób. Używaj lokalnego SMTP test server oraz example.test.
+Docker i pełny Mailpit deployment pozostają na etap 11. Już teraz podaj działającą lokalną instrukcję odbioru poczty demonstracyjnej. Jeśli Docker jest dostępny, można użyć samego Mailpit; jeśli nie, zapewnij jasno oznaczony lokalny odbiornik testowy poza produkcyjnym profilem. Nie zastępuj SMTP publicznym endpointem zwracającym token.
+
+7. RATE LIMITS I BOOTSTRAP
+Wykorzystaj trwałe liczniki z warstwy danych:
+* poprawne jednostki ms;
+* limity kontraktu;
+* jednakowe zachowanie dla kont istniejących i nieistniejących;
+* limit przed kosztownym KDF;
+* brak trwałej blokady konta przez napastnika;
+* bezpieczny HMAC kluczy email;
+* 429 i Retry-After.
+Dodaj CLI pierwszego administratora:
+* getpass, bez hasła w argv i bez domyślnego hasła;
+* atomowa odmowa, jeśli istnieje aktywny administrator;
+* audyt bootstrapu;
+* jawny operatorski stan aktywacji;
+* brak publicznego bootstrap endpointu.
+
+8. MINIMALNY INTERFEJS KONT
+Dodaj prosty, spójny i responsywny interfejs:
+* rejestracja;
+* login;
+* instrukcja sprawdzenia poczty;
+* aktywacja;
+* prośba o reset i formularz nowego hasła;
+* ekran zalogowanego konta;
+* zmiana hasła i wylogowanie.
+Fetch/AJAX, walidacja klienta, błędy pól, loading i blokada podwójnego submit. Nie zapisuj haseł ani bearer tokens w localStorage. Po 401 usuń prywatny stan.
+Zalogowany ekran pokazuje tylko bezpieczne dane bieżącego konta i informację o aktualnie dostępnych funkcjach. Nie prezentuj niezaimplementowanych tabel lub integracji jako działających.
+Docelowe tabele, nawigacja i pełny design pozostają na kolejne etapy.
+
+9. TESTY I ODBIÓR
+Dodaj testy jednostkowe oraz integracyjne HTTP z prawdziwą tymczasową DB i lokalnym SMTP:
+* normalizacja i wyścig rejestracji tego samego email;
+* DRIVER niezależnie od prób podania innej roli;
+* brak loginu przed aktywacją;
+* VERIFY/RESET niezamienne, single-use, expiry i GET bez consume;
+* pełny register → mail → verify → login → me → logout;
+* pełny request-reset → mail → reset → nowy login;
+* równoległy reset i rollback błędu transakcji;
+* cookie/CSRF/Origin, fixation, rotacja i stary sekret;
+* idle/absolute TTL, block/security_version i revokacja wszystkich credentials;
+* rate limits i Retry-After;
+* SMTP failure, pełna kolejka i restart z niewysłanym tokenem;
+* brak sekretów w odpowiedziach, logach i audycie;
+* bootstrap i jego konflikt;
+* odmowa dostępu do runtime/backupów/odziedziczonych endpointów.
+Dodaj automatyczny scenariusz przeglądarkowy głównych formularzy na desktop i smartfonie. Jeśli środowisko blokuje przeglądarkę, podaj blokadę zamiast deklarować sukces.
+Uruchom testy etapu 4, regresję school_data i odpowiednią regresję GreenWave. Zmierz coverage nowych modułów kont oraz warstwy danych z branch=True i raportem per moduł. Wynik etapowy nie zastępuje końcowego szerokiego zakresu aplikacji.
+
+10. DOKUMENTACJA I COMMITY
+* Dodaj docs/school-app/stage4.md z implementacją, wynikami i ograniczeniami.
+* Aktualizuj run.md oraz README: dokładne polecenia init/migrate, konfiguracji, bootstrapu, SMTP demo, uruchomienia portalu i testów.
+* Instrukcja ma umożliwić mi ręczne przejście pełnej rejestracji i resetu bez zgadywania.
+* Uzupełnij ai-usage.md.
+* Aktualizuj stages.md: etap 3 zaakceptowany z pełnym hashem; etap 4 przygotowany do odbioru; etapy 5–12 nadal Do zrobienia.
+* Małe sensowne commity, staging konkretnych plików.
+* Żadnych DB, nagrań, mailboxów, sekretów ani środowisk w Git.
+* Nie pushuj i nie scalaj automatycznie.
+
+NA KOŃCU PODAJ
+1. Działające funkcje oraz granice etapu.
+2. Dokładne komendy PowerShell do uruchomienia serwera i poczty demo.
+3. Instrukcję ręcznego register/verify/login/logout/reset/change-password.
+4. Wyniki testów HTTP, SMTP, przeglądarkowych i regresji.
+5. Wynik coverage oraz pomiar kosztu rzeczywistego KDF.
+6. Hash końcowego commita, listę commitów i git status.
+7. Blokady i ograniczenia.
+8. Potwierdzenie, że nowy serwer nie udostępnia prywatnych danych ani legacy API bez ochrony.
+Doprowadź etap 4 do sprawdzonego końca i zatrzymaj się przed etapem 5.
+```
+
+### Rzeczywista pomoc AI i jej weryfikacja
+
+Codex napisał moduły school_accounts, samodzielny HTTP adapter, CLI/getpass,
+SMTP worker i lokalny syntetyczny odbiornik oraz minimalny UI. Nie delegowano
+pracy do innych agentów/czatów. Baza wejściowa i zaakceptowany etap3:
+2020b84d68ef3720c1b2d2345cf381c98a2a603b; status/staging czyste. Czytano obowiązujące
+AGENTS i dokumenty. Schema2/14tabel i zastosowane migracje niezmienione; brak
+czytania prywatnych data/runs/runtime/school, importu starego prototypu czy zmian rdzenia.
+
+Własne Windows wykonanie:29 testów kont PASS; razem77 kont+danych OK,1skip,57.506s.
+Pełna regresja syntetycznego eksportu9dcf41e:303 OK,1skip,78.617s. Node7+mobileflowPASS.
+Browser Edge headless desktop1280x900 i phone390x844 pełne register/SMTP/verify/login/
+reauth/logout/reset/change/logoutall PASS z produkcyjnym KDF,zero pageerrors/overflow/
+localStorage. Rzeczywiste subprocess CLI init/migrate/keys/serve/demomail i pełny
+register→mail→verify→login→me PASS. BaseCLI HTML/state200 w eksporcie PASS.
+Testy nie wysyłały wiadomości do realnych osób; tylko localhost i example.test.
+
+Fixtures używają TemporaryDirectory i wyraźnie tańszego wstrzykniętego KDF;
+realny scryptN131072 sprawdzony unit/integracyjnie w browser/CLI, demo nie osłabione.
+ActualStartTLSfailure lokalnego odbiornika, mock certverify STARTTLS/SMTPS,
+capacity/restart/PENDING recovery,parallelreset/rollback/limits/CSRF/cookies/revoke
+sprawdzone testami. Tkinter działał;1skip to Windows symlink1314,junctionPASS.
+Nie wykonano Linux ani realnego sieciowego HTTPS/proxy/SMTP-certificate deploymentu;
+Docker/Mailpit/hardware to późniejsze etapy,nie ukryte sukcesy.
+
+Początkowe błędy: fixture odczytana cp1252 zamiast UTF8, zły obiekt mockSMTP,
+za krótka lista fixturegetpass, brakargtypes dla benchmarku HANDLE Windows,
+Windows TCPreset przy early403, brak obsługi same-document hashchange linku.
+Naprawiono i ponowiono testy. Przegląd dodał refund wrong-passwordbudget przy503KDF_BUSY
+oraz wspólny mailbudget register/reset niezależny od istnienia email.
+
+CoveragebranchTrue całe school_accounts+school_data bezomit/exclude:
+1587/1660linie95.6024%,416/524gałęzie79.3893%,combined91.7125%.
+Samekonta88.5344%combined,dane94.4115%;permodule stage4.md. Wynik nie zastępuje
+końcowego szerokiego backend/M8/CV i osobnego JS. KDF CLIbenchmark:mediana0.5728665s,
+PeakWorkingSet175083520B (~167MiB),core128MiB/op,max2;pełne parametry/pomiar stage4.md.
+
+Commity:d0b2ddcbb2aea9c74ff3710a7e341e4997be5462,
+90beec7bd5b0abc51548e5c240e9e439708d2f87,4746c9ee5c55806e91e9bb25f7881244958322de,
+2b9ed3ddb8e34e316701270e64904c290a73541b,9dcf41e1b3e7140a64b437357f94f9614400eea2;
+dokumentacja:commit dodający stage4.md (git log -1 --diff-filter=A --format=%H -- docs/school-app/stage4.md).
+Dokumenty/README i dokładne komendy sprawdzone; staging konkretne źródła/testy/docs,
+bezDB/raw/mailboxów/kluczy/środowisk/logów/coverage. Main/CV niezmienione,
+bezpush/merge/rewrite;PUBLISH-01 osobno. Etap4 przygotowany do odbioru,5–12 Do zrobienia.

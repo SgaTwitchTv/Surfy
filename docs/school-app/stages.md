@@ -25,14 +25,14 @@ git log --diff-filter=A --format=%H -- docs/school-app/run.md
 
 Etap 2 został zaakceptowany przez użytkownika w prompcie etapu 3.
 PUBLISH-01 nadal otwarty; publikacja runtime nie została usunięta z historii.
-Portal HTTP nie jest zaimplementowany; etap 3 dodaje tylko persistence.
+Etap 3 dodał persistence. Bieżący etap 4 udostępnia osobny portal kont; integracja domeny pozostaje na kolejne etapy.
 
 | Etap | Zakres | Status | Commit | Dowody sprawdzenia | Blokady / następny krok |
 |---|---|---|---|---|---|
 |1|Audyt i worktree|Zweryfikowany i zaakceptowany przez użytkownika|bb99de3d808db8898426b42203e6c5e979e527be|Baza/status;226 Python;7 Node+mobile_flow;2 browser E2E;capture smoke;4 Android+APK;bazowe coverage85.9985%;audit.md|Docker CLI brak;YOLO/telefon/droga nieodebrane;wynik tylko bazy|
 |2|Kontrakt aplikacji|Zaakceptowany przez użytkownika|77c074cdc24eb14795eb8eb593167945d74eead4; pierwotny 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0; cleanup 7a2899770075cc6ac12c826234f620f1de97a380|14 tabel,37 API+26 adapterów; kontrola dokumentów i syntetyczny smoke opisane w contract/run|PUBLISH-01 osobno; zaakceptowany zakres v1|
-|3|Baza danych i migracje|Przygotowany do ponownego odbioru|wcześniejszy 6c3364997bd26cd8a0a0a67ee7505371bf93feef;fb80ef609632a78fd268ce864ede713c2b98df71;023198ae149b4953e2311be7c9729ac128d6e405; dokumentacja: ostatni commit stage3.md|14 tabel/v2;immutable0001;exact COMMIT reproducer rollback;v1 upgrade/legacy restore;raw.csv RunLogger;[from,to);48 testów 1skip;274 regresja 1skip;7Node+mobileflow;CLI/HTTP smoke;coverage94.4115%,linie98.5277%,gałęzie82.2148%|Win symlink1314,junctionPASS;niezależny Linux wynik6c33649 osobno;login/SMTP/UI/recovery nadal później;STOP przed4|
-|4|Konta i sesje|Do zrobienia|—|—|Implementacja ustalonego SMTP/aktywacji/resetu i session policy|
+|3|Baza danych i migracje|Zaakceptowany przez użytkownika|2020b84d68ef3720c1b2d2345cf381c98a2a603b|Niezależny przegląd i wyniki opisane w stage3.md; v2/14 tabel/immutable migrations/rollback/backup/isolacja|Akceptacja w prompcie etapu4; PUBLISH-01 nadal osobno|
+|4|Konta i sesje|Przygotowany do odbioru|d0b2ddcbb2aea9c74ff3710a7e341e4997be5462;90beec7bd5b0abc51548e5c240e9e439708d2f87;4746c9ee5c55806e91e9bb25f7881244958322de;2b9ed3ddb8e34e316701270e64904c290a73541b;9dcf41e1b3e7140a64b437357f94f9614400eea2;dokumentacja: commit stage4.md|Register/SMTP/verify/login/session/CSRF/reset/change/reauth/bootstrap; testy i per-module coverage w stage4.md; desktop i phone browser PASS z realnym KDF; brak legacy passthrough|Konta tylko; GPS/CV/trips/role panel/Docker później; STOP przed5|
 |5|Uprawnienia i ochrona API|Do zrobienia|—|—|Jawna macierz ról i wszystkie odziedziczone endpointy|
 |6|Przejazdy i obserwacje|Do zrobienia|—|—|Niezmienny raw, audyt korekt, spójność i recovery|
 |7|Nowoczesny UI użytkownika|Do zrobienia|—|—|Projekt w kierunku ReactLY i odbiór wizualny|
@@ -57,3 +57,7 @@ Ponowny przegląd etapu3: wcześniejszy literalny hash
 naprawione i opisane w stage3.md; nie traktujemy wcześniejszego odbioru jako
 potwierdzenia atomowości parsera ani zgodności sekund z kontraktem.
 Hash bieżącej dokumentacji: `git log -1 --format=%H -- docs/school-app/stage3.md`.
+
+Etap3 zaakceptowany: literalny hash2020b84d68ef3720c1b2d2345cf381c98a2a603b.
+Hash dokumentacji etapu4: `git log -1 --diff-filter=A --format=%H -- docs/school-app/stage4.md`.
+Wyniki i blokady etapu4 w stage4.md; etapy5–12 Do zrobienia.
