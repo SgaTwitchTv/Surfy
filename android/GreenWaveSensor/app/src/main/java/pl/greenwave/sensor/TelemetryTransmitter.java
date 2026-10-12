@@ -67,7 +67,7 @@ final class TelemetryTransmitter {
 
     private boolean refreshSession(String base) {
         try {
-            HttpJson.Response response = HttpJson.get(base + "/api/state", ConfigStore.token(context));
+            HttpJson.Response response = HttpJson.get(base + "/api/state");
             if (response.status != 200) return false;
             ConfigStore.saveSession(context, response.json.getString("session_id"));
             StatusStore.lastError = "Sesja serwera została odświeżona";

@@ -22,12 +22,9 @@ final class HttpJson {
         return response(connection);
     }
 
-    static Response get(String url) throws Exception { return get(url, null); }
-
-    static Response get(String url, String token) throws Exception {
+    static Response get(String url) throws Exception {
         HttpURLConnection connection = open(url);
         connection.setRequestMethod("GET");
-        if (token != null && !token.isEmpty()) connection.setRequestProperty("X-GreenWave-Token", token);
         return response(connection);
     }
 
