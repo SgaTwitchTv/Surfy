@@ -1,3 +1,4 @@
+from .time_units import date_range, timestamp_ms
 from .errors import Invalid, Conflict, Denied
 from .validation import text, email, digest, operation_key
 from .storage import identifier
@@ -27,11 +28,11 @@ class Trips:
             raise Invalid("Invalid pagination")
         if status and status not in {"PLANNED","STARTING","RECORDING","FINALIZING","COMPLETE","INTERRUPTED"}:
             raise Invalid("Invalid status filter")
-        if after is not None and before is not None and after>before: raise Invalid("Invalid date interval")
+        date_range(after, before)
         with self.database.transaction(False) as c:
             self.user(c,actor)
             clauses=["owner_id=?"]; values=[actor.user_id]
-            for column,operator,value in [("created_at",">=",after),("created_at","<=",before),("route_version_id","=",route),("status","=",status)]:
+            for column,operator,value in [("created_at",">=",after),("created_at","<",before),("route_version_id","=",route),("status","=",status)]:
                 if value is not None:
                     clauses.append(column+operator+"?"); values.append(value)
             return [dict(r) for r in c.execute("SELECT * FROM trips WHERE "+" AND ".join(clauses)+" ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",(*values,limit,offset))]
@@ -70,7 +71,7 @@ class Trips:
                 c.execute("UPDATE trips SET status=?,run_id=?,started_at=?,revision=revision+1 WHERE id=?",(status,run_id,now,trip_id))
             elif status=="COMPLETE":
                 digest(raw_hash); digest(manifest_hash)
-                expected=self.database.storage.run(actor.user_id,trip_id,trip["run_id"])/"gps.jsonl"
+                expected=self.database.storage.run(actor.user_id,trip_id,trip["run_id"])/"raw.csv"
                 relative=expected.relative_to(self.database.storage.root).as_posix()
                 if raw_ref!=relative: raise Invalid("Raw reference must belong to this trip")
                 c.execute("UPDATE trips SET status=?,ended_at=?,raw_ref=?,raw_hash=?,manifest_hash=?,revision=revision+1 WHERE id=?",(status,now,raw_ref,raw_hash,manifest_hash,trip_id))

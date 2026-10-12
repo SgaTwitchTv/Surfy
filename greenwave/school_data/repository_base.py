@@ -2,22 +2,27 @@
 Constructing it is not authentication. Browser DTOs must never supply this object.
 Roles and account state are fetched afresh inside each transaction.
 """
-import time
 import uuid
 from dataclasses import dataclass
 from .errors import Denied, Conflict, Invalid
 from .storage import identifier
+from .time_units import now_ms, timestamp_ms
 
 
 @dataclass(frozen=True)
 class Actor:
     user_id: str
-    reauthenticated_at: float | None = None
+    reauthenticated_at: int | None = None
+
+    def __post_init__(self):
+        if self.reauthenticated_at is not None:
+            timestamp_ms(self.reauthenticated_at)
 
 
 class RepositoryBase:
-    def __init__(self, database, clock=time.time, ids=lambda: uuid.uuid4().hex):
-        self.database, self.clock, self.ids = database, clock, ids
+    def __init__(self, database, clock=now_ms, ids=lambda: uuid.uuid4().hex):
+        self.database, self.ids = database, ids
+        self.clock = lambda: timestamp_ms(clock())
 
     def new_id(self):
         return identifier(self.ids())
@@ -29,7 +34,9 @@ class RepositoryBase:
         user = c.execute("SELECT * FROM users WHERE id=?", (actor.user_id,)).fetchone()
         if not user or user["status"]!="ACTIVE" or (roles and user["role"] not in roles):
             raise Denied("Active authorized account required")
-        if reauth and (actor.reauthenticated_at is None or not 0<=self.clock()-actor.reauthenticated_at<=300):
+        if actor.reauthenticated_at is not None:
+            timestamp_ms(actor.reauthenticated_at)
+        if reauth and (actor.reauthenticated_at is None or not 0<=self.clock()-actor.reauthenticated_at<=300000):
             raise Denied("Recent trusted reauthentication required")
         return user
 

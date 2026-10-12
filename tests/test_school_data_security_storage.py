@@ -33,7 +33,7 @@ class SecurityTests(RepositoryFixture):
         with self.assertRaises(Denied):self.repo.device_owner('f'*64,'boot-1')
         with self.assertRaises(Denied):self.repo.pairing_challenge(self.actor,session,'a'*64,'boot-1','Phone')
         expired=self.repo.create_session(self.actor,'1'*64,'2'*64)
-        self.now+=1800
+        self.now+=1800000
         with self.assertRaises(Denied):self.repo.touch_session(self.actor,expired)
 
     def test_token_rotation_expiry_single_use_and_atomic_callback(self):
@@ -48,7 +48,7 @@ class SecurityTests(RepositoryFixture):
         self.assertEqual(self.repo.consume_account_token('b'*64,'RESET')['user_id'],self.driver['id'])
         with self.assertRaises(Denied):self.repo.consume_account_token('b'*64,'RESET')
         self.repo.issue_account_token(self.driver['id'],'RESET','c'*64)
-        self.now+=900
+        self.now+=900000
         with self.assertRaises(Denied):self.repo.consume_account_token('c'*64,'RESET')
         pending=self.repo.create_user('pending@example.test','Pending','fixture')
         self.repo.issue_account_token(pending['id'],'VERIFY_EMAIL','d'*64)
@@ -75,8 +75,8 @@ class SecurityTests(RepositoryFixture):
 
     def test_rate_windows_pairing_rotation_and_constraints(self):
         self.assertEqual(self.repo.rate_attempt(HASH,'LOGIN',limit=2)['attempts'],1)
-        self.assertEqual(self.repo.rate_attempt(HASH,'LOGIN',limit=2)['blocked_until'],1060)
-        self.now+=61
+        self.assertEqual(self.repo.rate_attempt(HASH,'LOGIN',limit=2)['blocked_until'],1060000)
+        self.now+=61000
         self.assertEqual(self.repo.rate_attempt(HASH,'LOGIN',limit=2)['attempts'],1)
         with self.assertRaises(Invalid):self.repo.rate_attempt(HASH,'RESET')
         with self.assertRaises(Invalid):self.repo.rate_attempt(HASH,'LOGIN',limit=0)
@@ -84,19 +84,19 @@ class SecurityTests(RepositoryFixture):
         first=self.repo.pairing_challenge(self.actor,session,'3'*64,'boot','Phone')
         second=self.repo.pairing_challenge(self.actor,session,'4'*64,'boot','Phone')
         with self.assertRaises(Denied):self.repo.bind_device(self.actor,first,'phone','5'*64,'boot')
-        self.now+=300
+        self.now+=300000
         with self.assertRaises(Denied):self.repo.bind_device(self.actor,second,'phone','5'*64,'boot')
         # Direct SQL cannot pair a session of a different owner.
         with self.assertRaises(Conflict):
             with self.db.transaction() as c:
-                c.execute("INSERT INTO pairing_challenges VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL)",('a'*32,'6'*64,self.other['id'],session,'boot','Phone',self.now,self.now+300))
+                c.execute("INSERT INTO pairing_challenges VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL)",('a'*32,'6'*64,self.other['id'],session,'boot','Phone',self.now,self.now+300000))
 
     def test_observation_validation_archived_and_missing_records(self):
         with self.assertRaises(Invalid):self.repo.add_observation(self.actor,self.trip['id'],'s','RED','STATE_SEEN','e',source='OTHER')
         obs=self.obs()
         for kwargs in [{'limit':0},{'offset':-1},{'state':'BLUE'},{'event_type':'START'},{'after':2,'before':1}]:
             with self.assertRaises(Invalid):self.repo.list_observations(self.actor,self.trip['id'],**kwargs)
-        self.assertEqual(self.repo.list_observations(self.actor,self.trip['id'],after=2000),[])
+        self.assertEqual(self.repo.list_observations(self.actor,self.trip['id'],after=2000000),[])
         self.assertEqual(len(self.repo.list_observations(self.actor,self.trip['id'],signal='signal-1',event_type='STATE_SEEN')),1)
         with self.assertRaises(Denied):self.repo.correction_history(self.oa,obs['id'])
         with self.assertRaises(Denied):self.repo.correction_history(self.actor,'0'*32)

@@ -22,7 +22,7 @@ class MigrationTests(unittest.TestCase):
         self.storage=Storage(self.temp.name)
 
     def test_fresh_idempotent_fourteen_tables_pragmas(self):
-        self.assertEqual(migrate(self.storage)["version"],1)
+        self.assertEqual(migrate(self.storage)["version"],2)
         self.assertIsNone(migrate(self.storage)["backup"])
         self.assertTrue(status(self.storage)["current"])
         with Database(self.storage) as db:
@@ -38,22 +38,22 @@ class MigrationTests(unittest.TestCase):
 
     def test_upgrade_backup_and_future_refusal(self):
         migrate(self.storage)
-        extra=Migration(2,'CREATE TABLE synthetic_next_version (id INTEGER PRIMARY KEY);')
+        extra=Migration(3,'CREATE TABLE synthetic_next_version (id INTEGER PRIMARY KEY);')
         result=migrate(self.storage,load()+[extra])
         self.assertTrue(Path(result['backup']).exists())
         c=connect(self.storage.database)
-        try:self.assertEqual(validate(c,load()+[extra])['version'],2)
+        try:self.assertEqual(validate(c,load()+[extra])['version'],3)
         finally:c.close()
         with self.assertRaises(SchemaError):status(self.storage)
         with self.assertRaises(SchemaError):Database(self.storage).__enter__()
         # Lease was released on refused runtime startup.
-        self.assertEqual(migrate(self.storage,load()+[extra])['version'],2)
+        self.assertEqual(migrate(self.storage,load()+[extra])['version'],3)
 
     def test_upgrade_failure_rollback(self):
         migrate(self.storage)
-        bad=Migration(2,'CREATE TABLE transient_table (id INTEGER); INSERT INTO absent VALUES (1);')
+        bad=Migration(3,'CREATE TABLE transient_table (id INTEGER); INSERT INTO absent VALUES (1);')
         with self.assertRaises(sqlite3.OperationalError):migrate(self.storage,load()+[bad])
-        self.assertEqual(status(self.storage)['version'],1)
+        self.assertEqual(status(self.storage)['version'],2)
         c=connect(self.storage.database)
         try:self.assertIsNone(c.execute("SELECT name FROM sqlite_master WHERE name='transient_table'").fetchone())
         finally:c.close()
@@ -63,18 +63,18 @@ class MigrationTests(unittest.TestCase):
         bad=Migration(1,load()[0].sql+'INSERT INTO absent VALUES (1);')
         with self.assertRaises(sqlite3.OperationalError):migrate(self.storage,[bad])
         self.assertEqual(status(self.storage)['version'],0)
-        self.assertEqual(migrate(self.storage)['version'],1)
+        self.assertEqual(migrate(self.storage)['version'],2)
 
     def test_checksum_user_version_and_unknown_database_refused(self):
         migrate(self.storage)
         c=connect(self.storage.database)
         try:
-            c.execute("UPDATE schema_migrations SET checksum='tampered'")
+            c.execute("UPDATE schema_migrations SET checksum='tampered' WHERE version=1")
             with self.assertRaises(SchemaError):validate(c,load())
-            c.execute('UPDATE schema_migrations SET checksum=?',(load()[0].checksum,))
+            c.execute('UPDATE schema_migrations SET checksum=? WHERE version=1',(load()[0].checksum,))
             c.execute('PRAGMA user_version=9')
             with self.assertRaises(SchemaError):validate(c,load())
-            c.execute('PRAGMA user_version=1')
+            c.execute('PRAGMA user_version=2')
             with self.assertRaises(SchemaError):validate(c,[Migration(2,'SELECT 1;')])
         finally:c.close()
         with tempfile.TemporaryDirectory() as other:

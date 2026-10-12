@@ -10,13 +10,13 @@ class SecurityRecords:
             user=self.user(c,actor)
             sid,now=self.new_id(),self.clock()
             c.execute("INSERT INTO browser_sessions VALUES (?,?,?,?,?,?,?,?,?,NULL)",
-                      (sid,user["id"],secret_hash,csrf_hash,user["security_version"],now,now,now,now+28800))
+                      (sid,user["id"],secret_hash,csrf_hash,user["security_version"],now,now,now,now+28800000))
             return sid
 
     def session(self, c, session_id, owner_id):
         row=c.execute("SELECT s.* FROM browser_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.user_id=? AND s.revoked_at IS NULL AND u.status='ACTIVE' AND s.security_version=u.security_version",(session_id,owner_id)).fetchone()
         now=self.clock()
-        if not row or row["absolute_expiry"]<=now or row["last_activity_at"]+1800<=now:
+        if not row or row["absolute_expiry"]<=now or row["last_activity_at"]+1800000<=now:
             raise Denied("Session unavailable or expired")
         return row
 
@@ -46,7 +46,7 @@ class SecurityRecords:
                 raise Denied("Account token cannot be issued")
             now=self.clock(); token_id=self.new_id()
             c.execute("UPDATE account_tokens SET revoked_at=? WHERE user_id=? AND purpose=? AND used_at IS NULL AND revoked_at IS NULL",(now,user_id,purpose))
-            c.execute("INSERT INTO account_tokens VALUES (?,?,?,?,?,?,?,NULL,NULL,'PENDING')",(token_id,user_id,purpose,secret_hash,user["security_version"],now,now+(900 if purpose=="RESET" else 86400)))
+            c.execute("INSERT INTO account_tokens VALUES (?,?,?,?,?,?,?,NULL,NULL,'PENDING')",(token_id,user_id,purpose,secret_hash,user["security_version"],now,now+(900000 if purpose=="RESET" else 86400000)))
             return token_id
 
     def consume_account_token(self, secret_hash, purpose, *, apply=None):
@@ -65,7 +65,7 @@ class SecurityRecords:
             self.user(c,actor); self.session(c,session_id,actor.user_id)
             now=self.clock(); challenge=self.new_id()
             c.execute("UPDATE pairing_challenges SET revoked_at=? WHERE used_at IS NULL AND revoked_at IS NULL AND (expiry<=? OR parent_session_id=?)",(now,now,session_id))
-            c.execute("INSERT INTO pairing_challenges VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL)",(challenge,code_hmac,actor.user_id,session_id,boot_id,label,now,now+300))
+            c.execute("INSERT INTO pairing_challenges VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL)",(challenge,code_hmac,actor.user_id,session_id,boot_id,label,now,now+300000))
             return challenge
 
     def bind_device(self, actor, challenge_id, client_device_id, token_hash, boot_id):
@@ -79,9 +79,9 @@ class SecurityRecords:
             existing=c.execute("SELECT id FROM devices WHERE owner_id=? AND client_device_id=?",(actor.user_id,client_device_id)).fetchone()
             if existing:
                 did=existing[0]
-                c.execute("UPDATE devices SET token_hash=?,parent_session_id=?,boot_id=?,security_version=?,expiry=?,status='ACTIVE',revoked_at=NULL,label=? WHERE id=?",(token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800,challenge["label"],did))
+                c.execute("UPDATE devices SET token_hash=?,parent_session_id=?,boot_id=?,security_version=?,expiry=?,status='ACTIVE',revoked_at=NULL,label=? WHERE id=?",(token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800000,challenge["label"],did))
             else:
-                c.execute("INSERT INTO devices VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)",(did,actor.user_id,client_device_id,challenge["label"],'ACTIVE',token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800))
+                c.execute("INSERT INTO devices VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)",(did,actor.user_id,client_device_id,challenge["label"],'ACTIVE',token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800000))
             c.execute("UPDATE pairing_challenges SET used_at=? WHERE id=?",(now,challenge_id))
             self.audit(c,actor,"DEVICE_BOUND","DEVICE",did)
             return did
@@ -94,16 +94,16 @@ class SecurityRecords:
             self.session(c,row["parent_session_id"],row["owner_id"])
             return row["owner_id"]
 
-    def rate_attempt(self, key_hash, purpose, window_seconds=60, limit=5):
+    def rate_attempt(self, key_hash, purpose, window_ms=60000, limit=5):
         digest(key_hash); text(purpose,1,40)
-        if not isinstance(limit,int) or limit<1 or not isinstance(window_seconds,int) or not 1<=window_seconds<=86400:
+        if not type(limit) is int or limit<1 or not type(window_ms) is int or not 1<=window_ms<=86400000:
             raise Invalid("Invalid rate policy")
         with self.database.transaction() as c:
             now=self.clock()
             row=c.execute("SELECT * FROM auth_rate_limits WHERE key_hash=?",(key_hash,)).fetchone()
             if row and row["purpose"]!=purpose: raise Invalid("Rate key purpose mismatch")
-            start=row["window_start"] if row and row["window_start"]+window_seconds>now else now
+            start=row["window_start"] if row and row["window_start"]+window_ms>now else now
             count=row["attempts"]+1 if start!=now or (row and row["window_start"]==now) else 1
-            blocked=start+window_seconds if count>=limit else None
-            c.execute("INSERT INTO auth_rate_limits VALUES (?,?,?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts,blocked_until=excluded.blocked_until,expires_at=excluded.expires_at",(key_hash,purpose,start,count,blocked,start+window_seconds*2))
+            blocked=start+window_ms if count>=limit else None
+            c.execute("INSERT INTO auth_rate_limits VALUES (?,?,?,?,?,?) ON CONFLICT(key_hash) DO UPDATE SET window_start=excluded.window_start,attempts=excluded.attempts,blocked_until=excluded.blocked_until,expires_at=excluded.expires_at",(key_hash,purpose,start,count,blocked,start+window_ms*2))
             return {"attempts":count,"blocked_until":blocked}

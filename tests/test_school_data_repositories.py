@@ -16,7 +16,7 @@ class RepositoryFixture(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.storage=Storage(self.temp.name);migrate(self.storage)
         self.db=Database(self.storage).__enter__();self.addCleanup(self.db.close)
-        self.now=1000.0
+        self.now=1000000
         self.repo=Repository(self.db,clock=lambda:self.now)
         self.driver=self.account('driver');self.other=self.account('other')
         self.analyst=self.account('analyst','ANALYST');self.admin=self.account('admin','ADMIN')
@@ -24,14 +24,14 @@ class RepositoryFixture(unittest.TestCase):
         self.trip=self.repo.create_trip(self.actor,'Synthetic trip')
 
     def account(self,name,role='DRIVER'):
-        return self.repo.create_user(name+'@example.test',name,'fixture$NOT_AUTHENTICATION',role=role,status='ACTIVE',verified_at=900)
+        return self.repo.create_user(name+'@example.test',name,'fixture$NOT_AUTHENTICATION',role=role,status='ACTIVE',verified_at=900000)
 
     def complete(self):
         trip=self.trip
         run='b'*32
         for state in ['STARTING','RECORDING','FINALIZING','COMPLETE']:
             kwargs={'run_id':run} if state=='STARTING' else {}
-            if state=='COMPLETE':kwargs={'raw_ref':self.storage.run(self.driver['id'],trip['id'],run).relative_to(self.storage.root).as_posix()+'/gps.jsonl','raw_hash':HASH,'manifest_hash':HASH}
+            if state=='COMPLETE':kwargs={'raw_ref':self.storage.run(self.driver['id'],trip['id'],run).relative_to(self.storage.root).as_posix()+'/raw.csv','raw_hash':HASH,'manifest_hash':HASH}
             trip=self.repo.transition_trip(self.actor,trip['id'],trip['revision'],state,**kwargs)
         self.trip=trip
         return trip
@@ -44,7 +44,7 @@ class RepositoryFixture(unittest.TestCase):
 class RepositoryTests(RepositoryFixture):
     def test_email_normalization_uniqueness_validation_and_no_auto_import(self):
         with self.assertRaises(Conflict):self.repo.create_user(' DRIVER@example.test ','New','fixture')
-        for address in ['no-at','a@localhost','a..b@example.test','x@-bad.test','a@example..test','ą@example.test']:
+        for address in ['no-at','a@localhost','a..b@example.test','x@-bad.test','a@example..test','Ä…@example.test']:
             with self.assertRaises(Invalid):self.repo.create_user(address,'New','fixture')
         pending=self.repo.create_user('new+tag@example.test','New','fixture')
         self.assertEqual(pending['status'],'PENDING_VERIFICATION')
@@ -97,8 +97,8 @@ class RepositoryTests(RepositoryFixture):
     def test_metadata_revision_filters_archive_and_durability(self):
         changed=self.repo.edit_trip(self.actor,self.trip['id'],1,title='Edited',note='note')
         with self.assertRaises(Conflict):self.repo.edit_trip(self.actor,self.trip['id'],1,title='stale',note='')
-        self.assertEqual(len(self.repo.list_trips(self.actor,after=999,before=1001,status='PLANNED')),1)
-        self.assertEqual(self.repo.list_trips(self.actor,after=1001),[])
+        self.assertEqual(len(self.repo.list_trips(self.actor,after=999000,before=1001000,status='PLANNED')),1)
+        self.assertEqual(self.repo.list_trips(self.actor,after=1001000),[])
         for kw in [{'limit':101},{'offset':-1},{'status':'BAD'},{'after':2,'before':1}]:
             with self.assertRaises(Invalid):self.repo.list_trips(self.actor,**kw)
         self.db.close()
@@ -198,7 +198,7 @@ class RepositoryTests(RepositoryFixture):
         trip=self.trip
         for state in ['STARTING','RECORDING','FINALIZING']:
             trip=self.repo.transition_trip(self.actor,trip['id'],trip['revision'],state,**({'run_id':'b'*32} if state=='STARTING' else {}))
-        with self.assertRaises(Invalid):self.repo.transition_trip(self.actor,trip['id'],trip['revision'],'COMPLETE',raw_ref='other/gps.jsonl',raw_hash=HASH,manifest_hash=HASH)
+        with self.assertRaises(Invalid):self.repo.transition_trip(self.actor,trip['id'],trip['revision'],'COMPLETE',raw_ref='other/raw.csv',raw_hash=HASH,manifest_hash=HASH)
         self.assertEqual(self.repo.get_trip(self.actor,trip['id'])['status'],'FINALIZING')
 
     def test_global_recording_reservation_and_durable_intents(self):

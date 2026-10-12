@@ -1,3 +1,4 @@
+from .time_units import date_range, timestamp_ms
 import json
 from .errors import Conflict, Denied, Invalid
 from .validation import text, observation, canonical, request_hash, operation_key, digest
@@ -9,8 +10,10 @@ class Observations:
         observation({"state":state,"event_type":event_type,"valid":True})
         if source not in {"MANUAL","CV"}: raise Invalid("Invalid observation source")
         if geometry_hash is not None: digest(geometry_hash)
-        if measured_at is not None and (type(measured_at) not in {int,float} or not 0<=measured_at<=self.clock()+300):
-            raise Invalid("Invalid measurement timestamp")
+        if measured_at is not None:
+            timestamp_ms(measured_at)
+            if measured_at > self.clock()+300000:
+                raise Invalid("Invalid measurement timestamp")
         with self.database.transaction() as c:
             trip=self.own_trip(c,actor,trip_id)
             if trip["archived_at"] is not None: raise Conflict("Archived trip is immutable")
@@ -32,12 +35,12 @@ class Observations:
         if type(limit) is not int or not 1<=limit<=100 or type(offset) is not int or offset<0: raise Invalid("Invalid pagination")
         if state is not None and state not in {"RED","YELLOW","GREEN","RED_YELLOW","OFF","UNKNOWN"}: raise Invalid("Invalid state filter")
         if event_type is not None and event_type not in {"STATE_SEEN","STATE_START"}: raise Invalid("Invalid event filter")
-        if after is not None and before is not None and after>before: raise Invalid("Invalid date interval")
+        date_range(after, before)
         with self.database.transaction(False) as c:
             self.shared_trip(c,actor,trip_id) if shared else self.own_trip(c,actor,trip_id)
             # Effective values are derived from the immutable original and its latest correction.
             clauses=["o.trip_id=?"]; values=[trip_id]
-            fields=[("o.server_received_at",">=",after),("o.server_received_at","<=",before),("o.signal_id","=",signal),
+            fields=[("o.server_received_at",">=",after),("o.server_received_at","<",before),("o.signal_id","=",signal),
                     ("COALESCE(json_extract(k.after_json,'$.state'),o.state)","=",state),
                     ("COALESCE(json_extract(k.after_json,'$.event_type'),o.event_type)","=",event_type)]
             for column,operator,value in fields:

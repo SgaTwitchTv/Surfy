@@ -8,6 +8,7 @@ from pathlib import Path
 from .database import connect
 from .locking import Lease
 from .errors import SchemaError
+from .time_units import now_ms, seconds_to_ms, timestamp_ms
 
 
 @dataclass(frozen=True)
@@ -95,12 +96,13 @@ def execute_migration_statement(connection, statement):
     finally:
         connection.set_authorizer(None)
 
-def migrate(storage, migrations=None, clock=time.time):
+def migrate(storage, migrations=None, clock=now_ms):
     from .backup import snapshot
     migrations = load() if migrations is None else migrations
     with Lease(storage):
         existed = storage.database.exists()
         connection = connect(storage.database)
+        connection.create_function("school_seconds_to_ms", 1, seconds_to_ms, deterministic=True)
         try:
             status = validate(connection, migrations)
             if status["current"]:
@@ -114,8 +116,15 @@ def migrate(storage, migrations=None, clock=time.time):
                 for migration in migrations[status["version"]:]:
                     for statement in statements(migration.sql):
                         execute_migration_statement(connection, statement)
+                    applied_at = timestamp_ms(clock())
+                    # Historical v1 declares REAL seconds; v2 rebuilds it as INTEGER ms.
+                    legacy_time = connection.execute("SELECT type FROM pragma_table_info('schema_migrations') WHERE name='applied_at'").fetchone()[0] == 'REAL'
+                    if legacy_time:
+                        applied_at /= 1000
                     connection.execute("INSERT INTO schema_migrations VALUES (?,?,?,?)",
-                                       (migration.version, migration.checksum, clock(), "school-data-v1"))
+                                       (migration.version, migration.checksum,
+                                        applied_at,
+                                        "school-data-v2"))
                     connection.execute("PRAGMA user_version=" + str(migration.version))
                 result = validate(connection, migrations, require_current=True)
                 connection.commit()

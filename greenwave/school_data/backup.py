@@ -7,7 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 from .database import connect
-from .errors import Invalid, Busy
+from .errors import Invalid, Busy, SchemaError
 from .locking import Lease
 from .migrations import validate, load
 from .storage import Storage
@@ -32,7 +32,8 @@ def checked(path):
     Storage(path.absolute().parent)._safe(path.absolute())
     connection = connect(path, readonly=True)
     try:
-        validate(connection, load(), require_current=True)
+        if validate(connection, load())["version"] < 1:
+            raise SchemaError("Backup must contain a recognized initialized schema")
     except Exception:
         connection.close()
         raise
@@ -81,8 +82,13 @@ def restore(storage, source):
                     existing.close()
             # Every supported runtime uses Lease; replacement happens only while it is stopped.
             os.replace(staging, storage.database)
-            checked(storage.database).close()
-            return {"restored": str(storage.database), "previous": str(previous) if previous else None}
+            restored = checked(storage.database)
+            try:
+                schema = validate(restored, load())
+            finally:
+                restored.close()
+            return {"restored": str(storage.database), "previous": str(previous) if previous else None,
+                    "schema": schema}
         finally:
             backup_connection.close()
             if staging.exists():

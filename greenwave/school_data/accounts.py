@@ -1,11 +1,14 @@
 """Account records, not password authentication or public registration."""
 from .errors import Invalid, Conflict, Denied
 from .validation import email, text
+from .time_units import timestamp_ms
 
 
 class Accounts:
     def create_user(self, email_address, display_name, password_hash, *, role="DRIVER", status="PENDING_VERIFICATION", verified_at=None):
         # Internal provisioning only. Future register ignores any caller-supplied role.
+        if verified_at is not None:
+            timestamp_ms(verified_at)
         normalized = email(email_address)
         text(display_name,1,80)
         text(password_hash,1,4096)  # opaque future KDF result; fixtures explicitly labelled
