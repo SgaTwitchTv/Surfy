@@ -494,3 +494,17 @@ $RECYCLE.BIN/
 
 # Optional CV runtime fallback configuration/cache
 /Ultralytics/
+
+# GreenWave local data, environments and verification reports
+/runtime/
+/artifacts/
+.coverage
+.coverage.*
+/htmlcov/
+/.venv-school/
+/.venv-cv/
+/.venv/
+/venv/
+/coverage/
+/playwright-report/
+/test-results/

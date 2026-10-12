@@ -1,7 +1,0 @@
-schema_version,run_id,sequence,timestamp,simulation_seconds,model_seconds,event,signal_id,source,latitude,longitude,speed_mps,heading,gps_accuracy,current_corridor_position,next_signal,target_speed_mps,payload_json
-1,d0407506b820481ca69691d27c9880c2,1,2026-10-12T13:00:24.120638+00:00,0.2,0.2,RUN_START,,SIMULATION,,,0,,,0.0,S1,13.88888888888889,{}
-1,d0407506b820481ca69691d27c9880c2,2,2026-10-12T13:00:24.125285+00:00,0.2,0.2,TELEMETRY,,SIMULATION,,,0,,,0.0,S1,13.88888888888889,{}
-1,d0407506b820481ca69691d27c9880c2,3,2026-10-12T13:00:24.141913+00:00,0.2,0.2,CONTROL,,SIMULATION,,,0,,,0.0,S1,13.88888888888889,"{""running"": true, ""rate"": 1.0, ""speed_kmh"": 36.0, ""follow_recommendation"": true}"
-1,d0407506b820481ca69691d27c9880c2,4,2026-10-12T13:00:24.311833+00:00,0.4,0.4,CONTROL,,SIMULATION,,,0,,,0.0,S1,13.88888888888889,"{""running"": false, ""rate"": 1.0, ""speed_kmh"": 36.0, ""follow_recommendation"": true}"
-1,d0407506b820481ca69691d27c9880c2,5,2026-10-12T13:00:24.316912+00:00,0.4,0.4,TELEMETRY,,SIMULATION,,,0,,,0.0,S1,13.88888888888889,{}
-1,d0407506b820481ca69691d27c9880c2,6,2026-10-12T13:00:24.322752+00:00,0.4,0.4,RUN_END,,,,,,,,,,,"{""reason"": ""USER_STOP""}"
