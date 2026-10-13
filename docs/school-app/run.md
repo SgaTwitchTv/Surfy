@@ -538,3 +538,116 @@ Owner archived parent status200/cancel204 doTTL;nowa analiza archive409.
 Other/adminforeign404,anonymous/expired/revoked401,DELETE badCSRF/Origin403.
 Polecenia serwera/poczty i bazowego GreenWave nie zmieniają się. Nie ma nowego
 provisioning/revoke/resume endpointu,nowych tabel ani trwałej historii jobów.
+
+
+## 11. Etap 6 — zapis i powtarzalny odbiór HTTP
+
+Nowy backend działa bez docelowych tabel UI, live, telefonu i kamery.
+Użyj NOWEGO root, nie starego runtime/school ani prywatnego data/runs.
+Schema v3 wymaga jawnego init/migrate; serve nie aktualizuje bazy po cichu.
+W istniejącym dedykowanym szkolnym root upgrade wykonuje się przy zatrzymanym
+serwerze i z automatycznym backupem SQLite, ale odbiór poniżej używa nowego root.
+
+Terminal 1 — przygotowanie syntetycznego deploymentu:
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+git branch --show-current
+git status --short
+$schoolStage6Root = Join-Path (Get-Location) ('runtime\stage6-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolStage6Root" init
+python -m greenwave.school_data --root "$schoolStage6Root" migrate
+python -m greenwave.school_data --root "$schoolStage6Root" status
+python -m greenwave.school_accounts secrets --output "$schoolStage6Root\deployment-keys.json"
+python -m scripts.school_resource_fixtures --root "$schoolStage6Root" --confirm-synthetic
+```
+
+Fixture wymaga pustej DB i getpass (12–128 znaków Unicode, maksymalnie 512 bajtów UTF-8).
+Tworzy tylko syntetyczne konta example.test: driver, other, analyst, admin.
+Operator podaje wspólne hasło tych fixture; brak domyślnego hasła i hasła w argv.
+To skrypt operatorski, nie publiczny endpoint. Rejestracja/aktywacja SMTP: sekcja 9.
+
+```powershell
+$env:SCHOOL_SECRET_FILE = "$schoolStage6Root\deployment-keys.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_MODE = 'plain'
+$env:SMTP_SENDER = 'greenwave@example.test'
+$env:SMTP_USER = ''
+$env:SMTP_PASSWORD = ''
+python -m greenwave.school_accounts serve --root "$schoolStage6Root" --host 127.0.0.1 --port 8770
+```
+
+Poczta nie jest potrzebna do loginu aktywnych fixture i scenariusza rekordów.
+Do register/reset uruchom w osobnym terminalu lokalny odbiornik z sekcji 9:
+`python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771`.
+
+Terminal 2 w worktree — podaj przez getpass to samo hasło:
+
+```powershell
+python -m scripts.check_school_records --base-url http://127.0.0.1:8770
+```
+
+Skrypt wykonuje rzeczywisty HTTP z cookies/CSRF: login właściciela i analityka,
+create, SIM start, observation, finish, read/export, edit, correction, filtry/keyset,
+share/shared read, revoke/analyst 404, archive/owner read. Drukuje tylko PASS i
+syntetyczny trip_id. Nie loguje haseł, cookies, CSRF ani tokenów. Nie obsługuje
+arbitralnego zewnętrznego URL ani publicznego provisioningu.
+
+Zatrzymaj serwer Ctrl+C w terminalu 1. Ponów tę samą komendę serve z tym samym
+schoolStage6Root i env. W terminalu 2 podstaw wypisany trip_id:
+
+```powershell
+python -m scripts.check_school_records --base-url http://127.0.0.1:8770 --read-trip TU_WYPISANY_32_HEX_TRIP_ID
+```
+
+Login i odczyt archiwalnego trip po nowym boot powinny dać PASS, bez wznowienia jazdy.
+Kill podczas nagrywania bez prawidłowego manifestu oznacza INTERRUPTED po startup.
+Poprawny manifest po utracie DB commit pozwala na kontrolowane COMPLETE z audytem.
+Szczegółowe testy awarii i podstawy autoryzacji: stage6.md.
+
+Lista trips: route_id (logical_id ROUTE), status, archived, scope, sort=asc/desc,
+limit (25, max 100), from/to RFC3339 ze strefą i cursor. Observations są globalne,
+bez obowiązkowego trip_id; opcjonalne trip/route/signal/daty/efektywny kolor/typ/
+source/valid/scope/sort/limit/cursor. Używaj urlencode lub URLSearchParams dla
+offsetów (+02:00) i cursora. Query w ms i offset nie są akceptowane w tych listach.
+Zmiana filtra wymaga nowego cursora.
+
+CLI backup/restore DB przy zatrzymanym serwerze (nie obejmuje raw/mediów):
+
+```powershell
+$schoolStage6Backup = Join-Path $schoolStage6Root ('backups\manual-' + [guid]::NewGuid().ToString('N') + '.sqlite3')
+python -m greenwave.school_data --root "$schoolStage6Root" backup "$schoolStage6Backup"
+python -m greenwave.school_data --root "$schoolStage6Root" restore "$schoolStage6Backup"
+python -m greenwave.school_data --root "$schoolStage6Root" migrate
+python -m greenwave.school_data --root "$schoolStage6Root" status
+```
+
+Nie nadpisuj backupu; CLI odrzuca istniejący target. Nie kopiuj aktywnego pliku DB
+przy WAL. Backup musi być w kontrolowanym root; restore zachowuje poprzednią DB.
+
+Testy i pomiar (coverage 7.13.1 w tym środowisku; .venv-school według wcześniejszej
+sekcji testów, nie dodawaj jej do Git):
+
+```powershell
+New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+python -m unittest discover -s tests -p 'test_school_records.py' -v
+python -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_records,greenwave.school_resources,greenwave.school_accounts,greenwave.school_data,greenwave.telemetry --data-file=artifacts/stage6-accepted.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage6-accepted.coverage -m
+.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage6-accepted.coverage -o artifacts/stage6-accepted-coverage.json
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_resources.cjs
+node scripts/check_school_accounts.cjs
+node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs
+node tests/mobile_flow.cjs
+```
+
+Pełna regresja Python tylko w nowym git eksporcie (sekcja 3):
+`python -m unittest discover -s tests -v`.
+Bazowy GreenWave pozostaje odrębną lokalną aplikacją:
+`python -m greenwave --no-browser --port 8767`; smoke/nagrania testowe tylko w eksporcie.
+Nie ma pełnej nav/live/Android/CV ani UI rekordów — odpowiednie etapy 7–9.

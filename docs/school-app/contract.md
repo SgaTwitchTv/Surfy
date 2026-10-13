@@ -753,3 +753,39 @@ podstawą pokazuje CANCELLED. completed zachowuje COMPLETE i report_id prawidło
 opublikowanego raportu. Cancel nie usuwa raportu,nie zabija wątku i nie cofa CPU.
 Nie ma resume/restart endpointu;nowa analiza wymaga nowego joba. TTL/usunięcie/
 restart serwera nadal daje404,anonymous/expired/revoked sesja401.
+
+
+## Doprecyzowania implementacyjne etapu 6
+
+Schema v3 zachowuje 14 tabel. Dodaje historyczne oznaczenie obserwacji oraz kontekst
+sesji/boot/obserwacji dla intencji nagrywania. Zastosowane 0001/0002 pozostają
+niezmienione; stare obserwacje mają historical=0, bez domyślania pochodzenia.
+Niezmienność nowych faktów i spójność kontekstu egzekwują triggery.
+
+route_id oznacza logical_id konfiguracji ROUTE i obejmuje jej wersje. Sort asc/desc
+używa timestamp i ID w jednym kierunku. Daty API są RFC3339 ze strefą, ułamkiem 1–6
+cyfr i konwersją do integer UTC ms przez odcięcie mikrosekund. Jedna granica zakresu
+uzupełnia drugą o maksymalne 366 dni; bez dat pełna historia jest stronicowana.
+Cursor HMAC wiąże actor/rodzaj/filtry/sort, TTL 15 minut i as_of. Nie zamraża
+uprawnień ani pełnego zestawu mutable rekordów. Korekty, archive i revoke mogą
+zmieniać członkostwo między stronami. Publiczny offset/query w ms nie jest wspierany.
+
+Publiczna ręczna obserwacja ma measured_at NULL i source MANUAL nadane przez serwer.
+COMPLETE/INTERRUPTED oznacza adnotację historyczną, bez dopisywania raw. Aktywne
+nagranie ma journal z czasem przyjęcia przez serwer. START/FINISH/JOURNAL są trwałymi
+intencjami z kontrolowanymi root, nie jedną transakcją DB–filesystem. Przy błędzie
+raw fakt DB pozostaje trwały, a odpowiedź 202 jawnie wskazuje FAILED journaling.
+Idempotentny retry zachowuje tożsamość operacji/zasobu bez duplikowania zapisu;
+DTO statusu/revision pozostaje aktualne, nie historycznym snapshotem odpowiedzi.
+
+M01/M02/M03 w etapie 6 to konieczny minimalny SIM start/status/FINISH z Idempotency-Key,
+jedną globalną rezerwacją i stacjonarnym syntetycznym śladem. Bez PAUSE/RESUME/M04,
+live, telefonu i kamery; pełna integracja należy do etapu 9. Drugi start daje 409
+bez ujawniania właściciela. Nowy boot nie odtwarza jazdy ani świeżości GPS.
+Finalizacja po revokacji używa wcześniej powiązanego kontekstu/root i audytu
+systemowego, nie przywraca credentials. Watchdog nie odświeża idle i daje wspólny
+punkt integracji blokady/zmiany roli bez panelu administracji. Poprawny manifest po
+utracie DB commit pozwala na recovery COMPLETE. Brak/błędny manifest lub brak
+zaufanej intencji daje INTERRUPTED, bez zmiany zakończonego raw.
+
+Dokładny zakres i sprawdzone granice awarii: [stage6.md](stage6.md).

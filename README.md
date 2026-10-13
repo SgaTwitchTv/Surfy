@@ -211,11 +211,13 @@ cd android/GreenWaveSensor
 - M8 stationary and road-test procedure: [docs/m8-field-test.md](docs/m8-field-test.md)
 
 
-## GreenWave School — accounts (stage 4)
+## GreenWave School — accounts and records (stage 6)
 
 A separate account portal now supports registration, email verification, login,
 sessions, password changes and one-time reset through SMTP. It does not expose
-legacy M8/CV endpoints or connect trips/GPS to accounts yet. Use a NEW explicit
+legacy M8/CV endpoints. Scoped trips, observations/corrections, sharing, signed lists
+and recoverable synthetic recording now work through the school API. Full UI/live
+GPS/Android/camera remain later stages. Use a NEW explicit
 storage root; prepare it with `python -m greenwave.school_data --root <absolute-root> init`.
 
 Local synthetic mail: `python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771`.
@@ -225,3 +227,7 @@ SMTP configuration; it never migrates silently. Follow the complete PowerShell
 setup, administrator bootstrap and register/reset walkthrough in
 [school runbook](docs/school-app/run.md#9-portal-kont-i-lokalna-poczta-demo--etap-4).
 Results and boundaries: [stage 4](docs/school-app/stage4.md).
+
+Record API, recovery and acceptance: [stage 6](docs/school-app/stage6.md).
+Real HTTP acceptance (password through getpass): `python -m scripts.check_school_records --base-url http://127.0.0.1:8770`.
+Fresh synthetic setup and process restart steps: [school runbook](docs/school-app/run.md).

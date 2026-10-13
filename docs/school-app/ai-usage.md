@@ -1526,3 +1526,465 @@ Codecommit5ce716c28c1014e97ec19f058c870fa1c9925984;docscommitpodanywodpowiedzi.
 Kontrola dokumentów,PowerShellsyntax i stageddiffnames;bezDB/runtime/sekretów,
 bezmain/CVchanges/push/merge,rewrite. Etap5przygotowany do końcowego odbioru;
 6–12Dozrobienia. Ten kompletnyprompt zamknąłkwestięurwanejwiadomości.
+
+## Etap 6 — 2026-10-13: zapis domeny i recovery
+
+Akceptacja etapu 5 w poleceniu użytkownika:
+**13858b06051a4183bfc7e0559962611c8be2eae2**.
+Poniżej pełna treść promptu etapu 6 (bez dopisywania niewydanych zgód):
+
+```text
+dobra to teraz etap 6 — przejazdy, obserwacje, korekty, udostępnianie i trwały zapis
+
+etap 5 zaakceptowany po niezależnym przeglądzie i testach
+
+zaakceptowany commit
+13858b06051a4183bfc7e0559962611c8be2eae2
+
+kontynuuj w istniejącym worktree na codex/school-app
+implementuj etap 6 do działającego i sprawdzalnego końca
+nie kończ na planie i nie zaczynaj etapu 7
+
+najpierw przeczytaj obowiązujące AGENTS.md oraz docs/school-app/contract.md, stage3.md, stage4.md, stage5.md, stages.md, run.md i ai-usage.md
+
+sprawdź aktualny head, git status i staging
+zachowaj niezwiązane zmiany użytkownika
+
+zasady
+
+nie zmieniaj main ani codex/vision-camera
+
+nie czytaj prywatnego data/runs/ ani starego runtime/school/
+
+używaj jawnego nowego runtime root i syntetycznych danych
+
+nie importuj starych nagrań ani kont
+
+nie zmieniaj zastosowanych migracji
+jeśli schema wymaga zmiany, dodaj kolejną numerowaną migrację
+
+trwałe czasy i zaufany actor używają integer utc epoch milliseconds
+dotychczasowy logger i jego format czasów pozostają zgodne z istniejącym kontraktem raw
+konwersję między tymi warstwami rób jawnie na granicy adaptera
+
+nie zmieniaj formatu raw.csv, metadata.json i complete.json
+
+nie zmieniaj solvera, predykcji ani warunków rekomendacji live
+
+nie osłabiaj polityki kont, csrf, własności danych i powiązania kontekstów z konkretnym share
+
+nie przepisuj historii, nie pushuj i nie scalaj automatycznie
+
+krok 1 — ustal dokładny zakres implementacji
+
+porównaj aktualny kod z zaakceptowanym kontraktem
+
+w tym etapie implementujemy
+
+tworzenie przejazdów
+
+edycję dozwolonych metadanych
+
+archiwizację
+
+zapis obserwacji i osobnych korekt
+
+udostępnienie i cofnięcie udostępnienia
+
+pełne filtrowanie i paginację dwóch zbiorów kierowcy
+
+koordynację db, loggera i manifestów oraz recovery
+
+nie implementujemy docelowych tabel ui, administracji, nowej nawigacji, parowania androida ani uruchamiania kamery
+
+dla sprawdzenia zapisu udostępnij minimalny autoryzowany scenariusz nagrywania syntetycznego zgodny z docelowym kontraktem navigation
+
+jeśli wymaga to podłączenia części endpointów planowanych wcześniej na etap 9, opisz dokładnie tę zależność i zrealizuj tylko konieczny zakres simulation start i finish
+
+nie dodawaj publicznego endpointu testowego ani drugiego konkurencyjnego api nagrywania
+
+pełne live, telefon, sterowanie nawigacją i cv pozostają na etap 9
+
+krok 2 — serwis operacji i endpointy
+
+dodaj czytelną warstwę usług zapisujących dane
+http adapter ma walidować i mapować odpowiedź, a nie zawierać całą logikę domenową
+
+implementuj endpointy kontraktu dla
+
+create trip
+
+edit title i note z expected_revision
+
+archive zamkniętego trip
+
+create observation
+
+append correction
+
+share complete trip z aktywnym analitykiem
+
+revoke konkretnego share
+
+własność i actor zawsze z aktualnej sesji i db
+nie z body, query ani nagłówka klienta
+
+wszystkie browser mutations wymagają csrf i dokładnego origin
+
+waliduj każde pole, typ, długość, enum i revision
+odrzucaj nieznane i duplikowane pola, bool zamiast liczby, nan i infinity
+
+brak konta → 401
+cudze lub nieistniejące prywatne id → 404
+konflikt revision lub stanu → 409
+błąd formularza → 422
+
+zachowaj neutralne błędy, request_id i bezpieczne dto
+
+krok 3 — przejazdy
+
+nowy trip ma właściciela, tytuł, notatkę, tryb i dozwoloną wersję trasy zgodnie z kontraktem
+
+edycja zmienia wyłącznie dozwolone metadane
+nie pozwala zmienić owner, raw_ref, hashów, czasu przejazdu ani statusu przez dowolny patch
+
+expected_revision obowiązkowe
+dwa równoległe zapisy tej samej revision nie mogą oba przejść
+
+archiwizacja tylko stanów dozwolonych kontraktem
+nie usuwa raw ani raportów
+cofa share i blokuje nowe analizy oraz replay tego przejazdu
+
+właściciel nadal widzi archiwum
+zarządzanie istniejącymi jobami przez właściciela działa zgodnie z poprawką etapu 5
+
+nie dodawaj fizycznego delete ani restore archiwum poza ustalonym v1
+
+krok 4 — obserwacje i korekty
+
+obserwacja należy do trip
+własność wynika z parent trip
+
+zachowaj rozróżnienie STATE_SEEN i STATE_START
+UNKNOWN nie może być STATE_START
+
+czas otrzymania nadaje serwer
+czas pomiaru jest osobnym polem i może być null
+
+retrospektywna adnotacja zamkniętego przejazdu ma measured_at=null i jawne oznaczenie historyczne
+nie udaje obserwacji wykonanej podczas jazdy
+nie dopisuje nic do zakończonego raw
+
+publiczny formularz ręcznej obserwacji nie może podszyć się pod source CV
+source CV pozostaje dla zaufanego adaptera przyszłej integracji
+
+korekta jest nowym wpisem
+zawiera autora, czas serwera, powód, before, after i revision
+
+zmienia tylko state, event_type i valid zgodnie z kontraktem
+nie zmienia gps, źródła, czasów, trip ani raw
+
+lista pokazuje oryginał i efektywną wartość
+filtrowanie koloru, typu i valid dotyczy efektywnej wartości
+
+zachowaj triggery niezmienności
+techniczna aktualizacja journaling nie może przy okazji zmieniać oryginalnych faktów
+
+krok 5 — udostępnianie
+
+właściciel może udostępnić jeden complete niearchiwalny trip jednemu aktywnemu analitykowi przez dokładny email
+
+jedno uprawnienie READ_ANALYZE
+brak eksportu i cv dla analityka
+brak globalnego dostępu administratora
+
+odbiorca nie może dostać informacji o innych kontach przez publiczną wyszukiwarkę
+stosuj neutralny błąd odbiorcy i limit prób zgodnie z kontraktem
+
+cofnięcie wymaga expected_share_id
+powtórzenie cofnięcia tej samej zgody jest bezpieczne
+stare żądanie nie może cofnąć nowszego share z innej karty
+
+po revoke lub archive stare replay i job analityka tracą dostęp
+regrant nie ożywia starych kontekstów
+
+właściciel zachowuje odczyt statusu i anulowanie istniejących jobów
+
+podłącz zmiany uprawnień do kontekstów
+queued i running jobs nie mogą publikować na cofniętej zgodzie
+nie opieraj całego mechanizmu tylko na tym, że analityk kiedyś wykona następne żądanie
+
+nie zmieniaj pierwotnej podstawy wykonania joba na OWN przez działanie właściciela
+
+krok 6 — pełne listy i filtry
+
+przejazdy kierowcy
+
+filtry daty utworzenia, trasy, statusu i archived
+jawny scope own lub shared
+sortowanie zgodne z kontraktem
+
+obserwacje kierowcy
+
+lista ze wszystkich jego przejazdów, bez obowiązkowego trip_id
+opcjonalne filtry trip, trasy, sygnalizatora, daty, efektywnego koloru, efektywnego typu zdarzenia, source i valid
+scope own lub shared zgodnie z uprawnieniami
+
+nie skanuj globalnych nagrań
+listy wynikają z autoryzowanych rekordów db
+
+daty api zgodnie z contract.md — utc RFC3339 z wymaganą strefą
+backend przelicza je na integer ms
+from inclusive, to exclusive
+from < to i maksymalny zakres zgodny z kontraktem
+
+dotychczasowy format query w ms z etapu 5 był rozwiązaniem przejściowym
+zaktualizuj klienty testowe i dokumentację
+nie utrzymuj dwóch niejednoznacznych formatów tego samego pola
+
+implementuj keyset cursor zgodny z actor, scope, filtrami i sortowaniem
+cursor podpisany hmac, z ttl i stabilnym tie-breaker id
+limit domyślny 25, maksymalny 100
+
+inny actor, zmieniony filtr, sortowanie, uszkodzony lub wygasły cursor → odmowa
+dostęp do share sprawdzaj na każdej stronie
+
+nie zamrażaj uprawnień w cursorze
+nie deklaruj pełnego snapshotu wszystkich zmiennych rekordów, jeśli implementacja go nie zapewnia
+opisz zachowanie przy korektach lub archiwizacji między stronami
+
+listy nie mogą ucinać całej historii do pierwszych 500 lub 10000 rekordów
+
+krok 7 — idempotency i audyt
+
+zachowaj kontrakt idempotency dla operacji, które go wymagają
+
+ten sam klucz, actor i payload → ten sam wynik bez duplikatu
+ten sam klucz z inną treścią → 409
+
+obejmij szczególnie start, finish, zapis obserwacji i korektę
+pozostałe mutacje zabezpiecz revision lub identyfikatorem konkretnego zasobu zgodnie z kontraktem
+
+audyt zapisuje actor, action, resource, czas, powód tam gdzie wymagany i request_id
+
+nie zapisuje haseł, raw tokenów, kopii gps ani payloadów poczty
+
+dane i ich audyt zapisuj w jednej transakcji tam, gdzie oba są w sqlite
+
+krok 8 — koordynator nagrywania
+
+wykorzystaj istniejący RunLogger przez adapter z jawnym autoryzowanym root
+
+jedna aktywna sesja nagrywania na deployment
+równoległy start drugiego użytkownika daje 409 bez ujawnienia właściciela
+
+start
+
+db intent i rezerwacja
+kontrolowany run-root
+utworzenie loggera i plików
+przejście do recording po poprawnym przygotowaniu
+
+finish
+
+przejście do finalizing
+zakończenie raw
+istniejący poprawny manifest i hashe
+sprawdzenie plików
+complete dopiero po rzeczywistym sukcesie
+
+nie fabrykuj complete.json
+nie uznawaj trip za complete tylko na podstawie przesłanych hashów
+
+manual observation w aktywnym nagraniu
+
+db event i trwała intencja
+journal do raw z kontrolowanym source_event_id
+retry i recovery nie tworzą duplikatu
+
+jeśli drugi magazyn zawiedzie, zachowaj zapisany fakt i jawny journaling status
+nie odpowiadaj fałszywym sukcesem obu zapisów
+
+do poprawnego flush i finalizacji użyj istniejących interfejsów
+jeżeli potrzebujesz małego rozszerzenia loggera, zachowaj format i kompatybilność istniejących nagrań oraz dodaj regresję
+
+krok 9 — recovery i cofnięcie sesji
+
+przy startup nowy boot i recovery tylko nowego szkolnego runtime
+
+nie wznawiaj jazdy ani świeżości ostatniego gps
+nie uruchamiaj automatycznie kamery
+
+aktywny trip bez prawidłowego complete manifest → interrupted
+prawidłowy manifest po utracie ostatniego db commit → kontrolowane complete i audyt recovery
+
+niedokończone intencje rozstrzygaj idempotentnie
+pliki bez zaufanego powiązania nie stają się dostępne kontom
+
+nie zmieniaj zakończonych raw
+nie naprawiaj integralności przez przeliczenie hashów uszkodzonego źródła
+
+logout, logout-all, reset i zmiana hasła mają zakończyć podłączone nagrywanie odpowiedniej sesji
+
+przyszła blokada i zmiana roli muszą mieć wspólny punkt integracji
+nie dodawaj teraz panelu administracji
+
+techniczna finalizacja po utracie sesji działa jako ograniczona operacja systemowa z audytem
+nie wymaga ponownego uzyskania uprawnień użytkownika
+nie daje nikomu dodatkowego dostępu do danych
+
+opisz gwarancje przy awarii db, pliku i procesu
+nie obiecuj jednej transakcji obejmującej sqlite i filesystem
+
+krok 10 — testy
+
+testy jednostkowe i integracyjne http, prawdziwa tymczasowa sqlite i syntetyczne pliki
+
+create, edit, archive, observations, corrections, share i revoke
+restart i trwałość
+actor spoofing, cudze id, role i csrf
+konkurencyjne revision i idempotency
+oryginały raw oraz obserwacji niezmienione po korekcie
+historyczna adnotacja nie dopisuje do complete raw
+source CV nie może pochodzić z ręcznego formularza
+
+wszystkie filtry obu list
+daty na granicach, różne strefy i zmiany czasu Europe/Warsaw
+cursor przy jednakowych timestampach, nowych rekordach, zmienionych filtrach, innym actorze, expiry i cofniętym share
+paginacja całej historii bez sztucznego ucięcia
+
+start i finish
+równoległa rezerwacja
+błędy db i filesystem na kolejnych granicach operacji
+awaria po utworzeniu manifestu przed db commit
+restart z pending intents
+brak duplikatu manual event po retry i recovery
+logout lub reset podczas aktywnego nagrania
+bezpieczna finalizacja po revokacji
+
+revoke → regrant nadal nie ożywia starych replay i jobs
+właściciel nadal zarządza jobem
+eksport zakończonego przejazdu działa i przechodzi sprawdzenie integralności
+
+steruj wyścigami przez event i barrier
+nie opieraj wyniku na przypadkowym sleep
+
+uruchom nową suite oraz regresję kont, danych i zasobów
+pełna regresja w izolowanym eksporcie
+odpowiednie testy js i smoke prawdziwego http
+
+zmierz coverage szkolnych pakietów z branch=True, per moduł
+nie wyłączaj trudnego recovery i io
+wynik etapowy nie zastępuje końcowego szerokiego zakresu M8/CV i js
+
+krok 11 — ręczny scenariusz odbioru
+
+zapewnij powtarzalny scenariusz na nowym syntetycznym root
+
+login
+create trip
+start simulation recording
+manual observation
+finish
+read i export
+edit metadata
+correction
+filters i pagination
+share analitykowi
+revoke
+archive
+restart i read
+
+scenariusz może być skryptem używającym rzeczywistego http i sesji
+nie musi jeszcze mieć docelowych tabel ui
+
+nie podawaj hasła w argv i nie loguj tokenów
+fixtures nie mogą stać się publicznym provisioning api
+
+krok 12 — dokumentacja i commity
+
+dodaj docs/school-app/stage6.md
+
+opisz działające endpointy, jednostki czasu, cursory, idempotency, koordynację zapisu, recovery i ograniczenia
+
+zaktualizuj contract.md tylko o konieczne doprecyzowania
+nie zmieniaj ustalonych ról i zakresu v1
+
+zaktualizuj run.md oraz readme, jeśli zmieniły się komendy
+
+uzupełnij ai-usage.md o ten prompt i faktyczne działania
+
+w stages.md oznacz etap 5 jako zaakceptowany z hashem
+13858b06051a4183bfc7e0559962611c8be2eae2
+
+etap 6 przygotowany do odbioru po testach
+etapy 7–12 nadal do zrobienia
+
+dziel pracę na małe sensowne commity
+staging konkretnych plików
+żadnych db, runtime, nagrań, mailboxów, sekretów ani środowisk w git
+
+nie pushuj automatycznie
+nie scalaj z main
+
+na końcu podaj
+
+co działa i co zostało na etap 7–9
+
+listę endpointów oraz pola formularzy
+
+wyniki zapisu, korekt, filtrów, cursorów i udostępniania
+
+wyniki awarii, restartu i finalizacji po revokacji
+
+wyniki testów, coverage i blokady środowiska
+
+dokładne komendy oraz ręczny scenariusz odbioru
+
+hashe commitów i git status
+
+to jest całość promptu
+doprowadź etap 6 do działającego i sprawdzonego końca, potem zatrzymaj się przed etapem 7
+```
+
+Działania AI: przegląd kontraktu i kodu przy zgodnym, czystym HEAD etapu 5;
+nowa migracja 0003 bez zmian zastosowanych 0001/0002; atomowe jednostki danych/audytu;
+warstwa writes/lists/paging/raw/recording; jawne trasy HTTP i minimalny SIM start/finish;
+kontrolowany RunLogger run_id i close_unfinished z zachowaniem formatu; callbacks
+credentials i watchdog; proaktywne cofanie kontekstów; skrypt rzeczywistego HTTP;
+25 testów etapu 6 i adaptacja regresji do aktualnej schema/API.
+Nie odtwarzano portalu z historii. Nie delegowano pracy do agentów/innych czatów.
+
+Weryfikacja AI: nowe syntetyczne TemporaryDirectory i izolowane eksporty; HTTP z
+cookies/CSRF i realną SQLite; Event/Barrier dla wyścigów; celowe błędy DB/filesystem,
+manifestów i restart; kontrola oryginałów raw oraz immutable triggerów. Test paginacji
+odczytał 10007 rekordów. Rzeczywisty CLI świeżej bazy/upgrade v2/backup/restore,
+serwer z produkcyjnym scrypt oraz ręczny skrypt i restart/read PASS. Getpass przy
+unattended teście Windows wstrzyknięty ze stdin tylko w procesie testowym, bez hasła
+w argv, logach ani osłabienia KDF. Nie wysyłano maili do prawdziwych osób.
+
+Końcowy kod bf6af53f72365cdb95523db40f9fb48b0d0a1fe1:
+133 szkolne testy (132 PASS, 1 skip), 309.084 s; pełny izolowany Python zestaw
+359 testów (358 PASS, 1 skip), 329.174 s. Skip POSIX symlink WinError 1314;
+Windows junction PASS. Tkinter dostępny, bez ukrywania błędu. Node 7/7 i mobile_flow
+PASS; browser resources i pełny accounts SMTP flow desktop/phone PASS z realnym KDF.
+Bazowy GreenWave smoke HTML/state 200 w osobnym eksporcie. Linux, Docker, telefon,
+ADB, prawdziwa kamera i YOLO nie były wykonywane jako dowód tego etapu.
+
+Coverage branch=True: cztery całe szkolne pakiety 2701/2837 linii, 765/1030 gałęzi,
+combined 89.6302%. Dodatkowo cały zmieniony telemetry: 2784/2970 linii,
+771/1060 gałęzi, combined 88.2134%. Zero excluded lines. Pełny per-module raport
+w stage6.md, lokalny JSON ignorowany. Nie jest to końcowy szeroki pomiar M8/CV/JS.
+Pierwsze nieudane próby i ich poprawki ujawniono w stage6.md, nie przemilczano ich.
+
+AI zmieniło kod i dokumentację; wynik wymaga końcowego przeglądu użytkownika.
+Dowody, gwarancje i granice (bez jednej transakcji DB–filesystem, bez wznowienia
+jazdy/GPS po restart) są w stage6.md; dokładne komendy w run.md sekcja 11.
+Staging wyłącznie konkretnych plików, bez danych/runtime/sekretów, bez zmian
+main/vision-camera, push, merge lub rewrite. PUBLISH-01 pozostaje otwarty.
+Etap 6 przygotowany do odbioru; 7–12 Do zrobienia i nie rozpoczęte.
+
+Kontrola końcowych dokumentów: UTF-8/fences/odnośniki oraz 35 bloków PowerShell PASS.
+Zastosowane migracje bez diff, niezmienione refs main/vision-camera, brak śledzonych
+runtime/data-runs. Przejrzano konkretne nazwy staged plików oraz git diff --cached
+--check przed commitem dokumentacji. Hash tego commita w końcowej odpowiedzi.
