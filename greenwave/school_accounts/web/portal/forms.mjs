@@ -21,8 +21,8 @@ export function editTrip(records,trip) {
   });content.append(node,conflict);d=dialog('Edytuj przejazd',content);
 }
 export function archiveTrip(records,trip) {
-  let d;const content=el('div');content.append(notice('Archiwizujesz „'+trip.title+'”. Surowe dane i raporty pozostaną zapisane; zgoda analityka zostanie cofnięta. Nie ma fizycznego usuwania.'));
-  content.append(form([{name:'reason',label:'Powód archiwizacji',max:500}],{reason:rules.reason},async value=>{await records.app.api.request('/trips/'+trip.id,{method:'DELETE',body:{...value,expected_revision:trip.revision}});d.close();records.list('trips');records.app.message('Przejazd zarchiwizowany.');},'Potwierdź archiwizację'));d=dialog('Archiwizacja przejazdu',content);
+  let current=trip,d;const content=el('div'),conflict=el('div');content.append(notice('Archiwizujesz „'+trip.title+'”. Surowe dane i raporty pozostaną zapisane; zgoda analityka zostanie cofnięta. Nie ma fizycznego usuwania.'));
+  content.append(form([{name:'reason',label:'Powód archiwizacji',max:500}],{reason:rules.reason},async value=>{try{await records.app.api.request('/trips/'+trip.id,{method:'DELETE',body:{...value,expected_revision:current.revision}});d.close();records.list('trips');records.app.message('Przejazd zarchiwizowany.');}catch(error){if(error.status===409){const latest=await records.app.api.request('/trips/'+trip.id);conflict.replaceChildren(notice('Aktualny rekord: '+latest.title+' / '+labels[latest.status]+' / rewizja '+latest.revision),action('Użyj aktualnej rewizji archiwizacji',()=>{current=latest;conflict.replaceChildren(notice('Przejrzano aktualny rekord. Potwierdź archiwizację ponownie.'));}));}throw error;}},'Potwierdź archiwizację'));content.append(conflict);d=dialog('Archiwizacja przejazdu',content);
 }
 export function shareTrip(records,trip) {
   let d;const body=el('div');body.append(notice('Udostępniasz przebieg GPS, obserwacje, historię korekt i raporty tego przejazdu jednemu aktywnemu analitykowi. Bez eksportu i surowych mediów CV.'));

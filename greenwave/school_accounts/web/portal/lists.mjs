@@ -1,5 +1,5 @@
 import {el,action,form,notice,table} from './dom.mjs';
-import {filters} from './filters.mjs';
+import {filters,filterRules} from './filters.mjs';
 import {stamp,ZONE} from './dates.mjs';
 import {labels,statuses,STATES,EVENTS} from './validation.mjs';
 const choose=values=>[['','Wszystkie'],...values.map(v=>[v,labels[v]||v])];
@@ -12,14 +12,14 @@ export function listView(records,kind) {
   if(kind==='trips')specs.push({name:'status',label:'Status',options:choose(statuses),required:false},{name:'archived',label:'Archiwum',options:[['false','Aktywne rekordy'],['true','Archiwalne']]});
   else specs.push({name:'trip_id',label:'Przejazd · ID (opcjonalnie)',required:false,max:32},{name:'signal_id',label:'Sygnalizator',required:false,max:120},{name:'state',label:'Kolor efektywny',options:choose(STATES),required:false},{name:'event_type',label:'Rodzaj efektywny',options:choose(EVENTS),required:false},{name:'source',label:'Źródło',options:choose(['MANUAL','CV']),required:false},{name:'valid',label:'Ważność efektywna',options:[['','Wszystkie'],['true','Ważne'],['false','Nieważne']],required:false});
   specs.push({name:'sort',label:'Sortowanie',options:[['desc','Najnowsze'],['asc','Najstarsze']]});
-  const filterForm=form(specs,{},async body=>{const query=filters(body,kind);records.page.reset(query);await load();},'Zastosuj filtry');filterForm.classList.add('filters');screen.append(filterForm);
+  const filterForm=form(specs,filterRules(kind),async body=>{const query=filters(body,kind);records.page.reset(query);return await load()?'Filtry zastosowane.':false;},'Zastosuj filtry');filterForm.classList.add('filters');const disclosure=el('details','','filter-panel');disclosure.open=matchMedia('(min-width:721px)').matches;disclosure.append(el('summary','Filtry i sortowanie'),filterForm);screen.append(disclosure);
   screen.append(el('p','Dni w Europe/Warsaw; koniec wybranego dnia to początek następnego, z uwzględnieniem DST.','muted'));
   const content=el('div'),feedback=notice(''),pager=el('div','','pagination');screen.append(content,feedback,pager);
   const first=action('Pierwsza strona',()=>{records.page.reset(records.page.filters);load().catch(app.fail.bind(app));});
   const next=action('Następna strona',()=>load().catch(app.fail.bind(app)));pager.append(first,next);
   async function load() {
     content.replaceChildren(notice('Ładowanie danych…'));next.disabled=true;feedback.textContent='';
-    try {await records.page.load((query,signal)=>app.api.request('/'+kind,{query,signal}),result=>{
+    try {return await records.page.load((query,signal)=>app.api.request('/'+kind,{query,signal}),result=>{
       if(!content.isConnected)return;
       content.replaceChildren();const items=result.items;
       if(!items.length)content.append(notice('Brak danych dla wybranych filtrów.'));
@@ -35,5 +35,6 @@ export function listView(records,kind) {
       next.disabled=!result.page.next_cursor;feedback.textContent=result.page.next_cursor?'Dostępna kolejna strona.':'Koniec wyników.';
     });}catch(error){if(content.isConnected){content.replaceChildren(notice('Nie udało się wczytać danych.'),action('Ponów pobranie',()=>load()));feedback.textContent='Błąd pobrania; filtry zachowane.';next.disabled=!records.page.cursor;app.fail(error);}}
   }
+  filterForm.addEventListener('change',()=>{records.page.cancel();records.page.cursor=null;next.disabled=true;content.replaceChildren(notice('Filtry zmienione. Kliknij Zastosuj filtry.'));});
   records.page.reset(filters({},kind));load().catch(error=>{if(content.isConnected){content.replaceChildren(notice('Nie udało się wczytać danych.'));feedback.textContent=error.message;app.fail(error);}});
 }

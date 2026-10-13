@@ -14,6 +14,7 @@ class Portal {
   message(text) { document.querySelector('#message').textContent=text; }
   fail(error) { this.message(errorText(error)); }
   menu() {
+    document.body.classList.toggle('signed-in',Boolean(this.state.value));
     const nav=document.querySelector('nav');nav.replaceChildren();
     const items=this.state.value?[['Moje przejazdy','trips'],['Moje obserwacje','observations'],['Konto','account']]:[['Logowanie','login'],['Rejestracja','register'],['Reset hasła','request-reset']];
     for(const [label,name] of items) {const button=action(label,()=>{this.message('');if(name==='account')this.accounts.account();else if(['trips','observations'].includes(name))this.records.list(name);else this.accounts.show(name);},'nav-button');

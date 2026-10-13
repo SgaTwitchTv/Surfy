@@ -22,7 +22,7 @@ export function form(specs,rules,submit,label='Zapisz') {
     const body=Object.fromEntries(new FormData(node));const errors=validate(body,rules);setErrors(errors);
     if(Object.keys(errors).length) { node.querySelector('[aria-invalid=true]')?.focus();return; }
     node.dataset.busy='true';button.disabled=true;feedback.textContent='Trwa operacja…';
-    try { await submit(body,node,feedback);if(node.isConnected) feedback.textContent='Zapisano.'; }
+    try { const outcome=await submit(body,node,feedback);if(node.isConnected&&outcome!==false) feedback.textContent=typeof outcome==='string'?outcome:'Zapisano.'; }
     catch(error) { if(node.isConnected) { feedback.textContent=typeof error.status==='number'?errorText(error):error.name==='AbortError'?'Przerwano żądanie. Wynik zapisu może być nieznany; nie zmieniaj operacji przy retry.':error.message;setErrors(error.fields||{}); } }
     finally { node.dataset.busy='false';button.disabled=false; }
   });return node;
@@ -37,5 +37,5 @@ export function table(headers,rows) {
   const wrap=el('div','','table-scroll');wrap.tabIndex=0;wrap.setAttribute('aria-label','Tabela danych; przewijanie poziome');
   const node=el('table'),head=el('thead'),tr=el('tr');for(const label of headers) { const th=el('th',label);th.scope='col';tr.append(th); }head.append(tr);
   const body=el('tbody');for(const cells of rows) { const row=el('tr');for(const value of cells) { const td=el('td');td.append(value instanceof Node?value:document.createTextNode(String(value)));row.append(td); }body.append(row); }
-  node.append(head,body);wrap.append(node);return wrap;
+  node.append(head,body);wrap.append(el('p','Przesuń tabelę w poziomie, aby odczytać wszystkie kolumny i akcje.','table-hint'),node);return wrap;
 }
