@@ -1082,3 +1082,79 @@ dokumentacja:commit dodający stage4.md (git log -1 --diff-filter=A --format=%H 
 Dokumenty/README i dokładne komendy sprawdzone; staging konkretne źródła/testy/docs,
 bezDB/raw/mailboxów/kluczy/środowisk/logów/coverage. Main/CV niezmienione,
 bezpush/merge/rewrite;PUBLISH-01 osobno. Etap4 przygotowany do odbioru,5–12 Do zrobienia.
+
+## 2026-10-13 — etap 5: uprawnienia i ochrona zasobów
+
+Prompt użytkownika (ujawniony zakres i kluczowe instrukcje;to opis polecenia,
+nie deklaracja ukończenia wszystkich przyszłych integracji):
+
+> Okej to lecimy etap 5 — uprawnienia i ochrona API zasobów GreenWave School.
+> Etap4 zaakceptowany:45eef418efa9ca0afc9af8a6137a286fa990f5a7. Kontynuuj w
+> istniejącym worktree codex/school-app. IMPLEMENTUJ do działającego i
+> sprawdzalnego końca;przeczytaj AGENTS i docs/school-app contract/audit/stage3/
+> stage4/stages/run/ai-usage oraz HEAD/status/staging. Zachowaj niezwiązanezmiany;
+> nie czytaj prywatnego data/runs/starego runtime/school,nie importuj kont/nagrań,
+> nie zmieniaj migracji/raw.csv/solver/GATE,UTCinteger ms,bezpush/merge/rewrite.
+
+Pozostałe żądania promptu,ujawnione bez zmiany jego intencji:
+
+- Inwentaryzacja każdej metody/ścieżki accounts i trips/observations/corrections/
+  shares/export/replay/jobs/results/CVcapture/status/events/preview/frames/media/
+  Range/devices/pair/config/admin. Status działa/implementowana/niedostępna,
+  polityka,źródło i owner. Nie catch-all Handler ani local token zamiast kont.
+- Wspólna polityka:session/active/securityversion,role,ownerparent,READ_ANALYZE,
+  adminfreshreauth,defaultdeny. Role wszystkie own;DRIVERown;ANALYSTown+shared
+  completed;ADMIN bez globalGPS/filmów. SessionActor/role/owner/reauth wyłącznie
+  serwer. Anonymous401,foreign/missing404,explicitrole403,nie blanketDataError503.
+- SafeDTO/SQLscope/pagination własnychtrip/obs/history/shared/derived/configs;
+  bezhashes/sekretów/paths/audytu. Fullfilters/cursors etap6. Dostęp przedfile/CPU.
+- Export ownCOMPLETEsynthetic M8raw.csv/metadata/complete;manifest/hashkontrola,
+  controlledrunroot,containment/traversal/symlink/reparse/DB/backup odmowa,
+  żadnego globalscan/upload/biblioteki.
+- Replayown/shared,handle session+trip,bezglobalnav/radlive;analysisactor/trip,
+  access przedexecute/status/result,revokacja share i wynikowner;CVowneronly
+  metadane/events/media/Range eachrequest/pertrip,no filenames dlaanalyst,
+  nieYOLO/camera tests,niepodłączone funkcje jawnie unavailable.
+- Propagacja logout/all/password/reset/block/role/archive/sharerevoke na kolejne
+  żądania/jobs;oldcache/handle nie utrzymuje praw. Technicalclose nie read,
+  streamingbounded/reauthboundary,nie cofa downloadedbytes. Logger/phone później.
+- Zachować Host/Origin/CSRF/JSON duplicate/unknown/NaN/bodylimits/noCORS/headers/
+  neutralerrors/requestid/nosecrets. BezmutacjiGET,bezpublic provisioning.
+- HTTPmatrix2driver+analyst+admin:own/foreign/shared/unshared/obs/corrections/
+  syntheticderived;anon/owner/otherdriver/analystno/yes/adminforeign/expired.
+  ID substitutions/spoof/sharedexportCVdeny/revoke/role/block/archive/reset/
+  traversal/junction/Range/DB/cache/jobs/CSRF/Origin/DTO/legacy. Disabled nie
+  zastępuje testu rzeczywistej integracji. TestauthSMTP/data/coreJS/browser,
+  smoke login→own→foreigndenial→logout,branchTrue accounts+data+policy/adapters
+  permodulenoomit,wyniketapowy nie szeroki końcowy M8/CV coverage.
+- Dokumenty stage5/run manualtwo-users/analyst/AI/stages4acceptedliteralhash,
+  5prepared,6–12todo;smallcommits,exactstaging,noruntime/DB/mailbox/secrets,
+  finalmatrix/endpoints/testresults/export/replay/analysisCVRange/coverage/
+  commands/hashes/status/limitations/future6–9. STOP przed6.
+
+AI wykonała kod policy/reads/files/contexts/API,HTTPmount/neutralDataError mapping,
+20działającychresource method/path,syntetyczny CLIfixture(tylkoemptyDB),17testów,
+Playwrightfetchsmoke desktopphone. Nie delegowała pracy do innych czatów/agentów.
+Nie odtwarzała starego portalu;bezprywatnychdata/staregoruntime/migracjichanges.
+Eksport TemporaryFile/64KiB recheck;realM8GPSReplay/RunAnalysisGPS_QUALITY;
+CVmanifest/eventsdecode/mediaRange tylkoowner;livepreview/camera/phone/writes/
+adminviews pozostają konkretnie niedostępne w inwentaryzacji stage5.md.
+
+Weryfikacja faktyczna:17/17resourcePASS58.404s;94schooltesty93PASS1skip117.364s;
+pełna izolowanaPythonregresja320,319PASS1skip132.336s;WindowsjunctionPASS,
+POSIXsymlinkskipWinError1314,bezLinuxclaim/Tkintermasking. ObaBrowserresource i
+accountsmoke1280x900/390x844PASS zrealKDF,7NodePASS+mobileflowPASS. CLIinit/keys/
+serve/loginownforeignlogoutPASS TemporaryDirectory,fixture getpass wejście
+wstrzyknięte syntetycznie w unattendedWindows test (pipedstdin utknął na
+konsolowymgetpass,własny zweryfikowany proces zakończony). BazowyGreenWave
+isolatedexportHTML/state200PASS. Coverage całych3pakietów branchTrue:
+2150/2243linie95.8538%,594/772gałęzie76.9430%,combined91.0116%,zeroexclusions;
+resourcecombined89.1473%,permodule stage5.md. Wynik nie końcowy backend/M8/CV/JS.
+
+Pierwsze testy wykryły błędyfixture operationkey/SignalAssociation/cookieaccount
+switching;poprawionofixtures,niebypass. Przegląd dodał scoped SQLpaginatedhistory
+orazfailclosedconfigpayloadcredentials/paths;jobown/requester policyniegrant
+cudzychhandles. Codecommits5ada5e834ac50d4bea07a6d57d7152b78bc6bda9 i
+09646eb735dd8f141de3f89087a644eb875c8a76;doccommitstage5.md. FinalGitdiffcheck/
+stagednames/docslinks/status sprawdzone. Bezpush/merge/rewrite. Etap5 przygotowany
+do odbioru;6–12Dozrobienia. PUBLISH-01 nadaloddzielny.

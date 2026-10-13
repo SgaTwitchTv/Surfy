@@ -370,3 +370,124 @@ Na innym komputerze dostosuj ścieżkę zainstalowanego Playwright lub pomiń zm
 jeśli moduł jest rozwiązywany jako playwright. Skrypt wymaga Edge headless.
 Dowody, coverage per moduł i ograniczenia: [stage4.md](stage4.md).
 Pełną regresję nadal uruchamiaj w izolowanym Git eksporcie z sekcji 3.
+
+## 10. Etap 5 — chronione odczyty, syntetyczny odbiór ról
+
+Konta etapu4 nadal działają według sekcji9. Nowe API odczytu jest podłączone,
+ale docelowe tabele UI, tworzenie rekordów,share przez HTTP i telefon nie są
+jeszcze podłączone. [stage5.md](stage5.md) zawiera dokładną allowlistę i granice.
+Nie korzystaj ze starego runtime/school ani data/runs. Przykład poniżej tworzy
+NOWY pusty runtime,syntetyczne raw.csv/CV i konta example.test. Serwer musi być
+zatrzymany podczas operatorskich fixture/migracji (maintenance/runtime lease).
+Fixture odmówi przy jakimkolwiek istniejącym koncie;nie importuje Twoich danych.
+
+Terminal1 (tylko jeśli chcesz sprawdzić pocztę/reset,nie jest konieczny do odczytów):
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771
+```
+
+Terminal2:
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+git branch --show-current
+git status --short
+$schoolStage5Root = Join-Path (Get-Location) ('runtime\stage5-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolStage5Root" init
+python -m greenwave.school_data --root "$schoolStage5Root" status
+python -m greenwave.school_accounts secrets --output "$schoolStage5Root\deployment-keys.json"
+python -m scripts.school_resource_fixtures --root "$schoolStage5Root" --confirm-synthetic
+```
+
+Wpisz przez getpass jedno własne hasło fixture(12–128 znaków) i confirmation.
+CLI używa rzeczywistego scrypt N131072,nie słabszego testowego KDF.
+Operator jawnie tworzy ACTIVE zweryfikowane syntetyczne konta:driver@example.test,
+other@example.test,analyst@example.test,admin@example.test. To nie publiczna
+rejestracja ani domyślne hasło. Rejestracja/SMTP aktywacja pozostaje sekcja9.
+Skopiuj wypisane JSON IDs: trips.shared,private,other;observations.shared;captures.shared.
+
+```powershell
+$env:SCHOOL_SECRET_FILE = "$schoolStage5Root\deployment-keys.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_MODE = 'plain'
+$env:SMTP_SENDER = 'greenwave@example.test'
+$env:SMTP_USER = ''
+$env:SMTP_PASSWORD = ''
+python -m greenwave.school_accounts serve --root "$schoolStage5Root" --host 127.0.0.1 --port 8770
+```
+
+Otwórz http://127.0.0.1:8770. Formularz kont działa;po loginie nie udaje tabel.
+Ctrl+C zatrzymuje ten serwer. Bazowy GreenWave pozostaje osobny:
+`python -m greenwave --no-browser --port 8767`;testy bazowe wyłącznie w świeżym
+izolowanym eksporcie z sekcji3,bez nagrywania w prywatnym checkout.
+
+Terminal3 — rzeczywiste cookies/fetch równoważne PowerShell HTTP bez bearer:
+
+```powershell
+$schoolBase = 'http://127.0.0.1:8770/school/api/v1'
+function New-SchoolLogin([string]$email) {
+    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+    $pre = Invoke-RestMethod "$schoolBase/auth/preflight" -WebSession $session
+    $secure = Read-Host 'Hasło syntetycznej fixture' -AsSecureString
+    $credential = New-Object System.Management.Automation.PSCredential($email, $secure)
+    $body = @{email=$email; password=$credential.GetNetworkCredential().Password} | ConvertTo-Json
+    $result = Invoke-RestMethod "$schoolBase/auth/login" -Method Post -WebSession $session -ContentType 'application/json' -Headers @{Origin='http://127.0.0.1:8770';'X-CSRF-Token'=$pre.data.csrf} -Body $body
+    return @{session=$session;csrf=$result.data.csrf}
+}
+$schoolDriver = New-SchoolLogin 'driver@example.test'
+$schoolOther = New-SchoolLogin 'other@example.test'
+$schoolAnalyst = New-SchoolLogin 'analyst@example.test'
+$schoolAdmin = New-SchoolLogin 'admin@example.test'
+$schoolOwn = Invoke-RestMethod "$schoolBase/trips" -WebSession $schoolDriver.session
+$schoolShared = Invoke-RestMethod "$schoolBase/trips?scope=shared" -WebSession $schoolAnalyst.session
+$schoolTrip = $schoolShared.data.items[0].id
+Invoke-RestMethod "$schoolBase/trips/$schoolTrip" -WebSession $schoolDriver.session
+Invoke-RestMethod "$schoolBase/observations?trip_id=$schoolTrip&scope=shared" -WebSession $schoolAnalyst.session
+# Oczekiwane404;PowerShell pokazuje błąd HTTP,to pozytywny test odmowy:
+Invoke-RestMethod "$schoolBase/trips/$schoolTrip" -WebSession $schoolOther.session
+Invoke-RestMethod "$schoolBase/trips/$schoolTrip" -WebSession $schoolAdmin.session
+Invoke-RestMethod "$schoolBase/trips/$schoolTrip/export" -WebSession $schoolAnalyst.session
+# Owner-only ZIP w ignorowanym artifacts,bez prywatnych danych:
+New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+Invoke-WebRequest "$schoolBase/trips/$schoolTrip/export" -WebSession $schoolDriver.session -OutFile artifacts/stage5-synthetic.zip
+# Logout ->kolejneGET401:
+Invoke-RestMethod "$schoolBase/auth/logout" -Method Post -WebSession $schoolDriver.session -ContentType 'application/json' -Headers @{Origin='http://127.0.0.1:8770';'X-CSRF-Token'=$schoolDriver.csrf} -Body '{}'
+Invoke-RestMethod "$schoolBase/trips" -WebSession $schoolDriver.session
+```
+
+Odbiór raw/export:ZIP ma tylko metadata.json,raw.csv,complete.json;hashy nie zmienia.
+Replay:POST trips/{id}/replays body {"mode":"GPS"},potemGET /replays/{id};
+POST control {"command":"SEEK","value":1};DELETE {} zamyka handle.
+Analysis:POST trips/{id}/analysis-jobs {"type":"GPS_QUALITY"},GET job aż COMPLETE,
+GET trips/{id}/reports/{report_id}. Wszystkie POST/DELETE używają Origin i CSRF
+bieżącej sesji jak przykład logout. Brak MAPPING/SIMULATION/capture start.
+CV read:GET trips/{id}/cv/captures;GET /{capture}/events;GET /{capture}/media/0
+z Range bytes=0-8 daje206 własnemu kontu. Fixture wideo to testowe bajty,nie film.
+Analityk nie dostaje eksportu/CV nawet dla shared. ADMIN nie ma globalnego dostępu.
+Share/revoke/archive/role/block przez UI/HTTP dopiero6/8;teraz sprawdza je test
+wewnętrznego API+kolejneHTTP,nie publiczny provisioning endpoint.
+
+Testy dokładnie używane w tym etapie:
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_resources.py' -v
+python -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_resources,greenwave.school_accounts,greenwave.school_data --data-file=artifacts/stage5-final.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage5-final.coverage -m
+.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage5-final.coverage -o artifacts/stage5-final-coverage.json
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_resources.cjs
+node scripts/check_school_accounts.cjs
+node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs
+node tests/mobile_flow.cjs
+```
+
+Coverage pakietów etapowych nie zastępuje szerokiego zakresu etapu10.
+Pełna regresja w eksporcie z sekcji3: `python -m unittest discover -s tests -v`.
+Żadnych nowych sekretów,SQLite,nagrań,skrzynek ani coverage do Git.
