@@ -491,3 +491,25 @@ node tests/mobile_flow.cjs
 Coverage pakietów etapowych nie zastępuje szerokiego zakresu etapu10.
 Pełna regresja w eksporcie z sekcji3: `python -m unittest discover -s tests -v`.
 Żadnych nowych sekretów,SQLite,nagrań,skrzynek ani coverage do Git.
+
+
+### Ponowny odbiór etapu 5 — revoke i ponowny share
+
+Nowy test na TemporaryDirectory nie czyta replay pomiędzy cofnięciem starego
+udostępnienia a utworzeniem nowego. Zasilanie i revoke są wewnętrznym API,
+nie publicznym provisioning ani przedwczesnym formularzem etapu6.
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_share_contexts.py' -v
+python -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_resources,greenwave.school_accounts,greenwave.school_data --data-file=artifacts/stage5-share-final.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage5-share-final.coverage -m
+```
+
+Sprawdź stare read/control/close404,nowy replay200,własny replay200;queued oraz
+running job po revoke→reshare CANCELLED bez nowego manifestu. Status/cancel
+starego joba404. Stary grant nie zmienia się na nowy w żadnym kontekście.
+Raport poprawnie opublikowany przed revokacją pozostaje właścicielowi;nowe
+udostępnienie pozwala na świeży dozwolony odczyt raportu,ale nie starego joba.
+Pełna regresja jak sekcja3 w nowym eksporcie. Bez zmian komend serwera,
+schematu v2/14 tabel,poczty,formatu raw.csv ani warunków rekomendacji live.

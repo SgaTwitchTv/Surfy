@@ -226,7 +226,7 @@ wynik etapowy trzech pakietów nie zastępuje etapu10.
 
 STOP przed6,bezpush/merge/rewrite i bez runtime/DB/mailbox/kluczy w Git.
 
-## Końcowy raport coverage
+## Pierwotny raport coverage (0b10d9b)
 
 Linie **2150/2243 = 95.8538%**; gałęzie **594/772 = 76.9430%**; combined **91.0116%**. Wyłączenia:0.
 
@@ -283,3 +283,134 @@ export/replay/jobs/CV,fixture i integracyjne testy.
 `git log -1 --diff-filter=A --format=%H -- docs/school-app/stage5.md`.
 Staging wyłącznie tych źródeł/testów/dokumentów;nieDB/runtime/mailbox/secret.
 Main/CV pozostały na wcześniejszych commitach. Nie pushowano ani scalano.
+
+
+## Ponowny przegląd — konkretne udostępnienie kontekstu
+
+Przegląd dotyczył **0b10d9b39c1f0251c513bcdfdffddffe74318b67**.
+Użytkownik przekazał niezależny wynik Linux:17 testów zasobów PASS;pełna regresja
+320 testów z jednym błędem importu Tkinter(brak biblioteki środowiska) i jednym
+pominiętym testem Windows. To dowód dostarczony przez użytkownika,nie nasze
+wykonanie Linux. Nie maskowano Tkinter ani testu rdzenia.
+
+Polecenie poprawek otrzymano urwane na „przed dostępem do”. Poproszono o resztę
+przez pytanie w czacie. Poniżej odbiór otrzymanej części;nie deklarujemy wykonania
+nieotrzymanych wymagań ani akceptacji etapu5. Etap6 nie rozpoczęty.
+
+### Reprodukcja przed zmianą kodu
+
+Na nowej TemporaryDirectory:share→replay→revoke→nowyshare temu samemuanalyst
+→GET starego replay. **Bez żadnego odczytu między revoke i nowym share**.
+Test test_exact_reproducer_revoke_regrant_without_intermediate_read przed
+poprawką zawiódł: **AssertionError:200 !=404**. Pierwsze wykonanie zebrało także
+17 importowanych testów ResourceTests:18 testów,17PASS/1FAIL,67.822s. Następnie
+poprawiono import w module testowym,żeby unittest nie zbierał obcej klasy.
+Jedyny FAIL był dokładnym reproduktorem;pozostałe istniejące testy nie wykrywały
+regrant resurrection. Nie dodano odczytu,który ukrywałby błąd.
+
+### Przyczyna i poprawka
+
+Kontekst pamiętał session/credential/trip,ale każde sprawdzenie wybierało dowolny
+aktualny grant. Regrant odtwarzał dostęp do starych uchwytów.
+AuthorizationBasis jest frozen dataclass:kind OWN/SHARE,actor_id,trip_id,share_id.
+Pochodzi z aktualnej DB i Sessions.lookup,nie z DTO klienta.
+Replay i job pamiętają tę podstawę oprócz dotychczasowej sesji/credential.
+Policy.check_basis wymaga dokładnego share_id,trip_id,analyst_id,READ_ANALYZE,
+revoked_at IS NULL,aktualnej roli ACTIVE ANALYST i COMPLETE nonarchive.
+Nie wybiera innego grantu i nie przechodzi automatycznie do OWN.
+Publiczne DTO nie ujawniają authorization/share_id/credential.
+
+Replay read/control/close po revoke→regrant404. Stary replay jest usuwany na
+pierwszej odmowie;sam zapisany share_id już uniemożliwia jego ożywienie bez
+wcześniejszego odczytu. Nowy replay na nowymgrancie200,własnyownerreplay200.
+Rotacja/logout/expiry nadal egzekwowane istniejącą regresją etapu5.
+Jobs po nieważnym grancie mają trwałą flagę authorization_invalid/cancelled;
+read/cancel404. Owner management nie zamienia podstawy wykonania joba na OWN.
+Właściciel może nadal zarządzać zadaniem z ważną podstawą,ale nie przywraca
+nieważnej podstawy cudzego zadania. Raport poprawnie opublikowany przed revoke
+pozostaje danymi właściciela. Świeży odczyt raportu to osobne O/S;nowy grant może
+go dopuścić,bez przywrócenia starego handle joba.
+
+Files.run dla kontekstów sprawdza pinned basis także przy hash/chunk kontroli.
+Worker sprawdza ją przed plikami,ponownie przed analizą,po analizie i bezpośrednio
+przed publikacją. Sessions.lookup może użyć istniejącego wewnętrznego połączenia,
+bez alternatywnej implementacji uwierzytelnienia. Końcowe session/grant check
+oraz niewielki zapis report/manifest są w BEGIN IMMEDIATE:revoke/archive/security
+writer nie wchodzi pomiędzy kontrolę a publikację. Podczas niekooperującego CPU
+M8 revokacja nie zabija wątku,lecz uniemożliwia publikację na cofniętym grancie,
+także gdy przed końcem CPU pojawił się nowy share.
+Nie deklarujemy transakcyjnego recovery DB–filesystem ani nowej funkcji produktu.
+
+### Nowe testy
+
+8/8 PASS,23.814s:
+- dokładny reproduktor bez intermediate read;
+- niezależne stare control i close404,nowy replay200,ownerreplay200,safe DTO;
+- complete job status/cancel404 bez ożywienia;wcześniejszy owner report nadalread;
+- queuedjob revoke→regrant:analyze nie wywołane,bezreport;
+- runningjob revoke→regrant:brak publikacji;
+- regrant po sprawdzeniu plików przed analizą:analyze nie wywołane;
+- regrant po wcześniejszej kontroli przed transakcyjną publikacją:brakmanifestu;
+- zgodność grant/recipient/trip i brakfallbackOWN.
+
+Kod: **fdc06bb7efd82455ffbf00deb62a37d80c494e23**.
+Końcowe własne wykonanie Windows:102 testy szkolne,101PASS/1skip,138.013s;
+pełna regresja w izolowanym eksporcie:328 testów,327PASS/1skip,158.144s.
+Eksport:git archive0b10d9b+wyłącznie4zmienione źródła i nowy plik testów;
+zgodne z codecommitemfdc06bb. Żadnych prywatnych nagrań/runtime do eksportu.
+Skip:Windows symlink WinError1314;Windows junction PASS. Tkinter naWindows
+bez błędu;Linux nie uruchamiano. Nowe8testówPASS23.814s.
+Browserresource i accountsdesktop1280x900/phone390x844PASS,Node7/7/mobileflowPASS.
+Testy sesji obejmują rotację/logout/expiry/status/securityversion jak wcześniej.
+Nie zmieniano schematu v2/14 tabel,migracji,solver/logger/livegate ani private roots.
+
+### Aktualny coverage po poprawce,branch=True
+
+Całe school_accounts+school_data+school_resources,bezomit/exclude:
+linie **2198/2294=95.8152%**,
+gałęzie **614/800=76.7500%**,
+combined **90.8856%**,excluded_lines0.
+
+|Moduł|Linie wykonane/wszystkie|Gałęzie wykonane/wszystkie|Combined|
+|---|---:|---:|---:|
+|school_accounts/__init__.py|0/0|0/0|100.0000%|
+|school_accounts/__main__.py|56/67|9/12|82.2785%|
+|school_accounts/config.py|51/55|16/20|89.3333%|
+|school_accounts/crypto.py|60/62|16/18|95.0000%|
+|school_accounts/demo_mail.py|70/80|30/38|84.7458%|
+|school_accounts/errors.py|4/4|0/0|100.0000%|
+|school_accounts/http.py|212/237|68/98|83.5821%|
+|school_accounts/limits.py|28/28|2/2|100.0000%|
+|school_accounts/mail.py|57/60|7/8|94.1176%|
+|school_accounts/service.py|163/169|25/34|92.6108%|
+|school_accounts/sessions.py|58/60|13/14|95.9459%|
+|school_data/__init__.py|3/3|0/0|100.0000%|
+|school_data/__main__.py|32/33|7/8|95.1220%|
+|school_data/accounts.py|50/50|19/20|98.5714%|
+|school_data/backup.py|71/74|9/12|93.0233%|
+|school_data/configurations.py|38/38|10/16|88.8889%|
+|school_data/database.py|59/62|8/8|95.7143%|
+|school_data/errors.py|11/11|0/0|100.0000%|
+|school_data/locking.py|33/37|5/8|84.4444%|
+|school_data/migrations.py|110/111|43/44|98.7097%|
+|school_data/observations.py|78/78|26/40|88.1356%|
+|school_data/repositories.py|8/8|0/0|100.0000%|
+|school_data/repository_base.py|37/37|12/12|100.0000%|
+|school_data/security_records.py|94/94|16/22|94.8276%|
+|school_data/storage.py|48/49|15/16|96.9231%|
+|school_data/time_units.py|26/26|14/14|100.0000%|
+|school_data/trips.py|133/133|45/62|91.2821%|
+|school_data/validation.py|39/39|16/16|100.0000%|
+|school_resources/__init__.py|0/0|0/0|100.0000%|
+|school_resources/api.py|61/61|37/42|95.1456%|
+|school_resources/contexts.py|178/183|35/54|89.8734%|
+|school_resources/files.py|154/161|48/72|86.6953%|
+|school_resources/policy.py|63/64|23/28|93.4783%|
+|school_resources/reads.py|113/120|40/62|84.0659%|
+
+
+Raport lokalny ignorowany artifacts/stage5-share-final-coverage.json;
+pełne polecenia w run.md. Nadal nie końcowe szerokie pokrycie M8/CV ani JS.
+Dokumentacyjny commit poprawki: `git log -1 --format=%H -- docs/school-app/stage5.md`.
+Bezpush/merge/rewrite;status po commicie czysty,etap6nierozpoczęty.
+Dalsza część promptu pozostaje do przekazania;nie deklarujemy jej odbioru.

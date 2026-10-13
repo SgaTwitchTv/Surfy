@@ -33,7 +33,7 @@ Etap 3 dodał persistence. Bieżący etap 4 udostępnia osobny portal kont; inte
 |2|Kontrakt aplikacji|Zaakceptowany przez użytkownika|77c074cdc24eb14795eb8eb593167945d74eead4; pierwotny 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0; cleanup 7a2899770075cc6ac12c826234f620f1de97a380|14 tabel,37 API+26 adapterów; kontrola dokumentów i syntetyczny smoke opisane w contract/run|PUBLISH-01 osobno; zaakceptowany zakres v1|
 |3|Baza danych i migracje|Zaakceptowany przez użytkownika|2020b84d68ef3720c1b2d2345cf381c98a2a603b|Niezależny przegląd i wyniki opisane w stage3.md; v2/14 tabel/immutable migrations/rollback/backup/isolacja|Akceptacja w prompcie etapu4; PUBLISH-01 nadal osobno|
 |4|Konta i sesje|Zaakceptowany przez użytkownika|45eef418efa9ca0afc9af8a6137a286fa990f5a7;d0b2ddcbb2aea9c74ff3710a7e341e4997be5462;90beec7bd5b0abc51548e5c240e9e439708d2f87;4746c9ee5c55806e91e9bb25f7881244958322de;2b9ed3ddb8e34e316701270e64904c290a73541b;9dcf41e1b3e7140a64b437357f94f9614400eea2;dokumentacja: commit stage4.md|Register/SMTP/verify/login/session/CSRF/reset/change/reauth/bootstrap; testy i per-module coverage w stage4.md; desktop i phone browser PASS z realnym KDF; brak legacy passthrough|Akceptacja w prompcie5;domena/role panel/telefon/Docker odbierane oddzielnie|
-|5|Uprawnienia i ochrona API|Przygotowany do odbioru|5ada5e834ac50d4bea07a6d57d7152b78bc6bda9;09646eb735dd8f141de3f89087a644eb875c8a76;dokumentacja stage5.md|Macierz HTTP,scoped export/replay/GPS_QUALITY/CVmedia/Range,revokacja;stage5.md|Niedostępne CRUD/phone/liveCV/admin opisane konkretnie;etapy6–12 Do zrobienia|
+|5|Uprawnienia i ochrona API|Przygotowany do ponownego odbioru otrzymanego zakresu|fdc06bb7efd82455ffbf00deb62a37d80c494e23;5ada5e834ac50d4bea07a6d57d7152b78bc6bda9;09646eb735dd8f141de3f89087a644eb875c8a76;dokumentacja stage5.md|Macierz HTTP,scoped export/replay/GPS_QUALITY/CVmedia/Range,revokacja;stage5.md|Niedostępne CRUD/phone/liveCV/admin opisane konkretnie;etapy6–12 Do zrobienia|
 |6|Przejazdy i obserwacje|Do zrobienia|—|—|Niezmienny raw, audyt korekt, spójność i recovery|
 |7|Nowoczesny UI użytkownika|Do zrobienia|—|—|Projekt w kierunku ReactLY i odbiór wizualny|
 |8|Widoki analityka i administratora|Do zrobienia|—|—|Zatwierdzone role i zakres danych|
@@ -66,3 +66,8 @@ Etap4 zaakceptowany w prompcie etapu5: **45eef418efa9ca0afc9af8a6137a286fa990f5a
 Etap5 dowody/status/granice: [stage5.md](stage5.md). Hash końcowej dokumentacji:
 `git log -1 --diff-filter=A --format=%H -- docs/school-app/stage5.md`.
 Etapy6–12 nadal Do zrobienia;bez automatycznego startu6.
+
+Przegląd etapu5 dotyczył **0b10d9b39c1f0251c513bcdfdffddffe74318b67**.
+Poprawka konkretnego share_id i dowody w końcowej sekcji stage5.md.
+Polecenie poprawek otrzymano urwane na „przed dostępem do”;poproszono o jego
+pozostałą część. Nie deklarujemy odbioru nieotrzymanych wymagań. Etapy6–12 Do zrobienia.

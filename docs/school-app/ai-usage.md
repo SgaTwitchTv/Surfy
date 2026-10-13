@@ -1158,3 +1158,69 @@ cudzychhandles. Codecommits5ada5e834ac50d4bea07a6d57d7152b78bc6bda9 i
 09646eb735dd8f141de3f89087a644eb875c8a76;doccommitstage5.md. FinalGitdiffcheck/
 stagednames/docslinks/status sprawdzone. Bezpush/merge/rewrite. Etap5 przygotowany
 do odbioru;6–12Dozrobienia. PUBLISH-01 nadaloddzielny.
+
+
+## Etap 5 — poprawka revoke/regrant po niezależnym przeglądzie
+
+Otrzymany prompt użytkownika (wiadomość urwana w punkcie4):
+
+> Poprawimy etap5 — poprawka cofania udostępnień i końcowy odbiór.
+> Kontynuuj w istniejącym worktree codex/school-app. Nie rozpoczynaj etapu6.
+> Przeczytaj AGENTS.md oraz contract.md,stage5.md,stages.md,run.md,ai-usage.md.
+> Przegląd dotyczył0b10d9b39c1f0251c513bcdfdffddffe74318b67.
+> Niezależne Linux:17testówzasobówPASS;pełna regresja320,jedenimportTkinter
+> (biblioteka środowiska) i jeden pominiętyWindows;dodatkowy reproduktor błąd.
+> Zachowaj main/CV i niezwiązane zmiany,bezprivate data/runs/runtime/school,
+> tylko nowesyntheticdata,bezsolver/logger/livegate/newproduct/migracjichanges,
+> pamięciowe replay/jobs bez nowychtabel;bezrewrite/push/merge.
+>
+> Odtwórz PRZED poprawką:owner share COMPLETE analyst→replay→revoke→re-share
+> tego samego trip temu samemuanalyst→GET staregohandle200. Nie wstawiajread
+> między revoke i nowyshare;obecny replay_context usuwa go dopiero po odmowie.
+> Przyczyna:session/credential/tripbezkonkretnegograntu. ZapisztestFAILprzedfix.
+>
+> Jawnywewnętrznykontekst OWN dlaowner lub SHARE zkonkretnymshare_id,odbiorcą
+> i trip. ZaktualnejDB/uwierzytelnionejsesji,niebody/query/headers. Przycreate
+> replay/job zachowaj dokładnąpodstawę orazsession/credential;przyread/execute
+> sprawdzaj tę samąpodstawę. Nie zastępuj share_id i niefallbackinnego dostępu.
+> Cofniętygrant nie ożywa przeznewgrant. Nie ujawniajinternalrefs/secretswDTO,
+> nieposzerzajadmin/analyst.
+>
+> Stare replayread/control/close nieodzyskująpraw poreshare;usuń/oznaczpermanent
+> invalid;neutral404. Nowy replaynowyshare i ownerreplaydziałają. Rotacja/logout/
+> expiry nadalinvalid. Sprawdźaktualnerevoked_at,właściwegoanalyst/trip,nie samID.
+>
+> Jobs:queued/running/status/cancel/publication. Staryshare niepublikujedzięki
+> nowejzgodzie. Ponownie sprawdzajkonkretnąpodstawę:przedwykonaniem;przeddostępemdo
+
+Dalszej części nie otrzymano na moment zapisania tego wpisu. AI zapytała o nią
+narzędziem request_user_input_async i wykonywała niezależnie otrzymany zakres.
+Nie traktujemy urwanego zdania jako zgody na nieznany zakres kolejnego etapu.
+
+AI:sprawdziła czystyHEAD0b10d9b i pustyAGENTS,rejestry;dodała exactHTTPreproducer.
+Przedfix18testów(17importowanychexistingPASS,reproducerFAIL200!=404),67.822s.
+Poprawiono import klas testowych,aby nie dublować suite. Następnie frozen
+AuthorizationBasis OWN/SHARE,checkdokładnychgrant/actor/trip/role/status/revoked;
+pinningreplay/job/Files.runhasher. Przedanalysis i publikacją brakfallback.
+PrzedmanifestpublishingBEGINIMMEDIATE zSessionlookup na tym samym connection,
+bezduplikowanejlogikiauth i bezmigracji. Stalejob permanentinvalid/cancelled,
+DTO bezbasis/credential/share_id. Dodano8regressiontests;PASS23.814s.
+Nowyshare dopuszcza nowycontext,freshreportread;nieprzywracastaregojob/replay.
+
+Własne pierwsze pełneWindowswyniki:101school,100PASS1symlinkskip148.422s;
+327fullisolatedexport,326PASS1skip166.317s. Po dodaniu ósmego testu finalne
+wykonanie i coverage opisane w ostatniej sekcji stage5.md. Browserresource i
+accountsdesktop/phonePASS,Node7PASS/mobileflowPASS. NiezależnyLinux wynik
+pochodzi od użytkownika;nie nasz. Nie maskowanoTkinter/skipa.
+
+Codecommit:fdc06bb7efd82455ffbf00deb62a37d80c494e23. Dokumenty contract/stage5/
+stages/run/AI;concrete staging,noruntime/DB/mediów/sekretów/coverage. Bezagentów/
+nowychczatów,push,merge,rewrite. PUBLISH-01 osobno. Etap6nierozpoczęty.
+
+Końcowe własne wyniki poprawki:102schooltests101PASS1skip138.013s;328fullPython
+isolatedexport327PASS1skip158.144s;8newtestsPASS23.814s. CoveragebranchTrue
+2198/2294linie95.8152%,614/800gałęzie76.7500%,combined90.8856%,zeroexclusions,
+pełnepermodule wstage5.md. Same3pakietyetapowe,nie końcowyM8/CV/JSzakres.
+Dokumenty/spójnośćUTF8/linki/PowerShellsyntax/stagednames/diffcheck sprawdzone.
+Main/CVrefsniezmienione;trackedruntime/data/runsbrak. Nadalczekamy na brakującą
+końcówkępromptu;odbiórpozostaje dla otrzymanegozakresu,nie nieznanychwymagań.

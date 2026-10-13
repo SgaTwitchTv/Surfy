@@ -702,3 +702,30 @@ gps.jsonl. Spójność fizycznych plików/manifestu/recovery pozostaje etap6.
 Filtry repo używają created_at trip i server_received_at obserwacji:>=from i <to,
 from>=to jest błędem. HTTP parsowanie RFC3339 do integer ms,keyset cursor i reszta
 filtrów UI nadal wymagane w etapie6;wewnętrzny offset ich nie zastępuje.
+
+
+## Doprecyzowanie etapu 5 — trwała podstawa kontekstu autoryzacji
+
+Replay i analysis job pamiętają wewnętrzną, niezmienną podstawę autoryzacji:
+OWN(actor_id,trip_id) albo SHARE(actor_id,trip_id,share_id). Podstawa pochodzi
+z uwierzytelnionej sesji i aktualnej DB podczas tworzenia kontekstu, nigdy
+z żądania klienta. Identyfikatory podstawy nie są publicznym DTO.
+SHARE wymaga tego samego rekordu, właściwego analityka i trip, aktywnego
+ANALYST, READ_ANALYZE oraz revoked_at IS NULL. Nowy grant nie zastępuje starego
+w istniejącym replay/jobie. Nie ma automatycznego fallbacku do innej podstawy.
+
+Revoke → ponowny share bez odczytu pomiędzy tymi mutacjami nadal unieważnia
+stary kontekst. Read/control/close starego replay dają neutralne404; nowy replay
+może powstać na nowym grancie. Jobs sprawdzają dokładny grant przed plikami,
+analizą, publikacją, odczytem statusu i cancel. Nieważny job jest oznaczany jako
+trwale nieważny/cancelled. Sesja, credential, expiry i security_version nadal
+obowiązują niezależnie od podstawy. Właściciel nie zmienia podstawy wykonania
+cudzego zadania przez odczyt jego statusu lub próbę zamknięcia.
+
+Końcowa kontrola sesji i konkretnego grantu oraz publikacja manifestu raportu
+są serializowane względem revokacji przez transakcję BEGIN IMMEDIATE.
+Nie oznacza to transakcyjnego recovery filesystem/DB; granice awarii zapisu
+pozostają jak w etapie5, pełna koordynacja nagrania w etapie6.
+Raport już poprawnie opublikowany jest danymi właściciela. Jego świeży odczyt
+jest niezależną operacją O/S; nowe udostępnienie może pozwolić czytać taki
+raport, lecz nigdy nie ożywia starego handle zadania.
