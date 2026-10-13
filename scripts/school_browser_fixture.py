@@ -1,5 +1,6 @@
 """Synthetic test harness with production KDF; prints only local server addresses."""
 import json
+import os
 import socket
 import tempfile
 import threading
@@ -24,9 +25,13 @@ def main():
         cfg=Config(f'http://127.0.0.1:{port}',(f'127.0.0.1:{port}',),b'a'*32,b'b'*32,port=port,smtp_port=smtp.server_address[1])
         with Database(storage) as db:
             service=AccountsService(Repository(db),cfg)  # real N131072, never test injection
+            fixture=None
+            if os.environ.get('GW_RESOURCE_FIXTURE')=='1':
+                from scripts.school_resource_fixtures import populate
+                fixture=populate(service.repo,service.passwords.hash('Browser password 123!'))
             server=AccountsHTTPServer(('127.0.0.1',port),service)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
-            print(json.dumps({'url':cfg.base_url,'mailbox':f'http://127.0.0.1:{mailbox.server_port}'}),flush=True)
+            print(json.dumps({'url':cfg.base_url,'mailbox':f'http://127.0.0.1:{mailbox.server_port}', 'trips':None if fixture is None else {k:v['id'] for k,v in fixture['trips'].items()}}),flush=True)
             try:input()
             finally:
                 server.shutdown();server.server_close();service.close()
