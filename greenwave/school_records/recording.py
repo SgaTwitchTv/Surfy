@@ -13,7 +13,7 @@ from .writes import fields,revision
 class Recording:
     def __init__(self,policy):
         self.policy,self.repo=policy,policy.repo;self.storage=self.repo.database.storage
-        self.raw=Raw(self.storage);self.boot=self.repo.new_id();self.lock=threading.RLock();self.contexts={}
+        self.raw=Raw(self.storage);self.boot=self.repo.new_id();self.lock=threading.RLock();self.contexts={};self.failed_starts={}
         self.fault=lambda boundary:None
         self.recover()
         self.stop=threading.Event();self.thread=threading.Thread(target=self.watch,daemon=True,name='school-recording-revocations');self.thread.start()
@@ -24,6 +24,7 @@ class Recording:
         try:self.policy.accounts.credential_observers.remove(self.reconcile_credentials)
         except ValueError:pass
         with self.lock:
+            self.retry_failed_starts()
             for ctx in list(self.contexts.values()):
                 try:self.finish_context(ctx,'shutdown',system=True)
                 except Exception:ctx['logger'].close_unfinished()
@@ -35,6 +36,7 @@ class Recording:
 
     def reconcile_credentials(self):
         with self.lock:
+            self.retry_failed_starts()
             for ctx in list(self.contexts.values()):
                 try:
                     row,_=self.policy.accounts.sessions.lookup(ctx['raw'],touch=False)
@@ -62,6 +64,7 @@ class Recording:
     def start(self,raw,body,key,request_id):
         fields(body,{'trip_id'});operation_key(key);identifier(body['trip_id'])
         with self.lock:
+            self.retry_failed_starts()
             with self.repo.atomic(request_id) as (repo,c):
                 row,actor=self.policy.accounts.sessions.lookup(raw,connection=c)
                 trip=repo.own_trip(c,actor,body['trip_id'])
@@ -77,10 +80,12 @@ class Recording:
                 run_id=repo.new_id();nid=repo.new_id()
                 repo.transition_trip(actor,trip['id'],trip['revision'],'STARTING',run_id=run_id)
                 c.execute("INSERT INTO recording_operations(id,trip_id,actor_id,kind,idempotency_key,request_hash,state,created_at,parent_session_id,boot_id) VALUES(?,?,?,'START',?,?,'PENDING',?,?,?)",(nid,trip['id'],actor.user_id,key,request_hash(body),repo.clock(),row['id'],self.boot))
-            logger=RunLogger(self.storage.run(actor.user_id,trip['id'],run_id).parent)
-            ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock()}
-            self.contexts[nid]=ctx
+            logger=None
             try:
+                self.fault('start-path')
+                logger=RunLogger(self.storage.run(actor.user_id,trip['id'],run_id).parent)
+                ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock()}
+                self.contexts[nid]=ctx
                 self.fault('start-intent')
                 now=utc(repo.clock())
                 logger.start({'start_time':now,'corridor_id':'school-synthetic','timebase':'SIMULATION','dataset':'SYNTHETIC','school_owner_id':actor.user_id,'school_trip_id':trip['id']},run_id=run_id)
@@ -93,12 +98,61 @@ class Recording:
                     self.policy.accounts.sessions.lookup(raw,connection=c)
                     t=repo.own_trip(c,actor,trip['id']);repo.transition_trip(actor,trip['id'],t['revision'],'RECORDING')
                     c.execute("UPDATE recording_operations SET state='APPLIED',result_ref=? WHERE id=?",(self.raw.root({**dict(t),'run_id':run_id}).relative_to(self.storage.root).as_posix(),nid))
-                return self.dto(ctx)
-            except Exception:
-                logger.close_unfinished()
-                self.interrupt(trip['id'],'START_FAILED',request_id)
+            except Exception as error:
+                # The committed intention exists even if path/logger/context creation failed.
                 self.contexts.pop(nid,None)
+                self.failed_starts[nid]={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,
+                    'run_id':run_id,'logger':logger,'request_id':request_id,
+                    'cause':type(error.__cause__ if isinstance(error.__cause__,OSError) else error).__name__}
+                self.retry_failed_starts()
+                # RunLogger wraps filesystem errors in ValueError; keep them server failures.
+                if isinstance(error,ValueError) and isinstance(error.__cause__,OSError):
+                    raise OSError('Recording start unavailable') from None
                 raise
+            return self.dto(ctx)
+
+    @staticmethod
+    def close_failed_logger(logger):
+        """Close without a manifest, including failure of the convenience close method."""
+        if logger is None:return True
+        stream=logger.stream
+        logger.active=False
+        try:
+            logger.close_unfinished()
+        except Exception:
+            pass
+        # Keep the captured stream reachable if close_unfinished clears its reference.
+        try:
+            if stream is not None and not stream.closed:stream.close()
+        except Exception:
+            logger.stream=stream
+            return False
+        logger.stream=logger.writer=None
+        return True
+
+    def retry_failed_starts(self):
+        """Retry local cleanup independently of active contexts; SQLite remains authoritative."""
+        with self.lock:
+            for nid,item in list(self.failed_starts.items()):
+                closed=self.close_failed_logger(item['logger'])
+                try:
+                    with self.repo.database.transaction() as c:
+                        op=c.execute("SELECT state FROM recording_operations WHERE id=? AND trip_id=? AND actor_id=? AND boot_id=? AND kind='START'",
+                            (nid,item['trip_id'],item['owner_id'],self.boot)).fetchone()
+                        if op is None:raise Conflict('Missing failed start intention')
+                        changed=c.execute("UPDATE trips SET status='INTERRUPTED',ended_at=?,revision=revision+1 WHERE id=? AND owner_id=? AND run_id=? AND status IN ('STARTING','RECORDING')",
+                            (self.repo.clock(),item['trip_id'],item['owner_id'],item['run_id'])).rowcount
+                        if op['state'] in {'PENDING','APPLIED'}:
+                            c.execute("UPDATE recording_operations SET state='FAILED' WHERE id=?",(nid,))
+                        if changed:
+                            self.repo.audit(c,None,'RECORDING_INTERRUPTED','TRIP',item['trip_id'],
+                                'START_FAILED:'+item['cause'],item['request_id'])
+                    if closed:self.failed_starts.pop(nid,None)
+                except Exception as error:
+                    # Retain controlled IDs and exception classes only, not paths/secret payloads.
+                    item['cleanup_cause']=type(error).__name__
+                    # No claim of releasing the SQLite reservation until the transaction commits.
+
 
     def journal(self,oid,request_id):
         with self.lock:

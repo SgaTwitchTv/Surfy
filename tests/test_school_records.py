@@ -35,6 +35,245 @@ class RecordsTests(Fixture):
         with self.db.connection() as c:t=dict(c.execute('SELECT * FROM trips WHERE id=?',(tid,)).fetchone())
         return self.storage.run(t['owner_id'],tid,t['run_id'])/'raw.csv'
 
+    def test_failed_start_storage_run_after_intent_releases_reservation(self):
+        rec=self.server.resources.recorder;trip=self.new_trip('Failed path')
+        self.use('other');second=self.new_trip('Next user');self.use('driver')
+        def fail_path(*args):
+            with self.db.connection() as c:
+                t=c.execute('SELECT status FROM trips WHERE id=?',(trip['id'],)).fetchone()
+                op=c.execute("SELECT state FROM recording_operations WHERE trip_id=? AND kind='START'",(trip['id'],)).fetchone()
+            self.assertEqual((t[0],op[0]),('STARTING','PENDING'))
+            raise OSError('synthetic path preparation failure')
+        with patch.object(rec.storage,'run',side_effect=fail_path):
+            status,data,_=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'p'*32})
+        self.assertNotIn('synthetic path',json.dumps(data))
+        with self.db.connection() as c:
+            state=c.execute('SELECT status FROM trips WHERE id=?',(trip['id'],)).fetchone()[0]
+            intent=c.execute("SELECT state FROM recording_operations WHERE trip_id=? AND kind='START'",(trip['id'],)).fetchone()[0]
+        self.assertFalse(any(ctx['trip_id']==trip['id'] for ctx in rec.contexts.values()))
+        self.use('other')
+        next_status=self.request('POST',PREFIX+'/navigation',{'trip_id':second['id']},{'Idempotency-Key':'q'*32})[0]
+        self.assertEqual((status,state,intent,next_status),(503,'INTERRUPTED','FAILED',201))
+
+    def failed_start_state(self,tid):
+        with self.db.connection() as c:
+            trip=dict(c.execute('SELECT * FROM trips WHERE id=?',(tid,)).fetchone())
+            intent=dict(c.execute("SELECT * FROM recording_operations WHERE trip_id=? AND kind='START'",(tid,)).fetchone())
+            audits=c.execute("SELECT count(*) FROM audit_events WHERE resource_id=? AND action='RECORDING_INTERRUPTED'",(tid,)).fetchone()[0]
+        return trip,intent,audits
+
+    def test_failed_start_constructor_context_and_partial_files(self):
+        from greenwave.telemetry import RunLogger
+        rec=self.server.resources.recorder;captured=[]
+        def logger(root):
+            obj=RunLogger(root);captured.append(obj);return obj
+        for boundary in ['constructor','start-intent','start-files','start-recording']:
+            with self.subTest(boundary=boundary):
+                trip=self.new_trip(boundary)
+                def fail(point):
+                    if point==boundary:raise OSError('synthetic start failure')
+                rec.fault=fail
+                with patch('greenwave.school_records.recording.RunLogger',side_effect=OSError('synthetic constructor') if boundary=='constructor' else logger):
+                    status=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':hashlib.sha256(boundary.encode()).hexdigest()})[0]
+                rec.fault=lambda _:None
+                self.assertEqual(status,503)
+                t,op,audits=self.failed_start_state(trip['id'])
+                self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+                self.assertFalse(any(v['trip_id']==trip['id'] for v in rec.contexts.values()))
+                self.assertFalse(rec.failed_starts)
+                root=self.storage.run(t['owner_id'],t['id'],t['run_id'])
+                self.assertFalse((root/'complete.json').exists())
+                if boundary!='constructor':
+                    obj=captured[-1];self.assertFalse(obj.active);self.assertIsNone(obj.stream)
+                if boundary in {'start-files','start-recording'}:
+                    before={p.name:p.read_bytes() for p in root.iterdir()}
+                    self.assertIn('raw.csv',before);self.assertIn('metadata.json',before)
+                    self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':hashlib.sha256(boundary.encode()).hexdigest()})[0],409)
+                    self.assertEqual(before,{p.name:p.read_bytes() for p in root.iterdir()})
+                    self.assertEqual(self.failed_start_state(trip['id'])[2],1)
+        self.use('other');self.start(self.new_trip('After failures'),key='z'*32)
+
+    def test_failed_start_actual_recording_commit_rollback(self):
+        import sqlite3
+        rec=self.server.resources.recorder;trip=self.new_trip('Commit rollback')
+        original=self.repo.__class__.transition_trip
+        def fail(repo,actor,tid,expected,status,**kw):
+            result=original(repo,actor,tid,expected,status,**kw)
+            if status=='RECORDING':raise sqlite3.OperationalError('synthetic transaction failure')
+            return result
+        with patch.object(self.repo.__class__,'transition_trip',new=fail):
+            self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'t'*32})[0],503)
+        t,op,audits=self.failed_start_state(trip['id'])
+        self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+        self.assertFalse(rec.contexts);self.start(self.new_trip('Next'))
+
+    def test_failed_start_close_failure_falls_back_to_stream_close(self):
+        from greenwave.telemetry import RunLogger
+        rec=self.server.resources.recorder;trip=self.new_trip('Close failure');streams=[];loggers=[]
+        def fail(point):
+            if point=='start-recording':
+                obj=next(iter(rec.contexts.values()))['logger'];loggers.append(obj);streams.append(obj.stream)
+                raise OSError('synthetic start failure')
+        rec.fault=fail
+        with patch.object(RunLogger,'close_unfinished',side_effect=OSError('synthetic close wrapper failure')):
+            self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'c'*32})[0],503)
+        rec.fault=lambda _:None
+        self.assertTrue(streams[0].closed);self.assertFalse(loggers[0].active);self.assertIsNone(loggers[0].stream)
+        self.assertFalse(rec.contexts);self.assertFalse(rec.failed_starts)
+        self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'INTERRUPTED')
+
+    def test_failed_start_cleanup_db_retry_without_context_and_no_duplicate_audit(self):
+        import sqlite3
+        rec=self.server.resources.recorder;rec.stop.set();rec.thread.join(timeout=5)
+        for boundary in ['path','start-recording']:
+            with self.subTest(boundary=boundary):
+                self.use('driver');trip=self.new_trip(boundary);observed=[]
+                def fail(point):
+                    if point=='start-recording' and boundary==point:
+                        obj=next(v for v in rec.contexts.values() if v['trip_id']==trip['id'])['logger']
+                        observed.append(obj.stream);raise OSError('synthetic partial start')
+                rec.fault=fail;original_audit=rec.repo.audit
+                def unavailable(*args,**kwargs):
+                    if len(args)>5 and str(args[5]).startswith('START_FAILED:'):raise sqlite3.OperationalError('synthetic cleanup database unavailable')
+                    return original_audit(*args,**kwargs)
+                with patch.object(rec.repo,'audit',side_effect=unavailable):
+                    if boundary=='path':
+                        with patch.object(rec.storage,'run',side_effect=OSError('synthetic path failure')):
+                            response=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':hashlib.sha256(boundary.encode()).hexdigest()})
+                    else:response=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':hashlib.sha256(boundary.encode()).hexdigest()})
+                    self.assertEqual(response[0],503);rec.fault=lambda _:None
+                    t,op,audits=self.failed_start_state(trip['id'])
+                    self.assertEqual((t['status'],op['state'],audits),('STARTING','PENDING',0))
+                    self.assertFalse(any(v['trip_id']==trip['id'] for v in rec.contexts.values()))
+                    self.assertEqual(len(rec.failed_starts),1)
+                    if observed:self.assertTrue(observed[0].closed)
+                    self.use('other');next_trip=self.new_trip('Blocked next')
+                    self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':next_trip['id']},{'Idempotency-Key':hashlib.sha256(('next'+boundary).encode()).hexdigest()})[0],409)
+                # The same entry point called by the watchdog retries even with no active ctx.
+                rec.reconcile_credentials();rec.reconcile_credentials()
+                t,op,audits=self.failed_start_state(trip['id'])
+                self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+                self.assertFalse(rec.failed_starts)
+                nav=self.start(next_trip,key=hashlib.sha256(('next'+boundary).encode()).hexdigest());self.assertEqual(self.finish(nav,key=hashlib.sha256(('finish'+boundary).encode()).hexdigest())[0],200)
+
+    def test_failed_start_cleanup_stream_retry_keeps_handle_until_closed(self):
+        rec=self.server.resources.recorder;rec.stop.set();rec.thread.join(timeout=5)
+        trip=self.new_trip('Stream close retry');seen=[]
+        class FailingClose:
+            def __init__(self,stream):self.stream=stream;self.fail=True
+            @property
+            def closed(self):return self.stream.closed
+            def close(self):
+                if self.fail:raise OSError('synthetic stream close failure')
+                self.stream.close()
+        def fail(point):
+            if point=='start-recording':
+                obj=next(iter(rec.contexts.values()))['logger'];obj.stream=FailingClose(obj.stream);seen.append(obj.stream)
+                raise OSError('synthetic partial start')
+        rec.fault=fail
+        self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'u'*32})[0],503)
+        rec.fault=lambda _:None;self.assertFalse(rec.contexts);self.assertEqual(len(rec.failed_starts),1)
+        self.assertFalse(seen[0].closed);self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'INTERRUPTED')
+        seen[0].fail=False;rec.reconcile_credentials();rec.reconcile_credentials()
+        self.assertTrue(seen[0].closed);self.assertFalse(rec.failed_starts);self.assertEqual(self.failed_start_state(trip['id'])[2],1)
+
+    def test_failed_start_cleanup_restart_and_revoked_session(self):
+        import sqlite3
+        from greenwave.school_records.recording import Recording
+        rec=self.server.resources.recorder;rec.stop.set();rec.thread.join(timeout=5);trip=self.new_trip('Restart cleanup')
+        original_audit=rec.repo.audit
+        def unavailable(*args,**kwargs):
+            if len(args)>5 and str(args[5]).startswith('START_FAILED:'):raise sqlite3.OperationalError('synthetic cleanup unavailable')
+            return original_audit(*args,**kwargs)
+        with patch.object(rec.repo,'audit',side_effect=unavailable),patch.object(rec.storage,'run',side_effect=OSError('synthetic path failure')):
+            self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'r'*32})[0],503)
+        self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'STARTING')
+        with patch.object(rec.repo,'audit',side_effect=unavailable):rec.close()
+        self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'STARTING')
+        self.server.resources.recorder=Recording(rec.policy);fresh=self.server.resources.recorder
+        self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'INTERRUPTED')
+        self.assertEqual(self.failed_start_state(trip['id'])[1]['state'],'FAILED')
+        self.assertFalse(fresh.contexts)
+        trip=self.new_trip('Revoke during start');raw=self.cookies['gw_session'];entered=threading.Event();release=threading.Event()
+        def barrier(point):
+            if point=='start-recording':entered.set();self.assertTrue(release.wait(5))
+        fresh.fault=barrier
+        # Derive the current session ID in the test, never via a client supplied owner.
+        row,_=self.service.sessions.lookup(raw)
+        def revoke():
+            self.assertTrue(entered.wait(5))
+            with self.db.transaction() as c:c.execute('UPDATE browser_sessions SET revoked_at=? WHERE id=?',(self.now,row['id']))
+            release.set()
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            pending=pool.submit(revoke)
+            response=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'v'*32});pending.result(timeout=5)
+        fresh.fault=lambda _:None;self.assertEqual(response[0],401)
+        t,op,audits=self.failed_start_state(trip['id']);self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+        self.assertFalse(any(v['trip_id']==trip['id'] for v in fresh.contexts.values()))
+        self.use('other');self.start(self.new_trip('After revoked start'),key='w'*32)
+
+    def test_failed_start_watchdog_retries_cleanup_without_active_context(self):
+        import sqlite3
+        rec=self.server.resources.recorder;trip=self.new_trip('Watchdog cleanup')
+        unavailable=threading.Event();unavailable.set();committing=threading.Event()
+        original=rec.repo.audit
+        def audit(*args,**kwargs):
+            if len(args)>5 and str(args[5]).startswith('START_FAILED:'):
+                if unavailable.is_set():raise sqlite3.OperationalError('synthetic cleanup unavailable')
+                result=original(*args,**kwargs);committing.set();return result
+            return original(*args,**kwargs)
+        with patch.object(rec.repo,'audit',side_effect=audit):
+            with patch.object(rec.storage,'run',side_effect=OSError('synthetic path failure')):
+                self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'d'*32})[0],503)
+            self.assertEqual(self.failed_start_state(trip['id'])[0]['status'],'STARTING');self.assertFalse(rec.contexts)
+            unavailable.clear();self.assertTrue(committing.wait(5),'watchdog did not retry')
+            with rec.lock:self.assertFalse(rec.failed_starts)
+        t,op,audits=self.failed_start_state(trip['id'])
+        self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+        self.use('other');self.start(self.new_trip('Watchdog released'),key='e'*32)
+
+    def test_failed_start_before_reservation_commit_creates_no_files_or_cleanup(self):
+        import sqlite3
+        rec=self.server.resources.recorder;trip=self.new_trip('Before commit')
+        original=self.repo.__class__.transition_trip
+        def fail(repo,actor,tid,expected,status,**kw):
+            result=original(repo,actor,tid,expected,status,**kw)
+            if status=='STARTING':raise sqlite3.OperationalError('synthetic reservation rollback')
+            return result
+        with patch.object(self.repo.__class__,'transition_trip',new=fail),patch('greenwave.school_records.recording.RunLogger') as logger:
+            self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':'b'*32})[0],503)
+            logger.assert_not_called()
+        with self.db.connection() as c:
+            self.assertEqual(c.execute('SELECT status FROM trips WHERE id=?',(trip['id'],)).fetchone()[0],'PLANNED')
+            self.assertEqual(c.execute('SELECT count(*) FROM recording_operations WHERE trip_id=?',(trip['id'],)).fetchone()[0],0)
+            self.assertEqual(c.execute("SELECT count(*) FROM audit_events WHERE resource_id=? AND action='RECORDING_INTERRUPTED'",(trip['id'],)).fetchone()[0],0)
+        self.assertFalse(rec.contexts);self.assertFalse(rec.failed_starts)
+        self.assertFalse(self.storage.trip(self.users['driver']['id'],trip['id']).exists())
+        self.start(trip,key='b'*32)
+
+    def test_failed_start_real_partial_files_and_initial_append(self):
+        from greenwave.telemetry import RunLogger,write_new
+        rec=self.server.resources.recorder;seen=[]
+        def make_logger(root):
+            obj=RunLogger(root);seen.append(obj);return obj
+        for phase in ['metadata','writer','append']:
+            with self.subTest(phase=phase):
+                trip=self.new_trip(phase);key=hashlib.sha256(phase.encode()).hexdigest()
+                def partial(path,value):
+                    write_new(path,value);raise OSError('synthetic failure after metadata fsync')
+                target={'metadata':'greenwave.telemetry.write_new','writer':'greenwave.telemetry.csv.DictWriter','append':'greenwave.telemetry.RunLogger.append'}[phase]
+                kw={'side_effect':partial} if phase=='metadata' else {'side_effect':OSError('synthetic writer construction')} if phase=='writer' else {'return_value':False}
+                with patch('greenwave.school_records.recording.RunLogger',side_effect=make_logger),patch(target,**kw):
+                    self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':key})[0],503)
+                t,op,audits=self.failed_start_state(trip['id'])
+                self.assertEqual((t['status'],op['state'],audits),('INTERRUPTED','FAILED',1))
+                root=self.storage.run(t['owner_id'],t['id'],t['run_id']);before={p.name:p.read_bytes() for p in root.iterdir()}
+                self.assertIn('metadata.json',before);self.assertNotIn('complete.json',before)
+                self.assertFalse(seen[-1].active);self.assertIsNone(seen[-1].stream);self.assertFalse(rec.contexts)
+                self.assertEqual(self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id']},{'Idempotency-Key':key})[0],409)
+                self.assertEqual(before,{p.name:p.read_bytes() for p in root.iterdir()})
+        self.use('other');self.start(self.new_trip('Partial start released'),key='j'*32)
+
     def test_full_write_record_correct_share_revoke_archive(self):
         trip=self.new_trip();nav=self.start(trip)
         obsbody={'signal_id':'synthetic-light','state':'RED','event_type':'STATE_SEEN','source_event_id':'record-event'}
