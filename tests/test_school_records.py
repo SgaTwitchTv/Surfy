@@ -73,7 +73,7 @@ class RecordsTests(Fixture):
             for who in ['other','analyst','admin',None]:
                 self.use(who);self.assertEqual(self.request(method,PREFIX+path,body)[0],401 if who is None else 404)
             self.use('driver')
-        for body in [{'title':'x','mode':'SIMULATION','owner_id':self.users['admin']['id']},{'title':'x','mode':True},{'title':'x','mode':'LIVE'}]:self.assertEqual(self.post('/trips',body)[0],422)
+        for body in [{'title':'x','mode':'SIMULATION','owner_id':self.users['admin']['id']},{'title':'x','mode':True},{'title':'x','mode':'SIMULATION','route_version_id':False},{'title':'x','mode':'SIMULATION','route_version_id':''},{'title':'x','mode':'LIVE'}]:self.assertEqual(self.post('/trips',body)[0],422)
         for body in [{'expected_revision':True,'title':'x'},{'expected_revision':1,'raw_ref':'x'},{'expected_revision':1}]:self.assertEqual(self.request('PATCH',PREFIX+'/trips/'+trip['id'],body)[0],422)
         nav=self.start(trip)
         invalid={'signal_id':'x','state':'UNKNOWN','event_type':'STATE_START','source_event_id':'x'}

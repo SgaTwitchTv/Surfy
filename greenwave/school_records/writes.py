@@ -33,6 +33,7 @@ class Writes:
 
     def create(self,raw,body,request_id):
         fields(body,{'title','mode'},{'note','route_version_id'})
+        if body.get('route_version_id') is not None:identifier(body['route_version_id'])
         if body['mode']=='LIVE' and not body.get('route_version_id'):raise AuthError(422,'VALIDATION')
         with self.unit(raw,request_id) as (repo,c,_,actor):
             return trip_dto(repo.create_trip(actor,body['title'],body.get('note',''),body['mode'],body.get('route_version_id')),True)
