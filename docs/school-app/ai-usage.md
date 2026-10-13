@@ -2768,3 +2768,87 @@ potwierdzone serve --help. Logger/migracje/solver/GATE i refs main/vision-camera
 niezmienione. Dokumentacja i 10 PNG staged konkretnymi nazwami; bez runtime/DB/
 mailboxów/sekretów/środowisk/tymczasowych raportów. Git diff --cached --check PASS.
 Etap7 przygotowany do odbioru, STOP przed8. Końcowy hash dokumentacji w odpowiedzi.
+
+
+## 2026-10-13 — etap8, widoki analityka i administratora
+
+Prompt użytkownika rozpoczynał się: „to lecimy etap 8 — widoki analityka i administratora”,
+„implementuj etap 8 do działającego i sprawdzalnego końca”, „nie zaczynaj etapu 9”.
+Zaakceptowany commit etapu7:0499805f282d39944989fb88232fda8cfdb256c9.
+Poniżej wierny skrócony zapis zakresu promptu; pełna treść pozostaje w tym samym czacie.
+
+1. Przeczytać AGENTS i contract/stage4–7/stages/run/ai-usage; sprawdzić HEAD/status/staging,
+   zachować niezwiązane zmiany. Nie czytać data/runs/starego runtime/school, syntetyczne
+   dane dla testów/screenshotów; nie zmieniać main/CV/solver/logger/raw/live gate,
+   zastosowanych migracji, uprawnień; bez emergency admin/global GPS/media sharing,
+   push/merge/rewrite i bez przejścia do9.
+2. Macierz przed implementacją: DRIVER own/published, ANALYST own/shared i robocze
+   konfiguracje, ADMIN konta/role/block/audit/draft/publish/archive bez cudzych danych.
+3. Osobny scope=shared, readonly details/corrections, poprawić findObservation context,
+   bez edit/archive/correction/share/export/CV; czyścić widok/polling po revoke/archive/
+   roli/sesji. Regrant nie ożywia starych kontekstów.
+4. Laboratorium GPS replay create/status/play/pause/seek/rate/close; GPS_QUALITY jobs
+   queued/running/complete/cancelled/failed, cancel, raporty/metryki/jednostki.
+   Execution pinned actor/session/credential/OWN lub SHARE; owner management osobno.
+   Polling epoch/generation bez spóźnionych danych po zmianie konta.
+5. Admin API safe list/details ifneeded, role/block/unblock/audit, DTO bez hashów/
+   sekretów/device/GPS/paths. Mutacje ADMIN+reauth+CSRF+Origin+revision+reason, realne
+   hasło; brak client timestamp i automatycznego odtwarzania starej mutacji.
+6. Atomowe security_version/audit/revocation/grants/context/recording; unblock nie
+   odtwarza praw i nie aktywuje pending email. Last ACTIVE ADMIN również concurrent;
+   self change wylogowuje. Brak ustawiania cudzego hasła/reset tokenu.
+7. SQL allowlista/projekcja audytu kont/auth/security/admin/config, date/action/actor
+   paging, bez prywatnych korekt/notatek/GPS/fileID/payloads/secrets.
+8. Config ROUTE/SIGNAL/MODEL published/draft/create/edit/publish/archive. ANALYST tylko
+   własne draft, ADMIN wszystkie, jeśli kontrakt nie rozstrzyga. Domain validators,
+   unknown/nonfinite/geometria/phases/relations/limits, bez filesystem/URL resolution.
+   Klient nie nadaje nested FIELD_CHECKED/verified. Publish nie weryfikuje terenowo;
+   immutable published, nowe wersje, zachowane historyczne trip snapshot/hash/live blocks.
+9. Dark/lime styl7, client+server validation,409 aktualny rekord i świadomy retry,
+   dialog keyboard/Escape/focus/aria,1360×900/390×844/320px/local table scroll/longdata,
+   bez niezaimplementowanej nawigacji/telefonu/CV.
+10. RealHTTP/tempSQLite/synthetic backend matrix, role/reauth/CSRF/spoof/revision,
+    lastadminrace, revocations/recording/contexts, own/shared/export/CV denied;
+    config kinds/ownership/publish/immutable/snapshot/nestedflags/no paths;
+    audit bez private facts.
+11. JS role/capability/reauth/revision/config/polling/401/accountswitch, real browser
+    trzy role, revoke/regrant, admin operations, draft/publish/driver/no live unblock,
+    trzy rozmiary/keyboard/errors; rzeczywiste screenshoty obejrzeć; jawny per-module
+    line/branch coverage bez twierdzenia o całej aplikacji; właściwa regresja.
+12. stage8/contract/run/README/ai-usage/stages:7accepted literalhash,8prepared,
+    9–12todo; małe konkretne commity, syntheticPNGonly, bez DB/runtime/mailbox/secrets.
+
+AI samodzielnie napisało school_admin service i strict schemas/adapters, zintegrowało
+role API z Policy/Repository.atomic, bezpieczną projekcję audytu, pending activation
+safeguard, proactive context revocation i snapshot nowych nagrań. Dodało moduły UI
+roles/role_views/laboratory, jawny scope i readonly shared, polling/access cleanup,
+serial controls i rzeczywisty postęp Play przez POST; nie zmieniło GET w mutację.
+Dodało testy HTTP/Event/Barrier/fixtures, Node/V8 oraz realne Playwright scenariusze;
+wykonało testy i samodzielnie obejrzało 8 syntetycznych PNG. Nie użyto subagentów/innych
+czatów, ReactLY kodu/frameworka/bundlera ani generowanych makiet jako dowodu działania.
+
+Weryfikacja wyników AI: rzeczywiste DB/HTTP/SMTP; 10 testów administracji PASS (34.572s),
+157 szkolnych (333.206s) i 383 pełnej regresji (341.814s), OK z jednym pominięciem:
+Windows symlink, privilege WinError1314; test junction PASS. Pełna regresja w izolowanym
+eksporcie bez runtime/data/runs, nie w prywatnej bazie. 25 Node/V8 (6 modułów logiki),
+7 bazowych Node oraz mobile_flow PASS. Browser ról i UI etapu7 w trzech rozmiarach PASS;
+auth/SMTP/resources desktop/phone PASS. Python, pięć szkolnych pakietów i telemetry:
+3058/3239 linii (94.4119%), 898/1220 gałęzi (73.6066%), combined88.7194%.
+Same szkolne pakiety:89.7812%; nowy admin:86.4353% combined. JS:99.39% linii,
+95.38% gałęzi,98.55% funkcji; roles100/100/100. Mianowniki i raport per moduł w stage8.md.
+To pomiary etapowe, nie końcowe pokrycie M8/CV/JS.
+
+AI popełniło i naprawiło błędy: fixture revision0 zamiast1, verification jako string
+zamiast obiektu, zbyt częsty test reauth, za krótki test Idempotency-Key, usuwanie
+callbacku przy dwukrotnym close, wyścig controls replay. Początkowa regresja155 szkolnych
+oraz381 wszystkich testów miała błąd close i stare oczekiwanie404 dla nowego admin API.
+Końcowa powtórka157/383 jest czysta. Legacy/runtime nadal404, admin anonim401/DRIVER403
+po wdrożeniu. Przegląd screenshotów poprawił mylący status shared, precyzję seek,
+metryki, footer i zbyt wysokie wiersze audytu (pełny powód rozwijany). Nie ukryto
+Tkinter; w Windows jest dostępny. Nie deklarowano Linux/Docker/drogi/kamery/telefonu.
+
+Każdy tekst użytkownika renderowany textContent, statics na jawnej allowliście.
+Sekrety nie są zwracane lub zapisywane w localStorage/logach/Git. Przed stagingiem:
+diff check, konkretne pliki i kontrola niedozwolonych DB/runtime/sekretów. PUBLISH-01
+nadal osobny problem historyczny; bez rewrite/force push. Etap8 przygotowany do odbioru,
+9–12 Do zrobienia; STOP po etapie8.

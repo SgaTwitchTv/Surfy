@@ -237,3 +237,9 @@ UI acceptance and real screenshots: [stage 7](docs/school-app/stage7.md).
 Complete manual setup and walkthrough: [school runbook, section 13](docs/school-app/run.md#13-etap-7--pełny-ręczny-odbiór-interfejsu).
 Browser E2E: `node scripts/check_school_ui.cjs` (Playwright/Edge, new synthetic DB).
 No bundler or frontend framework is required to run the portal.
+
+
+GreenWave School — widoki trzech ról, administracja i konfiguracje (etap8):
+[uruchomienie i ręczny odbiór](docs/school-app/run.md#14-etap8--odbiór-trzech-ról),
+[implementacja i dowody](docs/school-app/stage8.md). Admin nie uzyskuje dostępu do
+cudzych przejazdów; publikacja konfiguracji nie odblokowuje rekomendacji live.

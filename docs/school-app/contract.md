@@ -4,7 +4,8 @@ Wersja 1.1, 2026-10-12. **Przygotowany do końcowego odbioru**.
 Decyzje produktowe zostały ustalone aktualnym promptem użytkownika i zastępują
 propozycje z commita 3ff54d9d3c4a7dfb23b53db9095f69f1112427f0.
 Nie wracamy do wyboru D1–D7. Ten dokument określa implementację przyszłych
-etapów; portal szkolny jest usunięty i jeszcze nie działa według tego kontraktu.
+etapów; bieżące działające zakresy i dowody są w stage3–8.md. Stan na wejściu
+etapu2 (usunięty prototyp) opisany niżej jest historyczny.
 
 ## 1. Stan repozytorium i prywatność
 
@@ -799,3 +800,29 @@ inne pozostają niedostępne. Status + bezpieczny enum X-School-Error umożliwia
 odmowę bez dużego Blob i bez anulowanego konkurencyjnego GET. GET ponownie sprawdza
 prawa i integralność; HEAD nie jest grantem ani gwarancją przyszłego transferu.
 Brak nowych tabel, scopes, ról lub zmiany DTO zapisów. Szczegóły/testy w stage7.md.
+
+
+## Doprecyzowanie etapu8 — role, audyt i konfiguracje
+
+Ustalenia ról v1 bez zmiany. ANALYST edytuje wyłącznie własne DRAFT; ADMIN wszystkie
+DRAFT. Odczyt draftów wspólnej konfiguracji jest dostępny ANALYST/ADMIN; publish i
+archive wyłącznie ADMIN po świeżym reauth. Dodany PATCH /config/versions/{id} przyjmuje
+payload, expected_revision, reason (C30b); istniejąca wersja określa kind/logical_id.
+C32 zgodnie z kontraktem ma reason i idempotentną archiwizację konkretnego ID.
+C28–C29 bezpieczne DTO; cursor dla listy, offset zachowany dla wcześniejszych klientów.
+C33/C35 podpisane keyset cursory,25/max100,UTC ms w DTO/RFC3339 w filtrach dat.
+Admin audit ma allowlistę akcji i resource_type USER/CONFIG oraz bezpieczną projekcję
+powodu. Nie wybiera zdarzeń prywatnego przejazdu lub korekty.
+
+Konfiguracje ROUTE/SIGNAL/MODEL mają ścisłe allowlisty i istniejące domain validators,
+nie samą poprawność JSON. Source geometrii: attribution, description?, url? wyłącznie
+metadata http/https bez credentials, bez pobierania. Pozostałe URL i ścieżki zabronione.
+Geometria dostaje obiekt verification.status=DRAFT; sygnały i relacje UNVERIFIED/false.
+Klient nigdy nie dostarcza tych flag, także nested. Publish ich nie podnosi. Nowe
+nagrania szkolne przechowują school_route_snapshot (ID/payload/hash) w metadata;
+archiwizacja/publikacja nowej wersji nie zmieniają starych snapshotów, hashów ani raw.
+
+Zmiana konta atomowo unieważnia credentials i niewłaściwe grants; po commit wspólny
+callback finalizuje nagrywanie i unieważnia wykonanie kontekstów. Owner management
+jobów jest nadal odrębne od execution authorization; nie podmienia podstawy OWN/SHARE.
+Admin nie ma wyjątku dla cudzych danych. Unblock nie aktywuje niezweryfikowanego email.

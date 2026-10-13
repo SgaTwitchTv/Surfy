@@ -706,7 +706,7 @@ granic jest opisana w końcowej sekcji stage6.md.
 
 Frontend jest vanilla JS/ES modules, nie wymaga npm ani bundlera do uruchomienia.
 Użyj nowego syntetycznego root. Portal nie importuje starych kont/nagrań. Konto
-analityka i administratora ma tu własne dane; dodatkowe ekrany ról dopiero etap 8.
+analityka i administratora ma własne dane; dodatkowe ekrany ról działają od etapu 8.
 
 Terminal 1, PowerShell:
 
@@ -812,3 +812,109 @@ Browser skrypt tworzy nową tymczasową DB/SMTP, używa realnego KDF i testuje t
 rozmiary przy browser timezone America/New_York. Generuje rzeczywiste screenshoty
 w docs/school-app/screenshots; nie zapisuje haseł/tokenów/mailboxa. Raporty tymczasowe
 w artifacts nie trafiają do Git. Wyniki i jawny zakres coverage: stage7.md.
+
+
+## 14. Etap8 — odbiór trzech ról
+
+Vanilla JS, bez nowego frameworka/bundlera. Świeży root, serwer zatrzymany przy init.
+Nie wskazuj starego runtime/school, data/runs albo prywatnych nagrań.
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+git branch --show-current
+git status --short
+$schoolStage8Root = Join-Path (Get-Location) ('runtime\stage8-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolStage8Root" init
+python -m greenwave.school_data --root "$schoolStage8Root" status
+python -m greenwave.school_accounts secrets --output "$schoolStage8Root\deployment-keys.json"
+python -m scripts.school_resource_fixtures --root "$schoolStage8Root" --confirm-synthetic
+$env:SCHOOL_SECRET_FILE = "$schoolStage8Root\deployment-keys.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_MODE = 'plain'
+$env:SMTP_SENDER = 'greenwave@example.test'
+$env:SMTP_USER = ''
+$env:SMTP_PASSWORD = ''
+python -m greenwave.school_accounts serve --root "$schoolStage8Root" --host 127.0.0.1 --port 8770
+```
+
+Fixture jest wewnętrznym operatorskim CLI na PUSTEJ syntetycznej DB. Pyta getpass i
+confirmation, nie ma hasła w argv ani publicznego provisioning HTTP. Tworzy
+`driver@example.test`, `other@example.test`, `analyst@example.test`, `admin@example.test`
+z wybranym hasłem i syntetycznymi ukończonymi przejazdami. Ma MODEL draft/published
+zgodne ze schematem domenowym. Nie podłącza kamery ani YOLO. Nie używaj dla realnych osób.
+Ctrl+C zatrzymuje serwer. Dla register/reset w osobnym terminalu:
+
+```powershell
+python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771
+```
+
+Portal http://127.0.0.1:8770, skrzynka operatora http://127.0.0.1:8771.
+Realny profil wymaga HTTPS/Secure cookies/SMTP TLS jak w sekcji9. Istniejący właściwy
+root aktualizuj wyłącznie przy zatrzymanym serwerze przez `school_data --root <root> migrate`.
+Bazowy GreenWave pozostaje osobną lokalną aplikacją: `python -m greenwave`; nowy portal
+nie przekazuje do niej HTTP. Nie uruchamiaj zapisu bazowego GreenWave na prywatnych
+katalogach podczas szkolnego odbioru.
+
+Scenariusz ręczny, najlepiej osobne profile/incognito przeglądarek:
+
+1. DRIVER: własne tabele/konto i PUBLISHED konfiguracje; bez menu Konta/Audyt/Draft.
+   Bezpośrednie `/school/api/v1/admin/users` daje403; anonim daje401.
+2. ANALYST: Udostępnione przejazdy → Synthetic shared → obserwacja/historia.
+   Nie ma edit/correct/share/archive/export/CV. Query jest scope=shared.
+3. Laboratorium: Otwórz GPS replay, Play/Pause, seek0, rate2, Zamknij. Zleć GPS_QUALITY;
+   poczekaj COMPLETE, rozwiń raport, sprawdź metryki/jednostki. Anulowanie nie usuwa
+   wcześniej opublikowanego raportu. Nie ma rekomendacji live.
+4. DRIVER cofa zgodę w szczegółach. Otwarty widok analityka usuwa dane przy następnym
+   sprawdzeniu. Ponowne share nie ożywia starego replay/joba; nowy kontekst działa.
+   Właściciel nadal ma dozwolone status/cancel joba.
+5. ANALYST → Konfiguracje → Nowy draft MODEL. Podaj logical_id, reason, popraw settings.
+   DRAFT edytujesz z revision; nie możesz publikować lub zmieniać cudzego draft.
+   Szablony ROUTE/SIGNAL w edytorze JSON zawierają nazwane pola z jednostkami domeny.
+   Celowo błędny JSON, fazy lub nested verified zostają odrzucone.
+6. ADMIN → Konto → Potwierdź tożsamość hasłem. Konfiguracje → DRAFT → szczegóły →
+   Opublikuj z powodem. DRIVER widzi PUBLISHED; opis mówi, że to nie weryfikacja terenowa.
+   Zmiany wymagają nowej wersji; archive nie kasuje historycznego payloadu.
+7. ADMIN → Konta → Zarządzaj kontem other. Zmień rolę z powodem. Stara sesja other
+   dostaje401. Zaloguj other ponownie, zablokuj konto; następny odczyt ponownie401.
+   Unblock nie przywraca wcześniejszych credentials/grants. PENDING nie aktywuje się
+   zwykłym unblock. Degradacja/blokada ostatniego aktywnego ADMIN daje409.
+8. Po >5 minutach bez reauth mutacja daje REAUTH_REQUIRED. Potwierdź hasło w Koncie,
+   wróć do panelu i świadomie ponów; żądanie nie wykonuje się automatycznie.
+9. Konflikt revision w dwóch kartach: zobacz aktualny rekord/payload, świadomie
+   przyjmij revision i zapisz ponownie. Nie nadpisuj automatycznie zmian.
+10. Audit: filtrowanie dat/akcji/actor, kolejne strony; rozwijany pełny powód. Brak
+    prywatnych powodów korekt, GPS i sekretów. Tab/Shift+Tab/Escape/focus restore,
+    1360×900,390×844,320px, lokalny scroll tabel i długie dane.
+
+Komendy testów:
+
+```powershell
+python -m unittest discover -s tests -p test_school_admin.py -v
+python -m unittest discover -s tests -p 'test_school*.py' -v
+python -m unittest discover -s tests -p 'test_*.py' -v
+node --test tests/school_roles.cjs tests/school_portal.cjs
+node --test --experimental-test-coverage --test-coverage-include="**/portal/roles.mjs" --test-coverage-include="**/portal/state.mjs" --test-coverage-include="**/portal/api.mjs" --test-coverage-include="**/portal/dates.mjs" --test-coverage-include="**/portal/filters.mjs" --test-coverage-include="**/portal/validation.mjs" tests/school_roles.cjs tests/school_portal.cjs
+.\.venv-school\Scripts\python.exe -m coverage run --branch --source=greenwave.school_admin,greenwave.school_accounts,greenwave.school_data,greenwave.school_resources,greenwave.school_records,greenwave.telemetry -m unittest discover -s tests -p 'test_school*.py' -v
+.\.venv-school\Scripts\python.exe -m coverage report -m
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_roles.cjs
+$env:GW_SCREENSHOT_ROOT = 'artifacts/stage8-stage7-regression'
+node scripts/check_school_ui.cjs
+node scripts/check_school_accounts.cjs
+node scripts/check_school_resources.cjs
+node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs
+node tests/mobile_flow.cjs
+```
+
+Coverage wymaga środowiska z pakietem coverage (istniejące .venv-school lub
+`python -m venv .venv-school`, potem pip install coverage). Node24 i Playwright/Edge
+jak w sekcji13, wyłącznie narzędzia testowe. E2E tworzą własne tymczasowe SQLite/SMTP,
+nie potrzebują uruchomionego serwera ani publicznego test endpointu. Nowe role screenshoty:
+`docs/school-app/screenshots/stage8-{desktop,phone}-{analyst,admin,configs,audit}.png`.
+GW_SCREENSHOT_ROOT pozwala zachować zaakceptowane screenshoty etapu7 podczas regresji.
+Pełna regresja w tym etapie jest wykonana w izolowanym eksporcie kodu bez runtime/data/runs;
+wyniki, zakres coverage i pominięcia w stage8.md. Etap9 nie rozpoczęty.
