@@ -3,6 +3,7 @@ Constructing it is not authentication. Browser DTOs must never supply this objec
 Roles and account state are fetched afresh inside each transaction.
 """
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from .errors import Denied, Conflict, Invalid
 from .storage import identifier
@@ -47,7 +48,21 @@ class RepositoryBase:
             raise Denied("Trip is unavailable")
         return row
 
+    @contextmanager
+    def atomic(self, request_id='internal'):
+        with self.database.transaction() as connection:
+            class BoundDatabase:
+                storage = self.database.storage
+                @contextmanager
+                def transaction(inner, write=True): yield connection
+                @contextmanager
+                def connection(inner): yield connection
+            unit = type(self)(BoundDatabase(), clock=self.clock, ids=self.ids)
+            unit.audit_request_id = request_id
+            yield unit, connection
+
     def audit(self, c, actor, action, resource_type, resource_id, reason="", request_id="internal", outcome="OK"):
+        if request_id == 'internal': request_id = getattr(self,'audit_request_id','internal')
         # Deliberately no arbitrary payload/GPS/token field.
         c.execute("INSERT INTO audit_events(actor_id,actor_type,action,resource_type,resource_id,reason,server_at,request_id,outcome) VALUES (?,?,?,?,?,?,?,?,?)",
                   (actor.user_id if actor else None,"USER" if actor else "SYSTEM",action,resource_type,resource_id,reason,self.clock(),request_id,outcome))

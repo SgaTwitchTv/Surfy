@@ -47,18 +47,22 @@ class EpochUpgradeTests(unittest.TestCase):
             times={t:[r[1] for r in c.execute('PRAGMA table_info('+t+')') if r[2]=='REAL'] for t in tables}
             objects={(r[0],r[1]) for r in c.execute("SELECT type,name FROM sqlite_master WHERE type IN ('index','trigger')")}
             checksum=load()[0].checksum;c.close()
-            result=migrate(s);self.assertEqual(result['version'],2);self.assertTrue(Path(result['backup']).exists())
+            result=migrate(s);self.assertEqual(result['version'],len(load()));self.assertTrue(Path(result['backup']).exists())
             self.assertIsNone(migrate(s)['backup'])
             with Database(s) as db:
                 with db.connection() as c:
                     after_objects={(r[0],r[1]) for r in c.execute("SELECT type,name FROM sqlite_master WHERE type IN ('index','trigger')")}
-                    self.assertEqual(objects,after_objects)
+                    self.assertTrue(objects.issubset(after_objects))
                     self.assertEqual(c.execute("SELECT seq FROM sqlite_sequence WHERE name='audit_events'").fetchone()[0],100)
                     self.assertEqual(c.execute('SELECT checksum FROM schema_migrations WHERE version=1').fetchone()[0],checksum)
                     for t in tables:
                         after=[dict(r) for r in c.execute('SELECT * FROM '+t)]
                         if t=='schema_migrations':after=after[:1]
                         expected=[{k:seconds_to_ms(v) if k in times[t] else v for k,v in row.items()} for row in before[t]]
+                        if t=='observations':
+                            for row in expected:row['historical']=0
+                        if t=='recording_operations':
+                            for row in expected:row.update(parent_session_id=None,boot_id=None,observation_id=None)
                         self.assertEqual(after,expected,t)
                         for row in c.execute('PRAGMA table_info('+t+')'):
                             if row[1] in times[t]:self.assertEqual(row[2],'INTEGER')
@@ -107,10 +111,10 @@ class EpochUpgradeTests(unittest.TestCase):
                 self.assertTrue(Path(str(s.database)+'-wal').exists())
                 backup(s,old)
             finally:writer.close()
-            migrate(s);self.assertEqual(status(s)['version'],2)
+            migrate(s);self.assertEqual(status(s)['version'],len(load()))
             result=restore(s,old);self.assertTrue(Path(result['previous']).exists())
-            self.assertEqual(result['schema'],{'version':1,'latest':2,'current':False})
-            self.assertEqual(status(s),{'version':1,'latest':2,'current':False})
+            self.assertEqual(result['schema'],{'version':1,'latest':len(load()),'current':False})
+            self.assertEqual(status(s),{'version':1,'latest':len(load()),'current':False})
             with self.assertRaises(SchemaError):Database(s).__enter__()
             again=s.root/'backups'/'v1-again.sqlite3';backup(s,again)
             migrate(s);self.assertTrue(status(s)['current'])

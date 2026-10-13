@@ -64,9 +64,11 @@ class RunLogger:
             except OSError: pass
         self.stream = self.writer = None
 
-    def start(self, metadata):
+    def start(self, metadata, *, run_id=None):
         if self.active: raise ValueError('Nagranie już trwa')
-        self.run_id = uuid4().hex
+        if run_id is not None and (not isinstance(run_id,str) or not RUN_ID.fullmatch(run_id)):
+            raise ValueError("Invalid controlled run ID")
+        self.run_id = run_id or uuid4().hex
         self.error = None
         self.sequence = 0
         self.counts = {}
@@ -120,6 +122,14 @@ class RunLogger:
             self.active = False
         except (OSError, ValueError, TypeError) as error:
             self._fail(error)
+
+    def close_unfinished(self):
+        """Close an interrupted writer without inventing a completion manifest."""
+        try:
+            if self.stream:self.stream.close()
+        finally:
+            self.stream=self.writer=None
+            self.active=False
 
     def _directory(self, run_id):
         if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):

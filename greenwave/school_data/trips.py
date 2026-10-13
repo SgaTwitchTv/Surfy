@@ -121,7 +121,7 @@ class Trips:
                 if existing["request_hash"]!=request_hash or existing["trip_id"]!=trip_id: raise Conflict("Idempotency key reused with different content")
                 return dict(existing)
             op=self.new_id()
-            c.execute("INSERT INTO recording_operations VALUES (?,?,?,?,?,?,'PENDING',NULL,?)",(op,trip_id,actor.user_id,kind,key,request_hash,self.clock()))
+            c.execute("INSERT INTO recording_operations(id,trip_id,actor_id,kind,idempotency_key,request_hash,state,result_ref,created_at) VALUES (?,?,?,?,?,?,'PENDING',NULL,?)",(op,trip_id,actor.user_id,kind,key,request_hash,self.clock()))
             return dict(c.execute("SELECT * FROM recording_operations WHERE id=?",(op,)).fetchone())
 
     def finish_intent(self, actor, operation_id, state, result_ref=None):

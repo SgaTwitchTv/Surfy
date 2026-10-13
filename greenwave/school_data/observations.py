@@ -5,7 +5,8 @@ from .validation import text, observation, canonical, request_hash, operation_ke
 
 
 class Observations:
-    def add_observation(self, actor, trip_id, signal_id, state, event_type, source_event_id, *, source="MANUAL", measured_at=None, geometry_hash=None):
+    def add_observation(self, actor, trip_id, signal_id, state, event_type, source_event_id, *, source="MANUAL", measured_at=None, geometry_hash=None, historical=False):
+        if type(historical) is not bool: raise Invalid('Invalid history marker')
         text(signal_id,1,120); text(source_event_id,1,128)
         observation({"state":state,"event_type":event_type,"valid":True})
         if source not in {"MANUAL","CV"}: raise Invalid("Invalid observation source")
@@ -18,12 +19,12 @@ class Observations:
             trip=self.own_trip(c,actor,trip_id)
             if trip["archived_at"] is not None: raise Conflict("Archived trip is immutable")
             existing=c.execute("SELECT * FROM observations WHERE trip_id=? AND source=? AND source_event_id=?",(trip_id,source,source_event_id)).fetchone()
-            values={"actor_id":actor.user_id,"signal_id":signal_id,"state":state,"event_type":event_type,"measured_at":measured_at,"geometry_hash":geometry_hash}
+            values={"actor_id":actor.user_id,"signal_id":signal_id,"state":state,"event_type":event_type,"measured_at":measured_at,"geometry_hash":geometry_hash,"historical":int(historical)}
             if existing:
                 if any(existing[k]!=v for k,v in values.items()): raise Conflict("Observation operation content changed")
                 return dict(existing)
             oid=self.new_id()
-            c.execute("INSERT INTO observations(id,trip_id,actor_id,signal_id,source,state,event_type,server_received_at,measured_at,geometry_hash,source_event_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",(oid,trip_id,actor.user_id,signal_id,source,state,event_type,self.clock(),measured_at,geometry_hash,source_event_id))
+            c.execute("INSERT INTO observations(id,trip_id,actor_id,signal_id,source,state,event_type,server_received_at,measured_at,geometry_hash,source_event_id,historical) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",(oid,trip_id,actor.user_id,signal_id,source,state,event_type,self.clock(),measured_at,geometry_hash,source_event_id,int(historical)))
             self.audit(c,actor,"OBSERVATION_ADDED","OBSERVATION",oid)
             return dict(c.execute("SELECT * FROM observations WHERE id=?",(oid,)).fetchone())
 
@@ -52,10 +53,11 @@ class Observations:
                 result.append({**dict(row),"effective":effective,"correction_revision":revision})
             return result
 
-    def correct_observation(self, actor, observation_id, expected_revision, after, reason, operation_id):
+    def correct_observation(self, actor, observation_id, expected_revision, after, reason, operation_id, *, request_fingerprint=None):
         observation(after); text(reason,3,500); operation_key(operation_id)
         if type(expected_revision) is not int or expected_revision<0: raise Invalid("Invalid revision")
-        fingerprint=request_hash({"observation":observation_id,"revision":expected_revision,"after":after,"reason":reason})
+        if request_fingerprint is not None: digest(request_fingerprint)
+        fingerprint=request_fingerprint or request_hash({"observation":observation_id,"revision":expected_revision,"after":after,"reason":reason})
         with self.database.transaction() as c:
             row=c.execute("SELECT * FROM observations WHERE id=?",(observation_id,)).fetchone()
             if not row: raise Denied("Observation unavailable")
