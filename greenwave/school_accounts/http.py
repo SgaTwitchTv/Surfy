@@ -8,7 +8,7 @@ from http.cookies import SimpleCookie,CookieError
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
-from greenwave.school_data.errors import DataError
+from greenwave.school_data.errors import DataError, Denied, Invalid, Conflict
 from .errors import AuthError
 
 PREFIX='/school/api/v1'
@@ -34,6 +34,8 @@ class AccountsHTTPServer(ThreadingHTTPServer):
     block_on_close=True
     def __init__(self,address,service):
         self.service=service
+        from greenwave.school_resources.api import ResourceAPI
+        self.resources=ResourceAPI(service)
         self.request_slots=threading.BoundedSemaphore(64)
         self.tls_context=None
         super().__init__(address,Handler)
@@ -41,6 +43,10 @@ class AccountsHTTPServer(ThreadingHTTPServer):
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(service.config.tls_cert,service.config.tls_key)
             self.tls_context=context
+
+    def server_close(self):
+        super().server_close()
+        self.resources.close()
 
     def get_request(self):
         connection,address=super().get_request()
@@ -117,6 +123,9 @@ class Handler(BaseHTTPRequestHandler):
             return forwarded
         return peer
 
+    def resource_body(self):
+        return self.body(None)
+
     def body(self,fields):
         if self.headers.get('Transfer-Encoding'):raise AuthError(400,'BAD_REQUEST')
         if self.headers.get('Content-Type','').lower() not in {'application/json','application/json; charset=utf-8'}:raise AuthError(415,'CONTENT_TYPE')
@@ -129,7 +138,9 @@ class Handler(BaseHTTPRequestHandler):
             value=json.loads(self.rfile.read(size).decode('utf-8'),object_pairs_hook=duplicate_checked,
                              parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite JSON')))
         except (ValueError,UnicodeError):raise AuthError(400,'BAD_REQUEST') from None
-        if not isinstance(value,dict) or set(value)!=fields:raise AuthError(422,'VALIDATION',{'form':'Brakujące lub niedozwolone pola.'})
+        if not isinstance(value,dict) or (fields is not None and set(value)!=fields):raise AuthError(422,'VALIDATION',{'form':'Brakujące lub niedozwolone pola.'})
+        if fields is None:
+            return value
         if any(not isinstance(v,str) for v in value.values()):raise AuthError(422,'VALIDATION',{'form':'Pola muszą być tekstem.'})
         try:
             for field in value.values():field.encode('utf-8')
@@ -139,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):self.dispatch(False)
     def do_POST(self):self.dispatch(True)
     def do_PATCH(self):self.reply(404,{'error':{'code':'NOT_FOUND'}})
-    do_DELETE=do_PATCH
+    def do_DELETE(self):self.dispatch(True)
     do_PUT=do_PATCH
     do_OPTIONS=do_PATCH
     do_HEAD=do_PATCH
@@ -150,7 +161,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             ip=self.check_request(mutation)
             parsed=urlsplit(self.path)
-            if parsed.scheme or parsed.netloc or parsed.query:raise AuthError(400,'BAD_REQUEST')
+            if parsed.scheme or parsed.netloc or parsed.fragment:raise AuthError(400,'BAD_REQUEST')
             path=parsed.path;svc=self.server.service;cookies=self.cookies()
             if not mutation and path in STATIC:
                 asset=Path(__file__).parent/'web'/STATIC[path]
@@ -160,6 +171,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200,{'data':{'ok':True,'deployment_mode':svc.config.profile},'request_id':request_id});return
             if not path.startswith(PREFIX):raise AuthError(404,'NOT_FOUND')
             route=path[len(PREFIX):]
+            handled,data,status=self.server.resources.dispatch(self,route,parsed.query,cookies.get('gw_session',''))
+            if handled:
+                from greenwave.school_resources.files import Transfer
+                if isinstance(data,Transfer):self.transfer(data,request_id)
+                else:self.reply(status,{'data':data,'request_id':request_id})
+                return
+            if parsed.query:raise AuthError(400,'BAD_REQUEST')
+            if self.command not in {'GET','POST'}:raise AuthError(404,'NOT_FOUND')
             if not mutation:
                 if route=='/auth/preflight':
                     svc.limits.take('PREFLIGHT_IP',ip,100,900000)
@@ -219,8 +238,38 @@ class Handler(BaseHTTPRequestHandler):
             error={'code':exc.code,'message':'Operacja nie jest dostępna.'}
             if exc.fields:error['fields']=exc.fields
             self.reply(exc.status,{'error':error,'request_id':request_id},[self.cookie('gw_session')] if exc.status==401 else [],extra)
-        except (DataError,sqlite3.Error,OSError,ValueError,TypeError):
+        except (Denied,Invalid,Conflict) as exc:
+            status=404 if isinstance(exc,Denied) else 409 if isinstance(exc,Conflict) else 422
+            self.reply(status,{'error':{'code':'NOT_FOUND' if status==404 else 'CONFLICT' if status==409 else 'VALIDATION'},'request_id':request_id})
+        except (ValueError,TypeError):
+            self.reply(422,{'error':{'code':'VALIDATION'},'request_id':request_id})
+        except (DataError,sqlite3.Error,OSError):
             self.reply(503,{'error':{'code':'UNAVAILABLE','message':'Spróbuj ponownie później.'},'request_id':request_id})
         except Exception:
             self.reply(500,{'error':{'code':'SERVER_ERROR','message':'Operacja nie powiodła się.'},'request_id':request_id})
 
+
+    def transfer(self, transfer, request_id):
+        # No buffering of large files. Authorize before headers and every <=64KiB.
+        try:
+            transfer.validate()
+            self.send_response(transfer.status)
+            self.send_header('Connection','close');self.close_connection=True
+            self.send_header('X-Request-ID',request_id)
+            for key,value in {'Content-Length':str(transfer.size),'Content-Type':transfer.mime,
+                              'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+                              'Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'",
+                              **(transfer.headers or {})}.items():self.send_header(key,value)
+            if self.server.service.config.secure:self.send_header('Strict-Transport-Security','max-age=31536000')
+            self.end_headers()
+            remaining=transfer.size
+            while remaining:
+                try:
+                    transfer.validate()
+                    block=transfer.stream.read(min(65536,remaining))
+                    if not block:break
+                    self.wfile.write(block);remaining-=len(block)
+                except (AuthError,DataError,OSError):
+                    # Headers already sent: terminate transfer, never append a JSON error.
+                    break
+        finally:transfer.close()

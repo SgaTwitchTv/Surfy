@@ -50,7 +50,7 @@ class Fixture(unittest.TestCase):
         c=http.client.HTTPConnection('127.0.0.1',self.cfg.port,timeout=10)
         h={'Cookie':'; '.join(k+'='+v for k,v in self.cookies.items())}
         payload=None
-        if method=='POST':
+        if method in {'POST','DELETE'}:
             payload=json.dumps(body if body is not None else {})
             h.update({'Content-Type':'application/json','Origin':self.cfg.origin,'X-CSRF-Token':self.csrf})
         h.update(headers or {})
@@ -134,8 +134,9 @@ class HTTPTests(Fixture):
         self.preflight()
         for header in [{'Origin':'http://evil.test'},{'X-CSRF-Token':'wrong'},{'Host':'evil.test'}]:
             self.assertEqual(self.request('POST',PREFIX+'/auth/request-reset',{'email':'x@example.test'},header)[0],403)
-        for path in ['/api/state','/api/control','/api/recordings','/runtime/school.sqlite3','/backups/v1.sqlite3','/school/api/v1/admin/users','/school/api/v1/trips','/school/static/../../runtime/school.sqlite3']:
+        for path in ['/api/state','/api/control','/api/recordings','/runtime/school.sqlite3','/backups/v1.sqlite3','/school/api/v1/admin/users','/school/static/../../runtime/school.sqlite3']:
             self.assertEqual(self.request('GET',path)[0],404)
+        self.assertEqual(self.request('GET',PREFIX+'/trips')[0],401)
         status,data,headers=self.request('GET',PREFIX+'/health');self.assertEqual(status,200);self.assertEqual(data['data'],{'ok':True,'deployment_mode':'demo'})
         response=dict(headers)
         self.assertEqual(response['Cache-Control'],'no-store');self.assertEqual(response['X-Content-Type-Options'],'nosniff')
