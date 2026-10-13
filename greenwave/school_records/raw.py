@@ -34,6 +34,7 @@ class Raw:
             if (root/name).stat().st_size>1048576:raise ValueError('Metadata size limit')
         meta=json.loads((root/'metadata.json').read_text(encoding='utf-8'))
         complete=json.loads((root/'complete.json').read_text(encoding='utf-8'))
+        if not isinstance(meta,dict) or not isinstance(complete,dict) or not isinstance(complete.get('sha256'),dict):raise ValueError('Invalid manifest shape')
         if any(v.get('run_id')!=trip['run_id'] or v.get('schema_version')!=1 for v in [meta,complete]):raise ValueError('Manifest identity')
         if meta.get('school_owner_id')!=trip['owner_id'] or meta.get('school_trip_id')!=trip['id']:raise ValueError('Metadata owner binding')
         for name in ['metadata.json','raw.csv']:
@@ -41,8 +42,9 @@ class Raw:
         from collections import Counter
         from .paging import rfc3339
         from greenwave.school_accounts.errors import AuthError
+        from greenwave.school_data.errors import Invalid
         try:ended=rfc3339(complete['end_time'])
-        except (AuthError,KeyError):raise ValueError('Invalid completion time') from None
+        except (AuthError,Invalid,KeyError,ValueError):raise ValueError('Invalid completion time') from None
         if trip.get('started_at') is not None and ended<trip['started_at']:raise ValueError('Completion precedes start')
         rows=self.rows(trip)
         if dict(Counter(r['event'] for r in rows))!=complete.get('counts'):raise ValueError('Event counts mismatch')

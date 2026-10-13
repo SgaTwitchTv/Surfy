@@ -369,3 +369,14 @@ class RecordsTests(Fixture):
             try:self.server.resources.writes.correct(raw,oid,{'expected_revision':0,'client_operation_id':key*32,'changes':{'state':'GREEN'},'reason':'race'},'race');return 'OK'
             except Exception as error:return type(error).__name__
         with concurrent.futures.ThreadPoolExecutor(2) as pool:self.assertCountEqual(list(pool.map(change,['a','b'])),['OK','Conflict'])
+
+    def test_malformed_manifest_shapes_do_not_abort_recovery(self):
+        rec=self.server.resources.recorder
+        for index,(name,value) in enumerate([('complete.json',[]),('metadata.json',[]),('complete.json',{'sha256':None})]):
+            trip=self.new_trip();nav=self.start(trip,key=str(index)*32)
+            rec.fault=lambda point:(_ for _ in ()).throw(OSError('lost final commit')) if point=='finish-commit' else None
+            self.assertEqual(self.finish(nav,key=str(index+3)*32)[0],503)
+            ctx=rec.contexts.pop(nav['id']);ctx['logger'].close_unfinished()
+            path=self.raw_path(trip['id']).parent/name;path.write_text(json.dumps(value),encoding='utf-8');before=path.read_bytes()
+            rec.fault=lambda _:None;rec.recover()
+            self.assertEqual(self.get('/trips/'+trip['id'])[1]['data']['status'],'INTERRUPTED');self.assertEqual(path.read_bytes(),before)
