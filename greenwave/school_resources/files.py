@@ -71,11 +71,11 @@ class Files:
                 value.update(block)
         return value.hexdigest()
 
-    def run(self, raw, tid, owner_only=False):
-        _, _, trip, _ = self.policy.trip(raw, tid, owner_only, closed=True)
+    def run(self, raw, tid, owner_only=False, *, basis=None):
+        _, _, trip, _ = self.policy.bound_trip(raw, basis) if basis is not None else self.policy.trip(raw, tid, owner_only, closed=True)
         logger = ScopedLogger(self.storage, trip)
         root = logger._directory(trip['run_id'])
-        validate = lambda: self.policy.trip(raw, tid, owner_only, closed=True)
+        validate = (lambda: self.policy.bound_trip(raw, basis)) if basis is not None else (lambda: self.policy.trip(raw, tid, owner_only, closed=True))
         manifest = self.json(root / 'complete.json')
         metadata = self.json(root / 'metadata.json')
         expected_ref = (root / 'raw.csv').relative_to(self.storage.root).as_posix()

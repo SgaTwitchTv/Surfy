@@ -31,20 +31,25 @@ class Sessions:
     def forget_preauth(self,raw):
         with self.lock:self.preauth.pop(token_hash(raw),None)
 
-    def lookup(self,raw,touch=True):
+    def lookup(self,raw,touch=True,*,connection=None):
         try:key=token_hash(raw)
         except AuthError:raise AuthError(401,'UNAUTHORIZED') from None
+        if connection is not None:
+            return self._lookup(connection,raw,key,touch)
         with self.repo.database.transaction() as c:
-            row=c.execute("SELECT s.*,u.email_display,u.display_name,u.role,u.status,u.security_version AS current_version,u.revision AS user_revision FROM browser_sessions s JOIN users u ON u.id=s.user_id WHERE s.secret_hash=?",(key,)).fetchone()
-            now=self.repo.clock()
-            if not row or row['status']!='ACTIVE' or row['security_version']!=row['current_version'] or row['revoked_at'] is not None or row['absolute_expiry']<=now or row['last_activity_at']+1800000<=now:
-                raise AuthError(401,'UNAUTHORIZED')
-            expected_hash=hashlib.sha256(csrf(self.key,raw,row['id'],'session').encode()).hexdigest()
-            if not hmac.compare_digest(row['csrf_hash'],expected_hash):
-                raise AuthError(401,'UNAUTHORIZED')
-            if touch and now-row['last_activity_at']>=60000:
-                c.execute('UPDATE browser_sessions SET last_activity_at=? WHERE id=?',(now,row['id']))
-            return dict(row),Actor(row['user_id'],row['authenticated_at'])
+            return self._lookup(c,raw,key,touch)
+
+    def _lookup(self,c,raw,key,touch):
+        row=c.execute("SELECT s.*,u.email_display,u.display_name,u.role,u.status,u.security_version AS current_version,u.revision AS user_revision FROM browser_sessions s JOIN users u ON u.id=s.user_id WHERE s.secret_hash=?",(key,)).fetchone()
+        now=self.repo.clock()
+        if not row or row['status']!='ACTIVE' or row['security_version']!=row['current_version'] or row['revoked_at'] is not None or row['absolute_expiry']<=now or row['last_activity_at']+1800000<=now:
+            raise AuthError(401,'UNAUTHORIZED')
+        expected_hash=hashlib.sha256(csrf(self.key,raw,row['id'],'session').encode()).hexdigest()
+        if not hmac.compare_digest(row['csrf_hash'],expected_hash):
+            raise AuthError(401,'UNAUTHORIZED')
+        if touch and now-row['last_activity_at']>=60000:
+            c.execute('UPDATE browser_sessions SET last_activity_at=? WHERE id=?',(now,row['id']))
+        return dict(row),Actor(row['user_id'],row['authenticated_at'])
 
     def check_csrf(self,raw,row,value):
         expected=csrf(self.key,raw,row['id'],'session')

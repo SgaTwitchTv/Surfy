@@ -36,19 +36,19 @@ class Contexts:
 
     def replay_create(self, raw, tid, body):
         if body != {'mode': 'GPS'}: raise AuthError(422, 'REPLAY_MODE_UNAVAILABLE')
-        row, _, _, _ = self.policy.trip(raw, tid, closed=True)
-        trip, logger, _, _ = self.files.run(raw, tid)
+        row, _, _, basis = self.policy.basis_trip(raw, tid, closed=True)
+        trip, logger, _, _ = self.files.run(raw, tid, basis=basis)
         replay = GPSReplaySession(logger)
         try: replay.load(trip['run_id'])
         except ValueError: raise AuthError(409, 'GPS_REPLAY_UNAVAILABLE') from None
-        self.policy.trip(raw, tid, closed=True)
+        self.policy.bound_trip(raw, basis)
         with self.lock:
             self.purge()
             for hid, context in list(self.replays.items()):
                 if context['session_id'] == row['id']: del self.replays[hid]
             if len(self.replays) >= 64: raise AuthError(503, 'REPLAY_BUSY')
             hid = self.repo.new_id()
-            self.replays[hid] = {'session_id': row['id'], 'credential': row['secret_hash'], 'trip_id': tid,
+            self.replays[hid] = {'session_id': row['id'], 'credential': row['secret_hash'], 'trip_id': tid, 'authorization': basis,
                 'expiry': self.repo.clock()+1800000, 'replay': replay, 'tick': time.monotonic()}
             return self.replay_read(raw, hid)
 
@@ -58,7 +58,7 @@ class Contexts:
         context = self.replays.get(resource_id(hid))
         if not context or context['session_id'] != row['id'] or context['credential'] != row['secret_hash']:
             raise AuthError(404, 'NOT_FOUND')
-        try: self.policy.trip(raw, context['trip_id'], closed=True)
+        try: self.policy.bound_trip(raw, context['authorization'])
         except AuthError:
             del self.replays[hid]
             raise AuthError(404, 'NOT_FOUND') from None
@@ -102,17 +102,35 @@ class Contexts:
     def job_dto(job):
         return {k: job[k] for k in ('id', 'trip_id', 'type', 'status', 'report_id')}
 
-    def job_authorize(self, raw, job):
-        row, actor, trip, own = self.policy.trip(raw, job['trip_id'], closed=True)
-        if not own and (actor.user_id != job['actor_id'] or row['id'] != job['session_id'] or row['secret_hash'] != job['credential']):
+    def job_authorize(self, raw, job, *, execution=False):
+        row, actor = self.policy.session(raw)
+        if job['authorization_invalid']: raise AuthError(404, 'NOT_FOUND')
+        # Validate the job's original authorization even for owner management.
+        # Owner access to an existing job does not change its execution grant.
+        try:
+            with self.repo.database.transaction(False) as c:
+                trip = c.execute('SELECT * FROM trips WHERE id=?', (job['trip_id'],)).fetchone()
+                if trip is None: raise AuthError(404, 'NOT_FOUND')
+                self.policy.check_basis(c, job['authorization'], trip)
+                if trip['status'] != 'COMPLETE' or trip['archived_at'] is not None:
+                    raise AuthError(404, 'NOT_FOUND')
+                trip = dict(trip)
+        except AuthError:
+            job['authorization_invalid'] = True
+            job['cancelled'] = True
+            if job['status'] in {'QUEUED','RUNNING'}: job['status'] = 'CANCELLED'
+            raise
+        requester = (actor.user_id == job['actor_id'] and row['id'] == job['session_id']
+                     and row['secret_hash'] == job['credential'])
+        if not requester and (execution or trip['owner_id'] != actor.user_id):
             raise AuthError(404, 'NOT_FOUND')
         return trip
 
     def job_create(self, raw, tid, body):
         if body != {'type': 'GPS_QUALITY'}: raise AuthError(422, 'ANALYSIS_TYPE_UNAVAILABLE')
-        row, actor, trip, _ = self.policy.trip(raw, tid, closed=True)
+        row, actor, trip, basis = self.policy.basis_trip(raw, tid, closed=True)
         # Check complete manifest before allocating a job; recheck in the worker.
-        self.files.run(raw, tid)
+        self.files.run(raw, tid, basis=basis)
         with self.lock:
             self.purge()
             pending = [j for j in self.jobs.values() if j['status'] in {'QUEUED', 'RUNNING'}]
@@ -120,7 +138,7 @@ class Contexts:
             if len(pending) >= 22 or len(self.jobs) >= 1000: raise AuthError(503, 'ANALYSIS_BUSY')
             jid = self.repo.new_id()
             job = {'id': jid, 'trip_id': tid, 'actor_id': actor.user_id, 'session_id': row['id'],
-                   'credential': row['secret_hash'], 'type': 'GPS_QUALITY', 'status': 'QUEUED',
+                   'credential': row['secret_hash'], 'authorization': basis, 'authorization_invalid': False, 'type': 'GPS_QUALITY', 'status': 'QUEUED',
                    'report_id': None, 'cancelled': False, 'expiry': self.repo.clock()+1800000}
             self.jobs[jid] = job
             self.pool.submit(self.execute, raw, job)
@@ -131,24 +149,31 @@ class Contexts:
             with self.lock:
                 if job['cancelled']: job['status'] = 'CANCELLED'; return
                 job['status'] = 'RUNNING'
-            self.job_authorize(raw, job)
-            trip, logger, _, _ = self.files.run(raw, job['trip_id'])
+            self.job_authorize(raw, job, execution=True)
+            trip, logger, _, _ = self.files.run(raw, job['trip_id'], basis=job['authorization'])
+            self.job_authorize(raw, job, execution=True)
             analysis = RunAnalysis(logger).analyze(trip['run_id'])
-            self.job_authorize(raw, job)
+            self.job_authorize(raw, job, execution=True)
             with self.lock:
                 if job['cancelled']: job['status'] = 'CANCELLED'; return
-                rid = self.repo.new_id()
-                report = {'id': rid, 'trip_id': trip['id'], 'type': job['type'],
-                          'created_at': self.repo.clock(), 'source_raw_sha256': trip['raw_hash'],
-                          'diagnostic_only': True, 'metrics': analysis['gps_quality']}
-                root = self.files.storage._safe(self.files.storage.derived(trip['owner_id'], trip['id']) / rid)
-                root.mkdir(parents=True, exist_ok=False)
-                content = json.dumps(report, allow_nan=False, sort_keys=True).encode()
-                (root / 'report.json').write_bytes(content)
-                manifest = {'id': rid, 'trip_id': trip['id'], 'source_raw_sha256': trip['raw_hash'],
-                            'sha256': hashlib.sha256(content).hexdigest()}
-                (root / 'manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
-                job['report_id'], job['status'] = rid, 'COMPLETE'
+                # Serialize the last session/grant check and manifest publication
+                # against revoke/archive/security changes using BEGIN IMMEDIATE.
+                with self.repo.database.transaction() as c:
+                    current, _, trip, _ = self.policy.bound_trip(raw, job['authorization'], connection=c)
+                    if current['id'] != job['session_id'] or current['secret_hash'] != job['credential']:
+                        raise AuthError(404, 'NOT_FOUND')
+                    rid = self.repo.new_id()
+                    report = {'id': rid, 'trip_id': trip['id'], 'type': job['type'],
+                              'created_at': self.repo.clock(), 'source_raw_sha256': trip['raw_hash'],
+                              'diagnostic_only': True, 'metrics': analysis['gps_quality']}
+                    root = self.files.storage._safe(self.files.storage.derived(trip['owner_id'], trip['id']) / rid)
+                    root.mkdir(parents=True, exist_ok=False)
+                    content = json.dumps(report, allow_nan=False, sort_keys=True).encode()
+                    (root / 'report.json').write_bytes(content)
+                    manifest = {'id': rid, 'trip_id': trip['id'], 'source_raw_sha256': trip['raw_hash'],
+                                'sha256': hashlib.sha256(content).hexdigest()}
+                    (root / 'manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+                    job['report_id'], job['status'] = rid, 'COMPLETE'
         except AuthError:
             with self.lock: job['status'] = 'CANCELLED'
         except Exception:
