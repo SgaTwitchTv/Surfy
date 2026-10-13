@@ -789,3 +789,13 @@ utracie DB commit pozwala na recovery COMPLETE. Brak/błędny manifest lub brak
 zaufanej intencji daje INTERRUPTED, bez zmiany zakończonego raw.
 
 Dokładny zakres i sprawdzone granice awarii: [stage6.md](stage6.md).
+
+
+## Doprecyzowanie transportu etapu 7 — HEAD eksportu
+
+HEAD /school/api/v1/trips/{trip_id}/export używa tej samej polityki właściciela i
+integralności co GET, bez tworzenia ZIP/body. Tylko ta ścieżka obsługuje HEAD;
+inne pozostają niedostępne. Status + bezpieczny enum X-School-Error umożliwia UI
+odmowę bez dużego Blob i bez anulowanego konkurencyjnego GET. GET ponownie sprawdza
+prawa i integralność; HEAD nie jest grantem ani gwarancją przyszłego transferu.
+Brak nowych tabel, scopes, ról lub zmiany DTO zapisów. Szczegóły/testy w stage7.md.

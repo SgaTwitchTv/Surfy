@@ -2265,3 +2265,506 @@ niezmienione, staged wyłącznie cztery konkretne dokumenty. Jedyny skip Windows
 symlink WinError 1314, junction PASS; Tkinter i browser działały. Linux, Docker i
 sprzęt nie były wykonane. Bez runtime/DB/mailboxów/sekretów w Git, push/merge/rewrite.
 Etap 6 przygotowany do ponownego odbioru; nie rozpoczęto etapu 7.
+
+## Etap 7 — 2026-10-13: interfejs własnych danych
+
+Przyjęta baza: **eb6e61082e84ebf6b5797f02d634f4ec1df96f6e**.
+Pełny prompt etapu 7 (bez końcowych spacji w wierszach):
+
+```text
+dobra to teraz etap 7 — interfejs użytkownika, tabele i formularze greenwave school
+
+etap 6 zaakceptowany po niezależnym przeglądzie i testach
+
+zaakceptowany commit
+eb6e61082e84ebf6b5797f02d634f4ec1df96f6e
+
+kontynuuj w istniejącym worktree codex/school-app
+implementuj etap 7 do działającego, sprawdzonego końca
+nie kończ na projekcie lub planie
+nie zaczynaj etapu 8
+
+najpierw przeczytaj obowiązujące AGENTS.md oraz docs/school-app/contract.md, stage4.md, stage5.md, stage6.md, stages.md, run.md i ai-usage.md
+
+sprawdź aktualny head, status i staging
+zachowaj niezwiązane zmiany użytkownika
+
+zasady
+
+nie zmieniaj main ani codex/vision-camera
+
+nie czytaj prywatnego data/runs/ ani starego runtime/school/
+
+testy, screenshoty i demo wyłącznie na nowej syntetycznej bazie
+
+nie odtwarzaj usuniętego prototypu jako gotowej aplikacji
+
+nie zmieniaj solvera, loggera ani warunków rekomendacji live
+
+nie osłabiaj uprawnień, csrf, walidacji serwera, niezmienności raw ani związania kontekstów z konkretnym share
+
+nie zmieniaj działającego kontraktu api tylko dlatego, że łatwiej napisać frontend
+jeśli znajdziesz brak konieczny do ui, zrób małą uzasadnioną poprawkę z testem i dokumentacją
+
+nie przepisuj historii, nie pushuj i nie scalaj automatycznie
+
+krok 1 — zakres i projekt widoków
+
+w tym etapie budujemy wspólny interfejs kont oraz własnych danych użytkownika
+
+moje przejazdy
+
+moje obserwacje
+
+szczegóły przejazdu i historia korekt
+
+formularze tworzenia, edycji, archiwizacji, korekty i udostępnienia
+
+konto, zmiana hasła i wylogowanie
+
+minimalny scenariusz syntetycznego start i finish z etapu 6
+
+docelowe role analityka i administratora oraz ich dodatkowe widoki zostają na etap 8
+
+mapa nawigacji, pełny prędkościomierz, telefon, live i cv zostają na etap 9
+
+nie pokazuj niedziałających przycisków jako gotowych funkcji
+jeśli wspominasz o przyszłej funkcji, jasno oznacz jej stan
+
+kierunek wyglądu
+
+ciemny interfejs
+limonkowy akcent
+czytelna typografia
+spójne odstępy, formularze i komponenty
+jasna hierarchia informacji
+bez przeładowania diagnostyką
+
+jeśli lokalny design system ReactLY jest dostępny w tym środowisku i wcześniej wskazanym kontekście, możesz wykorzystać go jako inspirację
+nie uzależniaj wykonania od tego repo i nie kopiuj go bez przeglądu
+
+zachowaj istniejący frontend vanilla js i brak bundlera, jeśli nie ma konkretnego powodu do zmiany
+nie dodawaj frameworka i dużego zestawu zależności tylko dla tabel
+
+krok 2 — architektura frontendu
+
+podziel logikę na czytelne moduły
+
+api i obsługa błędów
+
+stan sesji
+
+walidacja formularzy
+
+filtry i paginacja
+
+widoki i komponenty
+
+nie twórz jednego ogromnego pliku
+
+nowe pliki statyczne dodaj do jawnej allowlisty serwera
+nie wystawiaj ogólnego katalogu filesystem
+
+zachowaj csp bez unsafe-inline
+bez inline onclick, eval i wstrzykiwania html z danych
+
+dane użytkownika renderuj bezpiecznie przez textContent lub równoważny mechanizm
+nie traktuj tytułu, notatki, nazwy ani powodu korekty jako html
+
+nie zapisuj haseł, bearer tokenów, linków resetu ani prywatnych rekordów w localStorage
+
+krok 3 — shell i konto
+
+zalogowany użytkownik dostaje czytelne menu własnych danych i konta
+
+wszystkie role mogą korzystać z własnych przejazdów i obserwacji
+rola nie daje automatycznego dostępu do cudzych danych
+
+zachowaj działające register, verify, login, reset, change-password, reauth, logout i logout-all
+
+ujednolić ich wygląd z resztą aplikacji
+
+po 401
+
+zatrzymaj polling i zależne żądania
+
+wyczyść prywatny stan widoków i dane starego konta
+
+pokaż login
+
+nie wykonuj automatycznie starej mutacji po ponownym zalogowaniu
+
+zmiana konta nie może pokazać list, zaznaczeń lub szczegółów poprzedniej osoby
+
+krok 4 — tabela moje przejazdy
+
+to ma być rzeczywista tabela danych z nagłówkami, dostępna zwykłemu kierowcy
+
+kolumny dobrane do istniejących dto
+
+tytuł
+data utworzenia
+trasa lub brak trasy
+tryb
+status
+akcje
+
+pokaż loading, pusty wynik, błąd i brak kolejnej strony
+
+filtry
+
+data od i do
+trasa
+status
+archiwum
+sortowanie
+
+daty wybrane jako dni lokalne przeliczaj na utc RFC3339 zgodnie z api
+koniec wybranego dnia ma być początkiem następnego dnia, nie 23:59:59
+uwzględnij DST
+strefę Europe/Warsaw i sposób wyświetlania dat pokaż jasno
+
+jeśli przeglądarka ma inną strefę, nie traktuj jej automatycznie jako Europe/Warsaw
+zastosuj poprawne przeliczenie albo udokumentowaną, jawną kontrolkę strefy
+bez zgadywania offsetu +01 lub +02
+
+paginacja przez next_cursor
+zmiana filtrów lub sortowania resetuje cursor
+
+po edycji lub archiwizacji odśwież właściwą listę
+nie doklejaj rekordów ze starego zapytania
+
+przy szybkim zmienianiu filtrów opóźniona odpowiedź wcześniejszego żądania nie może zastąpić aktualnych wyników
+użyj abortcontroller lub identyfikatora żądania
+
+krok 5 — tabela moje obserwacje
+
+druga rzeczywista filtrowalna tabela dostępna kierowcy
+
+lista ze wszystkich jego przejazdów
+trip_id jest opcjonalnym filtrem
+
+kolumny
+
+czas otrzymania
+przejazd
+sygnalizator
+źródło
+kolor
+rodzaj zdarzenia
+ważność
+informacja o korekcie i akcji
+
+pokaż wyraźnie wartość efektywną
+oryginał i historia są dostępne w szczegółach
+
+filtry
+
+data od i do
+przejazd
+trasa
+sygnalizator
+kolor
+rodzaj zdarzenia
+source
+valid
+sortowanie
+
+filtry koloru, typu i ważności dotyczą efektywnej wartości
+
+obsłuż cursory, loading, empty i błędy tak jak w przejazdach
+
+adnotację historyczną oznacz jasno
+nie pokazuj measured_at jako znanego, gdy jest null
+czas otrzymania nie udaje czasu zmiany światła
+
+nie pobieraj całej historii do pamięci tylko po to, żeby filtrować ją na kliencie
+
+krok 6 — formularze przejazdu
+
+utworzenie
+
+title, note, mode i dozwolona wersja trasy
+nie pozwalaj klientowi ustalać owner, role, status ani hashów
+
+live jest jeszcze niepodłączone
+nie oferuj uruchomienia live jako działającego
+jeśli dopuszczasz utworzenie planowanego live trip zgodnie z api, jasno wyjaśnij ograniczenie startu
+
+edycja
+
+tytuł i notatka
+expected_revision z aktualnego rekordu
+
+archiwizacja
+
+jawne potwierdzenie konkretnego przejazdu i powód
+informacja, że to archiwizacja, bez usunięcia raw
+bez przycisku fizycznego kasowania
+
+409 revision
+
+nie nadpisuj automatycznie nowszych danych
+pokaż aktualny rekord i możliwość ponownego świadomego zapisania zmian
+
+krok 7 — obserwacje i korekty
+
+formularz ręcznej obserwacji
+
+signal_id, state, event_type i kontrolowany source_event_id
+source MANUAL ustala backend
+
+źródłowy identyfikator zachowaj podczas retry tej samej operacji
+nowe zdarzenie dostaje nowy identyfikator
+
+STATE_SEEN i STATE_START opisz prostym językiem
+UNKNOWN nie może być początkiem fazy
+
+w aktywnym zapisie formularz jest jawnie przeznaczony dla pasażera
+widok kierowcy nie wymaga klikania podczas jazdy
+
+historyczna adnotacja zamkniętego przejazdu ma osobne wyjaśnienie
+nie udaje obserwacji live
+
+korekta
+
+pokaż oryginał i obecną wartość
+dozwolone state, event_type, valid
+wymagany powód
+expected_revision
+client_operation_id zachowany dla retry tego samego żądania
+
+zmiana payloadu wymaga nowej operacji i świadomego zapisu
+nie używaj tego samego klucza dla innych zmian
+
+historia korekt pokazuje autora, czas, powód oraz before i after
+
+krok 8 — udostępnianie i eksport
+
+właściciel może udostępnić complete niearchiwalny przejazd aktywnemu analitykowi przez dokładny email
+
+jasny komunikat
+udostępniasz przebieg gps, obserwacje i raporty tego przejazdu
+
+bez publicznej wyszukiwarki kont
+bez checkboxów eksportu lub cv, których v1 nie obsługuje
+
+cofnięcie używa aktualnego expected_share_id
+stare otwarte okno nie może cofnąć nowej zgody
+
+pokaż rzeczywisty status udostępnienia na podstawie api
+nie trzymaj go wyłącznie jako lokalny stan
+
+eksport tylko zgodnie z capabilities i uprawnieniami backendu
+
+obsłuż błędy integralności i wygaśnięcie sesji
+nie pobieraj dużego pliku do wielkiego blob w pamięci bez potrzeby
+użyj właściwego mechanizmu pobrania z autoryzowanym cookie
+
+ukrycie przycisku nie zastępuje kontroli serwera
+
+krok 9 — minimalne syntetyczne nagrywanie
+
+podłącz działający zakres etapu 6
+
+create simulation trip
+start
+status
+manual observation
+finish
+
+nie buduj jeszcze mapy ani symulatora ruchu
+opis mówi jasno, że to syntetyczny zapis testowy, bez prawdziwego gps
+
+start i finish korzystają ze stabilnych Idempotency-Key dla tego samego żądania
+
+nie uznawaj timeoutu za dowód, że operacja nie zaszła
+nie wysyłaj automatycznie nowego startu z innym kluczem
+
+pokaż 409 zajętej sesji bez tożsamości innego użytkownika
+
+po FAILED, INTERRUPTED lub utracie kontekstu pokaż stan i dozwolony dalszy krok
+nie obiecuj wznowienia dawnego runu
+
+po logout zakończ frontendowy polling
+backendowa finalizacja z etapu 6 pozostaje odpowiedzialnością serwera
+
+krok 10 — walidacja i dostępność
+
+każdy formularz ma walidację klienta i niezależną walidację serwera
+
+etykiety pól, powiązane błędy, aria-live dla komunikatów
+obsługa klawiatury
+widoczny focus
+sensowna kolejność tab
+
+dialog zamyka się przez escape, zarządza focusem i przywraca go do wywołującego elementu
+
+submit podczas trwania operacji zablokowany
+bez dublowania zapisów
+
+nie czyść całego formularza po błędzie walidacji
+hasła i tokeny obsługuj bezpiecznie
+
+koloru nie używaj jako jedynego oznaczenia statusu
+tekst lub ikona ma przekazywać tę samą informację
+
+krok 11 — responsywność
+
+sprawdź co najmniej
+
+desktop 1360×900
+smartfon 390×844
+wąski ekran 320 px
+
+brak poziomego overflow całej strony
+
+tabele mogą mieć kontrolowany poziomy scroll w swoim kontenerze
+nagłówki i akcje muszą pozostać czytelne
+nie ukrywaj kluczowych pól bez sposobu odczytu ich w szczegółach
+
+filtry i formularze na telefonie układają się pionowo
+przyciski mają wygodne obszary dotyku
+
+sprawdź długie tytuły, notatki, nazwy sygnalizatorów, puste dane i komunikaty błędów
+
+pełny odbiór responsywnej nawigacji pozostaje na etap 9
+
+krok 12 — testy automatyczne i wizualne
+
+dodaj jednostkowe testy istotnej logiki js
+
+walidacja
+przeliczanie dat i DST
+filtry i reset paginacji
+obsługa opóźnionych odpowiedzi
+401 i zmiana konta
+stabilność kluczy idempotency
+
+dodaj browser e2e z rzeczywistym backendem, tymczasową db i syntetycznymi danymi
+
+login
+create trip
+start i observation
+finish
+edit
+correction i historia
+filtry obu tabel
+kolejna strona
+share i revoke
+archive
+logout i login drugim kontem bez przecieku stanu
+
+sprawdź błędne formularze, konflikt revision, timeout lub błąd sieci i wygasłą sesję
+
+sprawdź keyboard i focus dialogów
+sprawdź wszystkie trzy rozmiary
+
+zapisz screenshoty rzeczywiście działających głównych widoków
+nie generuj makiet jako dowodu działania
+
+obejrzyj screenshoty i popraw zauważone problemy
+nie uznawaj wyglądu za sprawdzony wyłącznie po braku overflow
+
+zmierz coverage istotnych modułów js przez dostępne narzędzie Node/V8 lub równoważne
+pokaż jawny zakres i raport per moduł
+browser e2e nie zastępuje pomiaru coverage
+
+uruchom regresję backendu odpowiednią do zmian
+jeśli backend pozostaje niezmieniony, nie powtarzaj bez powodu całego kosztownego zestawu po każdej zmianie css
+
+brak przeglądarki raportuj jako blokadę odbioru wizualnego
+nie deklaruj nieprzeprowadzonych sprawdzeń
+
+krok 13 — dokumentacja i commity
+
+dodaj docs/school-app/stage7.md
+
+opisz widoki, formularze, walidację, działające akcje i ograniczenia
+podaj wyniki testów oraz miejsca screenshotów
+
+uaktualnij run.md i readme o ręczne sprawdzenie całego ui
+
+uaktualnij ai-usage.md
+
+w stages.md oznacz etap 6 jako zaakceptowany z hashem
+eb6e61082e84ebf6b5797f02d634f4ec1df96f6e
+
+etap 7 przygotowany do odbioru
+etapy 8–12 nadal do zrobienia
+
+małe sensowne commity
+staging konkretnych plików
+
+screenshoty przeznaczone do dokumentacji mogą być w docs/school-app/screenshots/
+wyłącznie dane syntetyczne, bez mailboxa, tokenów, haseł i danych prywatnych
+
+żadnych db, runtime, nagrań, sekretów, środowisk ani tymczasowych raportów w git
+
+nie pushuj automatycznie
+nie scalaj z main
+
+na końcu podaj
+
+listę działających widoków i formularzy
+
+dokładną komendę uruchomienia oraz scenariusz ręcznego odbioru
+
+wyniki e2e, testów js, coverage i regresji
+
+screenshoty desktop i telefonu z oceną wizualną
+
+ograniczenia i funkcje pozostawione na etap 8–9
+
+hashe commitów i git status
+
+to jest całość promptu
+doprowadź etap 7 do działającego i sprawdzonego końca, potem zatrzymaj się
+```
+
+Działania AI: przegląd obowiązujących instrukcji/dokumentów i czystej zaakceptowanej
+bazy; napisanie modularnego vanilla JS bez frameworka/bundlera, tabel i formularzy
+własnych danych, IANA Warsaw date conversion, AbortController/epoch/serial guard,
+stable keys i klientowej walidacji odpowiadającej serwerowi. Zabezpieczenia kont,
+CSRF, ownership i pinned share nie zostały osłabione. Nie kopiowano ReactLY/prototypu.
+
+Jedyna mała korekta API: chroniony HEAD eksportu na istniejącym zasobie zamiast
+anulowanego wstępnego GET ZIP, który E2E wykazał jako canceled. Owner/session/status/
+integrity jak GET, bez ZIP/body, safe error enum w nagłówku. 4 HTTP regresje obejmują
+allowlist, CSP i HEAD role/privacy/integrity. Brak nowych tabel/zmiany migracji.
+
+Testy AI: 16 Node unit, jawne 5 modułów logiki V8 (99.22% linii, 93.24% gałęzi,
+98.11% funkcji, per-module stage7.md); nie jest to coverage wszystkich DOM widoków.
+Browser real backend/tempSQLite/localSMTP/realKDF: desktop1360×900, phone390×844,
+narrow320×844, timezone America/New_York, pełny przepływ danych PASS. Konta i
+resource smoke desktop/phone PASS; Node driver/CV 7/7 + mobile_flow PASS. Python
+26 kont PASS35.663s,17 zasobów PASS54.061s,4 static/HEAD PASS7.708s. Nie deklarowano
+ponownej pełnej 369-test regresji lub aktualnego Linux/hardware wykonania.
+
+Ujawnione błędy znalezione podczas pracy: select bez pustej opcji miał brak wyboru;
+backend odrzucał skrajne spacje notatki, których klient wcześniej nie odrzucał;
+network error wyświetlał surowe Failed to fetch zamiast nieznanego wyniku; zbyt wąsko
+łamał się przycisk tabeli telefonu; spóźniony HEAD401 starego konta czyścił nową sesję
+(Node reproduktor FAIL przed, PASS po epoch guard). Poprawiono, ponowiono testy.
+Startup/cleanup etapu6, logger i solver nie zmieniły się. PUBLISH-01 nadal osobno.
+
+Screenshoty są realne, wyłącznie syntetyczne, w docs/school-app/screenshots.
+Oglądano je view_image i poprawiono zauważone problemy: mobile header, zwijane filtry,
+scroll hint, nowrap akcji i loading szczegółów przed screenshot. Nie generowano makiet.
+Testy obejmują text-only XSS, maksymalne długości, daty/DST, opóźnione odpowiedzi,
+klawiaturę/focus, real response loss po commit, stare share okno i zmianę konta.
+
+Commity kodu: 8ce6d513a2fbae420b51aead71b9b44231741c9b,
+d8e4e25599f8081a7a08e5bb105cfdc873d591e6,75e25b48c7b94641c573763a161c56e0f2ccbe88,
+a18fef0cbd8344b20b9bf40014dfe0e50d4088eb. Dokładne komendy i granice w run/stage7.
+Bez subagentów/innych czatów, prywatnych danych, push/merge/rewrite. Odbiór etapu7
+przez użytkownika pozostaje wymagany; etapy8–12 Do zrobienia i nie rozpoczęte.
+
+Końcowy E2E został powtórzony na a18fef0cbd8344b20b9bf40014dfe0e50d4088eb,
+trzy rozmiary PASS. Ponownie obejrzano główne końcowe PNG, także konto/trips/
+corrections i kompletne szczegóły po załadowaniu obserwacji. Node v24.18.0,
+Python3.14.4. UTF8/fences/links/PNG oraz 43 PowerShell blocks PASS; CLI flags
+potwierdzone serve --help. Logger/migracje/solver/GATE i refs main/vision-camera
+niezmienione. Dokumentacja i 10 PNG staged konkretnymi nazwami; bez runtime/DB/
+mailboxów/sekretów/środowisk/tymczasowych raportów. Git diff --cached --check PASS.
+Etap7 przygotowany do odbioru, STOP przed8. Końcowy hash dokumentacji w odpowiedzi.

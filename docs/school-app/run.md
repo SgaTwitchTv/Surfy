@@ -701,3 +701,114 @@ try { python -m unittest discover -s tests -v } finally { Pop-Location }
 Testy JS/browser: komendy z sekcji 11. Nie trzeba zmieniać istniejącej konfiguracji
 serwera lub dodawać narzędzia HTTP do naprawy runtime. Akceptacja nowych stanów i
 granic jest opisana w końcowej sekcji stage6.md.
+
+## 13. Etap 7 — pełny ręczny odbiór interfejsu
+
+Frontend jest vanilla JS/ES modules, nie wymaga npm ani bundlera do uruchomienia.
+Użyj nowego syntetycznego root. Portal nie importuje starych kont/nagrań. Konto
+analityka i administratora ma tu własne dane; dodatkowe ekrany ról dopiero etap 8.
+
+Terminal 1, PowerShell:
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+git branch --show-current
+git status --short
+$schoolStage7Root = Join-Path (Get-Location) ('runtime\stage7-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$schoolStage7Root" init
+python -m greenwave.school_data --root "$schoolStage7Root" status
+python -m greenwave.school_accounts secrets --output "$schoolStage7Root\deployment-keys.json"
+python -m scripts.school_resource_fixtures --root "$schoolStage7Root" --confirm-synthetic
+$env:SCHOOL_SECRET_FILE = "$schoolStage7Root\deployment-keys.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_MODE = 'plain'
+$env:SMTP_SENDER = 'greenwave@example.test'
+$env:SMTP_USER = ''
+$env:SMTP_PASSWORD = ''
+python -m greenwave.school_accounts serve --root "$schoolStage7Root" --host 127.0.0.1 --port 8770
+```
+
+Fixture pyta getpass i confirmation, bez hasła w argv/default hasła. Tworzy cztery
+aktywne syntetyczne konta: driver/other/analyst/admin@example.test z podanym hasłem.
+To operator CLI na PUSTEJ DB, nie publiczne HTTP. Nie używaj tej fixture dla realnych
+osób. Zakończenie serwera: Ctrl+C. Upgrade istniejącego właściwego szkolnego root
+przy zatrzymanym serwerze: `python -m greenwave.school_data --root <root> migrate`.
+
+Dla rejestracji/aktywacji/resetu uruchom w terminalu 2 lokalny odbiornik:
+
+```powershell
+python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771
+```
+
+Portal: http://127.0.0.1:8770; syntetyczna skrzynka operatora: http://127.0.0.1:8771.
+Nie zapisuj screenshotów skrzynki/linków do dokumentacji. Realne dane wymagają
+HTTPS/Secure cookies/prawidłowej poczty zgodnie z sekcją 9, nie profilu demo.
+
+Ręczny scenariusz:
+
+1. Login driver@example.test, zobacz Konto; menu Moje przejazdy/Moje obserwacje.
+2. Nowy przejazd: tytuł/notatka, SIM, opcjonalna dozwolona wersja trasy. Zwykła
+   fixture nie ma opublikowanych ROUTE, można wybrać Bez trasy.
+3. Szczegóły → Rozpocznij zapis syntetyczny → Obserwacja pasażera. Przy Bez trasy
+   podaj np. synthetic-light, RED, STATE_SEEN. UNKNOWN + STATE_START ma błąd.
+4. Zakończ zapis; status Ukończony. Eksport pobiera rzeczywisty ZIP. HEAD najpierw
+   sprawdza prawa/integralność bez tworzenia ZIP; GET sprawdza je ponownie.
+5. Edytuj metadane. W drugiej karcie zmień ten sam rekord, a w pierwszej spróbuj
+   stary revision: zobacz aktualny rekord i świadomie wybierz nowy revision.
+6. Historia / korekta → GREEN + powód. Oryginał RED pozostaje; historia pokazuje
+   autora/czas/przed/po. Adnotacja historyczna nie dopisuje do ukończonego raw.
+7. Obie tabele: filtry dnia (Europe/Warsaw), trasy, statusu/archiwum lub sygnalizatora,
+   efektywnego koloru/typu/valid/source; sort i kolejne strony przy >25 rekordach.
+   Zmiana filtra usuwa stary cursor. Tabela telefonu ma własny poziomy scroll.
+8. Udostępnij complete trip analyst@example.test; jasna informacja o GPS. Cofnij
+   konkretną zgodę. Stare okno nie cofa nowszego share. Nie ma EXPORT/CV checkboxów.
+9. Archiwizuj z powodem i potwierdzeniem; odczytaj przez filtr Archiwalne.
+10. Wyloguj; zaloguj other@example.test: brak list/szczegółów/filtrów starego konta.
+11. Konto: reauth, change-password i logout-all. Register/verify/reset według sekcji 9.
+12. Przetestuj Escape, Tab/Shift+Tab, przywrócenie focus dialogu, 1360/390/320 px.
+
+Po timeout nie twórz automatycznie nowego START z innym kluczem. Ponów świadomie
+identyczne żądanie; po INTERRUPTED potrzebny nowy trip. Pełny reload usuwa pamięciowy
+uchwyt nawigacji; obecne API nie odtwarza go, wylogowanie kończy zapis na serwerze.
+
+Jednostkowe JS, V8 coverage oraz odpowiednia regresja HTTP:
+
+```powershell
+New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+node --test --experimental-test-coverage --test-coverage-include="**/portal/state.mjs" --test-coverage-include="**/portal/api.mjs" --test-coverage-include="**/portal/dates.mjs" --test-coverage-include="**/portal/filters.mjs" --test-coverage-include="**/portal/validation.mjs" tests/school_portal.cjs
+python -m unittest discover -s tests -p test_school_ui_static.py -v
+python -m unittest discover -s tests -p 'test_school_accounts*.py' -v
+python -m unittest discover -s tests -p test_school_resources.py -v
+node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs
+node tests/mobile_flow.cjs
+```
+
+Browser wymaga Playwright jako narzędzia testowego i zainstalowanego Edge. W tym
+środowisku dostępny jest moduł bundlowanego runtime; na innym komputerze wskaż jego
+lokalną instalację przez GW_PLAYWRIGHT_MODULE (nie jest zależnością produkcyjnego UI).
+
+```powershell
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_ui.cjs
+node scripts/check_school_accounts.cjs
+node scripts/check_school_resources.cjs
+```
+
+Opcjonalne przygotowanie testowego Playwright na innym komputerze (Node 24/Edge),
+wyłącznie w ignorowanym artifacts, bez dodawania dependency do aplikacji:
+
+```powershell
+npm install --prefix artifacts/browser-tools playwright
+$env:GW_PLAYWRIGHT_MODULE = Join-Path (Get-Location) 'artifacts\browser-tools\node_modules\playwright'
+node scripts/check_school_ui.cjs
+```
+
+Ta opcjonalna instalacja nie była wykonywana tutaj — użyto istniejącego runtime.
+Browser skrypt tworzy nową tymczasową DB/SMTP, używa realnego KDF i testuje trzy
+rozmiary przy browser timezone America/New_York. Generuje rzeczywiste screenshoty
+w docs/school-app/screenshots; nie zapisuje haseł/tokenów/mailboxa. Raporty tymczasowe
+w artifacts nie trafiają do Git. Wyniki i jawny zakres coverage: stage7.md.
