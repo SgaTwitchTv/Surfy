@@ -651,3 +651,53 @@ Pełna regresja Python tylko w nowym git eksporcie (sekcja 3):
 Bazowy GreenWave pozostaje odrębną lokalną aplikacją:
 `python -m greenwave --no-browser --port 8767`; smoke/nagrania testowe tylko w eksporcie.
 Nie ma pełnej nav/live/Android/CV ani UI rekordów — odpowiednie etapy 7–9.
+
+## 12. Etap 6 — odbiór cleanup nieudanego startu
+
+Nie wstrzykuj awarii w prywatnym lub działającym deployment. Dokładny reproduktor
+jest automatycznym scenariuszem prawdziwego HTTP z nową tymczasową SQLite i plikami:
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+python -m unittest discover -s tests -p test_school_records.py -k failed_start_storage_run -v
+python -m unittest discover -s tests -p test_school_records.py -k failed_start -v
+python -m unittest discover -s tests -p test_school_records.py -v
+```
+
+Pierwszy test potwierdza STARTING/PENDING wewnątrz storage.run przed OSError,
+neutralne 503, następnie INTERRUPTED/FAILED oraz start drugiego użytkownika 201
+bez restartu. Pozostałe sprawdzają konstruktor, częściowe pliki/append, rollback
+RECORDING, close failure, DB cleanup failure, rzeczywisty watchdog i startup recovery.
+Jeżeli DB cleanup nadal nie działa, rezerwacja pozostaje i drugi start daje 409.
+Po ustąpieniu błędu retry kończy cleanup bez dublowania audytu. Retry nieudanego
+START nie wznawia jazdy; należy utworzyć nowy PLANNED trip.
+
+Nie dodano publicznego endpointu naprawczego. Normalny ręczny HTTP scenariusz oraz
+start/stop/backup/testy/coverage są nadal w sekcji 11. Fault tests nie wymagają
+telefonu, kamery ani modyfikacji uprawnień prywatnych katalogów.
+
+Pomiar poprawki, taki sam zakres jak w etapie 6, bez wyłączeń nowych ścieżek:
+
+```powershell
+New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_records,greenwave.school_resources,greenwave.school_accounts,greenwave.school_data,greenwave.telemetry --data-file=artifacts/stage6-start.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage6-start.coverage -m
+.venv-school/Scripts/python.exe -m coverage json --data-file=artifacts/stage6-start.coverage -o artifacts/stage6-start-coverage.json
+```
+
+Pełna regresja w nowym eksporcie (nie uruchamiaj jej na prywatnych nagraniach):
+
+```powershell
+$schoolStartReviewRoot = Join-Path (Get-Location) ('artifacts\stage6-start-review-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path "$schoolStartReviewRoot\source" | Out-Null
+git archive HEAD --output="$schoolStartReviewRoot\source.tar"
+if ($LASTEXITCODE -ne 0) { throw 'git archive failed' }
+tar -xf "$schoolStartReviewRoot\source.tar" -C "$schoolStartReviewRoot\source"
+if ($LASTEXITCODE -ne 0) { throw 'tar failed' }
+Push-Location "$schoolStartReviewRoot\source"
+try { python -m unittest discover -s tests -v } finally { Pop-Location }
+```
+
+Testy JS/browser: komendy z sekcji 11. Nie trzeba zmieniać istniejącej konfiguracji
+serwera lub dodawać narzędzia HTTP do naprawy runtime. Akceptacja nowych stanów i
+granic jest opisana w końcowej sekcji stage6.md.

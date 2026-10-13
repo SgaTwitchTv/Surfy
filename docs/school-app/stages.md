@@ -36,7 +36,7 @@ Niższe wpisy zachowują historię wcześniejszych odbiorów, nie zastępują bi
 |3|Baza danych i migracje|Zaakceptowany przez użytkownika|2020b84d68ef3720c1b2d2345cf381c98a2a603b|Niezależny przegląd i wyniki opisane w stage3.md; v2/14 tabel/immutable migrations/rollback/backup/isolacja|Akceptacja w prompcie etapu4; PUBLISH-01 nadal osobno|
 |4|Konta i sesje|Zaakceptowany przez użytkownika|45eef418efa9ca0afc9af8a6137a286fa990f5a7;d0b2ddcbb2aea9c74ff3710a7e341e4997be5462;90beec7bd5b0abc51548e5c240e9e439708d2f87;4746c9ee5c55806e91e9bb25f7881244958322de;2b9ed3ddb8e34e316701270e64904c290a73541b;9dcf41e1b3e7140a64b437357f94f9614400eea2;dokumentacja: commit stage4.md|Register/SMTP/verify/login/session/CSRF/reset/change/reauth/bootstrap; testy i per-module coverage w stage4.md; desktop i phone browser PASS z realnym KDF; brak legacy passthrough|Akceptacja w prompcie5;domena/role panel/telefon/Docker odbierane oddzielnie|
 |5|Uprawnienia i ochrona API|Zaakceptowany przez użytkownika|13858b06051a4183bfc7e0559962611c8be2eae2;5ce716c28c1014e97ec19f058c870fa1c9925984;fdc06bb7efd82455ffbf00deb62a37d80c494e23;5ada5e834ac50d4bea07a6d57d7152b78bc6bda9;09646eb735dd8f141de3f89087a644eb875c8a76;dokumentacja stage5.md|Macierz HTTP,scoped export/replay/GPS_QUALITY/CVmedia/Range,revokacja;stage5.md|Wcześniejsze granice etapu 5 w stage5.md; zapis odebrany osobno w etapie 6|
-|6|Przejazdy i obserwacje|Przygotowany do odbioru|bc459fb628861bd40b26404805840c66f45f0850;1e3ae7126fa5d6d5dac0aa38be42cb3cf9565f7b;9b0d0e5d18031c0d027ba63a5ceb421b4a5e3e83;bf6af53f72365cdb95523db40f9fb48b0d0a1fe1;dokumentacja stage6.md|133 testy szkolne / 359 pełna regresja, po 1 skip; HTTP/CLI/browser/Node PASS; coverage szkolne combined 89.6302%; stage6.md|UI/pełne nav/Android/CV później;STOP przed 7|
+|6|Przejazdy i obserwacje|Przygotowany do ponownego odbioru|bc459fb628861bd40b26404805840c66f45f0850;1e3ae7126fa5d6d5dac0aa38be42cb3cf9565f7b;9b0d0e5d18031c0d027ba63a5ceb421b4a5e3e83;bf6af53f72365cdb95523db40f9fb48b0d0a1fe1;1827dd8dfdf2d930bf610c84786c1ddded5553dc;przegląd 4d30c8bec1586604313a838413e6fc64818f7ae7;dokumentacja stage6.md|Poprawka: 35 records PASS; 143 szkolne / 369 pełna regresja (po 1 skip); browser/JS/HTTP PASS; coverage z telemetry 88.5812%; końcowa sekcja stage6.md|UI/pełne nav/Android/CV później;STOP przed 7|
 |7|Nowoczesny UI użytkownika|Do zrobienia|—|—|Projekt w kierunku ReactLY i odbiór wizualny|
 |8|Widoki analityka i administratora|Do zrobienia|—|—|Zatwierdzone role i zakres danych|
 |9|Nawigacja i responsywność|Do zrobienia|—|—|Nowy UI, regresja GPS/replay, zachowanie blokad live|
@@ -85,3 +85,10 @@ odebrane oddzielnymi testami;etapy6–12nadal Do zrobienia.
 Etap5 zaakceptowany:**13858b06051a4183bfc7e0559962611c8be2eae2**.
 Etap6 implementacja,dowody i granice:[stage6.md](stage6.md);etapy7–12 Do zrobienia.
 Hash dokumentacji etapu6:`git log -1 --diff-filter=A --format=%H -- docs/school-app/stage6.md`.
+
+
+Ponowny przegląd etapu 6: **4d30c8bec1586604313a838413e6fc64818f7ae7**.
+Poprawka nieudanego startu i retry cleanup niezależnego od aktywnego kontekstu:
+końcowa sekcja [stage6.md](stage6.md), reproduktor [run.md, sekcja 12](run.md).
+Bieżący status: **Przygotowany do ponownego odbioru**. Etapy 7–12 Do zrobienia.
+Hash dokumentacji poprawki: `git log -1 --format=%H -- docs/school-app/stage6.md`.

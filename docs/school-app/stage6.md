@@ -1,6 +1,8 @@
 # Etap 6 — przejazdy, obserwacje i trwały zapis
 
-**Przygotowany do odbioru**, 2026-10-13. Zaakceptowana baza etapu 5:
+**Przygotowany do ponownego odbioru**, 2026-10-13.
+Bieżące wyniki poprawki nieudanego startu znajdują się w końcowej sekcji;
+poprzednie wyniki poniżej pozostają historią pierwszego odbioru. Zaakceptowana baza etapu 5:
 **13858b06051a4183bfc7e0559962611c8be2eae2**.
 Worktree: `C:/Users/konra/.codex/worktrees/school-app/Surfy`, `codex/school-app`.
 Na wejściu HEAD był zgodny, status i staging puste. Przeczytano obowiązujący
@@ -307,3 +309,190 @@ Skrypt używa rzeczywistego HTTP/cookies/CSRF i getpass, bez hasła w argv/token
 - [ ] Przegląd powyższych wyników i granic; akceptacja użytkownika.
 
 STOP przed etapem 7. Bez push/merge/rewrite; bez DB/runtime/nagrań/mailboxów/sekretów w Git.
+
+## Poprawka po przeglądzie — nieudany start
+
+Przegląd: **4d30c8bec1586604313a838413e6fc64818f7ae7**. Na wejściu zgodny HEAD,
+czysty status i staging. Nie zmieniono formatu loggera, telemetry, solvera,
+containment, polityki sesji, migracji ani liczby tabel (nadal schema v3/14 tabel).
+Nie czytano prywatnego data/runs ani starego runtime/school. Wszystkie testy
+korzystają z nowych syntetycznych TemporaryDirectory i izolowanego git eksportu.
+
+### Przyczyna i dokładny reproduktor
+
+Po commit STARTING + PENDING START wywołania storage.run i konstruktor RunLogger
+znajdowały się przed try. OSError nie uruchamiał cleanup, więc globalna rezerwacja
+pozostawała zajęta. Test rzeczywistego HTTP wstrzykuje OSError w storage.run i
+**wewnątrz wstrzyknięcia potwierdza zapisany już STARTING/PENDING**. Nie polega na
+awarii sprzed rezerwacji ani na recovery/odczycie mogącym ukryć problem.
+
+Polecenie: `python -m unittest discover -s tests -p test_school_records.py -k failed_start_storage_run -v`.
+
+- Przed poprawką: FAIL, 1 test, 3.231 s; wynik
+  **(503, STARTING, PENDING, 409)** zamiast oczekiwanego
+  **(503, INTERRUPTED, FAILED, 201)**.
+- Po poprawce: PASS, 1 test, 3.176 s; neutralne 503, INTERRUPTED/FAILED,
+  drugi użytkownik startuje nowy trip z 201 **bez restartu serwera**.
+
+### Rozwiązanie i granice gwarancji
+
+Cały start po commit intencji jest teraz w try: ścieżka, konstruktor, kontekst,
+pliki, append/flush oraz transakcja RECORDING/APPLIED. logger zaczyna jako None;
+cleanup nie wymaga utworzonego ctx. Kontrola aktualnej sesji w końcowej transakcji
+pozostaje obowiązkowa. Odczyt DTO po udanym commit jest odrębnym odczytem: jego
+chwilowa awaria DB nie oznacza niepowodzenia już zatwierdzonego startu.
+
+Wyjątek usuwa ctx i zapisuje oddzielną pamięciową kolejkę **failed_starts**, zawierającą
+kontrolowane ID trip/START/owner/run, request_id, logger do zamknięcia i klasy wyjątków.
+Nie przechowuje treści wyjątku, sekretu sesji ani payloadu raw w diagnostyce cleanup.
+Trwałym źródłem stanu pozostaje recording_operations + trips w SQLite.
+
+Zamykanie loggera następuje **przed** próbą DB cleanup. W razie błędu metody
+close_unfinished adapter domyka uchwycony stream bez tworzenia complete.json.
+Jeżeli samo zamknięcie stream nadal zawodzi, uchwyt pozostaje w failed_starts,
+logger jest nieaktywny, ctx usunięty i domknięcie ponawiane. Nie udajemy, że trwała
+awaria OS close została pokonana. Po ustąpieniu błędu test potwierdza closed=True.
+Pliki pozostają na dysku i nie są nadpisywane. RunLogger ani jego format nie zmieniły się.
+Wrapped OSError loggera jest mapowany na neutralny błąd serwera 503, nie błąd formularza.
+
+Cleanup w jednej transakcji sprawdza konkretny START (ID/trip/actor/boot), aktualizuje
+wyłącznie właściwy trip/run na INTERRUPTED, jego START na FAILED i dodaje audyt
+systemowy RECORDING_INTERRUPTED z powodem START_FAILED:<klasa wyjątku> oraz request_id.
+Inne tripy/intencje nie są zbiorczo oznaczane jako failed. Audyt powstaje tylko przy
+rzeczywistym przejściu stanu, więc wielokrotny cleanup nie dopisuje duplikatu.
+
+Jeżeli DB zawodzi podczas cleanup, transakcja rollbackuje: STARTING/PENDING i
+rezerwacja pozostają. Logger jest mimo to domknięty lub zachowany do retry zamknięcia,
+a failed_starts pozostaje dostępne **niezależnie od aktywnych kontekstów**. Watchdog
+wywołuje retry przez reconcile_credentials; retry działa również przed następnym
+startem i przy shutdown. Dopiero commit cleanup zwalnia rezerwację w SQLite.
+Kolejny użytkownik do tego czasu dostaje 409, jeżeli DB jest czytelna; przy pełnej
+niedostępności DB może dostać 503. Po cleanup dostaje 201 bez restartu.
+Nie ma publicznego endpointu naprawczego ani automatycznego wznowienia starej jazdy.
+
+Startup recovery jest zabezpieczeniem po utracie pamięci procesu. Test pozostawia
+STARTING/PENDING mimo próby zamknięcia starego koordynatora (DB nadal niedostępna),
+a nowy Recording po przywróceniu DB rozstrzyga brak manifestu na INTERRUPTED/FAILED.
+Retry starego klucza daje 409, nie tworzy nowego run i nie udaje sukcesu.
+Nowy start wymaga nowego PLANNED trip. Błąd przed commit rezerwacji rollbackuje ją,
+nie tworzy plików ani audytu przerwanego nagrania.
+
+### Stany na granicach awarii
+
+| Granica | Trip / START po cleanup | Logger/kontekst i dowód |
+|---|---|---|
+| Przed commit rezerwacji | PLANNED / brak intencji | Konstruktor nie wywołany, brak plików, brak audytu interrupted |
+| storage.run po commit | INTERRUPTED / FAILED | Logger nie powstał, brak ctx; następny użytkownik 201 |
+| Konstruktor loggera | INTERRUPTED / FAILED | Brak ctx i complete.json |
+| Po rejestracji ctx, przed plikami | INTERRUPTED / FAILED | Logger nieaktywny, stream None, ctx usunięty |
+| Metadata fsync / konstrukcja CSV writer | INTERRUPTED / FAILED | Częściowe pliki zachowane, stream zamknięty, brak complete.json |
+| Pierwszy append / po plikach | INTERRUPTED / FAILED | Brak fałszywego manifestu i utraty dowodów |
+| Transakcja RECORDING zawodzi po UPDATE | INTERRUPTED / FAILED | Rollback RECORDING; logger domknięty, następny start działa |
+| close_unfinished zgłasza wyjątek | INTERRUPTED / FAILED | Fallback stream.close, closed=True, brak ctx |
+| Sam stream.close nadal zawodzi | INTERRUPTED / FAILED, jeżeli DB działa | Nieaktywny uchwyt zachowany do retry; po ustąpieniu close closed=True |
+| DB cleanup/audyt zawodzi | STARTING / PENDING | Brak aktywnego ctx, stream domknięty; następny start 409 |
+| DB odzyskuje sprawność | INTERRUPTED / FAILED | Retry watchdog bez restartu, jeden audyt; następny start 201 |
+| Restart po nieudanym DB cleanup | INTERRUPTED / FAILED | Startup recovery, bez wznowienia nagrania |
+| Sesja cofnięta przed końcowym commit | INTERRUPTED / FAILED | HTTP 401, brak przejścia do RECORDING |
+
+Wyścig revokacji i startu jest sterowany Event. Równoległa prawidłowa rezerwacja
+nadal jest objęta poprzednim testem Barrier: tylko jeden start sukcesem. Testy
+sprawdzają retry bez nowych run/zmian plików, brak complete.json, zamknięte stream,
+brak osieroconego aktywnego ctx i pojedynczy audyt po wielu cleanup.
+
+### Ponowna regresja i coverage
+
+Wstępne 9 testów poprawki PASS (35.141 s); następnie dodano test realnych częściowych
+I/O i pierwszego append. Cały test_school_records.py: **35/35 PASS, 140.332 s**, w tym
+10 nowych testów. W tym zestawie przeszedł również rzeczywisty HTTP scenariusz
+zapisu `scripts.check_school_records` oraz ponowne uruchomienie serwera i odczyt.
+Node driver_ui/vision_workbench_ui **7/7 PASS**, mobile_flow PASS. Browser resources
+i pełny accounts SMTP flow: desktop 1280×900 i phone 390×844 PASS, bez błędów strony,
+przepełnienia layoutu lub sekretów w localStorage; rzeczywisty KDF w scenariuszu kont.
+
+Cała suite szkolna: **143 testy, 142 PASS, 1 skip, 360.229 s**. Pomiar
+coverage pochodzi z tego samego wykonania, z branch=True i excluded_lines=0.
+Są to całe cztery szkolne pakiety plus cały telemetry, tak jak poprzednio:
+
+| Zakres | Linie | Gałęzie | Combined |
+|---|---|---|---|
+| Cztery szkolne pakiety | 2740/2876 (95.2712%) | 776/1042 (74.4722%) | 89.7397% |
+| Powyższe + telemetry | 2831/3009 (94.0844%) | 784/1072 (73.1343%) | 88.5812% |
+
+Combined = (covered lines + covered branches)/(statements + branches).
+Lokalny JSON: artifacts/stage6-start-coverage.json (ignorowany, nie Git).
+To wynik poprawki etapu 6, nie końcowy szeroki zakres M8/CV/JS.
+
+| Moduł (greenwave/) | Linie | Gałęzie | Combined |
+|---|---|---|---|
+| school_accounts/__init__.py | 0/0 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_accounts/__main__.py | 56/67 (83.58%) | 9/12 (75.00%) | 82.28% |
+| school_accounts/config.py | 51/55 (92.73%) | 16/20 (80.00%) | 89.33% |
+| school_accounts/crypto.py | 60/62 (96.77%) | 16/18 (88.89%) | 95.00% |
+| school_accounts/demo_mail.py | 70/80 (87.50%) | 30/38 (78.95%) | 84.75% |
+| school_accounts/errors.py | 4/4 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_accounts/http.py | 216/239 (90.38%) | 69/100 (69.00%) | 84.07% |
+| school_accounts/limits.py | 28/28 (100.00%) | 2/2 (100.00%) | 100.00% |
+| school_accounts/mail.py | 57/60 (95.00%) | 7/8 (87.50%) | 94.12% |
+| school_accounts/service.py | 170/177 (96.05%) | 27/36 (75.00%) | 92.49% |
+| school_accounts/sessions.py | 58/60 (96.67%) | 13/14 (92.86%) | 95.95% |
+| school_data/__init__.py | 3/3 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_data/__main__.py | 32/33 (96.97%) | 7/8 (87.50%) | 95.12% |
+| school_data/accounts.py | 50/50 (100.00%) | 20/20 (100.00%) | 100.00% |
+| school_data/backup.py | 71/74 (95.95%) | 9/12 (75.00%) | 93.02% |
+| school_data/configurations.py | 38/38 (100.00%) | 10/16 (62.50%) | 88.89% |
+| school_data/database.py | 59/62 (95.16%) | 8/8 (100.00%) | 95.71% |
+| school_data/errors.py | 11/11 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_data/locking.py | 33/37 (89.19%) | 5/8 (62.50%) | 84.44% |
+| school_data/migrations.py | 110/111 (99.10%) | 43/44 (97.73%) | 98.71% |
+| school_data/observations.py | 80/80 (100.00%) | 27/42 (64.29%) | 87.70% |
+| school_data/repositories.py | 8/8 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_data/repository_base.py | 51/51 (100.00%) | 14/16 (87.50%) | 97.01% |
+| school_data/security_records.py | 94/94 (100.00%) | 16/22 (72.73%) | 94.83% |
+| school_data/storage.py | 48/49 (97.96%) | 15/16 (93.75%) | 96.92% |
+| school_data/time_units.py | 26/26 (100.00%) | 14/14 (100.00%) | 100.00% |
+| school_data/trips.py | 133/133 (100.00%) | 45/62 (72.58%) | 91.28% |
+| school_data/validation.py | 39/39 (100.00%) | 16/16 (100.00%) | 100.00% |
+| school_records/__init__.py | 0/0 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_records/lists.py | 62/62 (100.00%) | 33/38 (86.84%) | 95.00% |
+| school_records/paging.py | 56/58 (96.55%) | 16/24 (66.67%) | 87.80% |
+| school_records/raw.py | 54/56 (96.43%) | 27/44 (61.36%) | 81.00% |
+| school_records/recording.py | 220/227 (96.92%) | 47/70 (67.14%) | 89.90% |
+| school_records/writes.py | 114/115 (99.13%) | 24/38 (63.16%) | 90.20% |
+| school_resources/__init__.py | 0/0 (100.00%) | 0/0 (100.00%) | 100.00% |
+| school_resources/api.py | 80/80 (100.00%) | 46/52 (88.46%) | 95.45% |
+| school_resources/contexts.py | 199/202 (98.51%) | 43/62 (69.35%) | 91.67% |
+| school_resources/files.py | 154/161 (95.65%) | 48/72 (66.67%) | 86.70% |
+| school_resources/policy.py | 63/64 (98.44%) | 23/28 (82.14%) | 93.48% |
+| school_resources/reads.py | 82/120 (68.33%) | 31/62 (50.00%) | 62.09% |
+| telemetry.py | 91/133 (68.42%) | 8/30 (26.67%) | 60.74% |
+
+Pełna regresja z izolowanego eksportu commita **1827dd8dfdf2d930bf610c84786c1ddded5553dc**:
+**369 testów, 368 PASS, 1 skip, 393.470 s**. Eksport zawiera identyczne bajty obu
+zmienionych plików wykonawczych, sprawdzone przez porównanie przed odbiorem.
+
+Własne środowisko tylko Windows/Python 3.14.4/coverage 7.13.1/Node 24/Edge.
+Jedyny skip: POSIX symlink, WinError 1314; Windows junction PASS. Tkinter dostępny,
+bez ukrywania błędu importu. Przegląd użytkownika nie jest przypisywany do własnych
+wykonań Linux. Browser działał, nie było blokady przeglądarki.
+
+Kontrola dokumentacji: UTF-8, code fences, odnośniki i 38 bloków PowerShell PASS.
+Zastosowane migracje bez zmian; refs main/vision-camera niezmienione. Staging
+wyłącznie czterech wskazanych plików dokumentacji, git diff --cached --check PASS.
+Brak DB/runtime/nagrań/mailboxów/sekretów/środowisk w staged zmianach.
+
+Commity poprawki:
+
+1. **1827dd8dfdf2d930bf610c84786c1ddded5553dc** — koordynator i 10 testów regresyjnych.
+2. Commit tej dokumentacji — hash w odpowiedzi i przez
+   `git log -1 --format=%H -- docs/school-app/stage6.md`.
+
+Ręczny odbiór: [run.md, sekcja 12](run.md#12-etap-6--odbiór-cleanup-nieudanego-startu).
+Akceptacja: reproduktor 503/INTERRUPTED/FAILED/201; DB failure/retry bez restartu;
+zamknięte stream i brak active ctx; startup recovery; wyniki regresji/coverage.
+**Etap 6 przygotowany do ponownego odbioru**, etapy 7–12 Do zrobienia.
+
+
+Granice bez zmian: brak UI rekordów, pełnej nawigacji/Androida/kamery, jednej
+transakcji DB–filesystem i automatycznego wznowienia jazdy. Nie testowano Linux,
+Docker lub sprzętu w ramach tej korekty. STOP przed etapem 7.

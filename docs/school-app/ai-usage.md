@@ -1988,3 +1988,280 @@ Kontrola końcowych dokumentów: UTF-8/fences/odnośniki oraz 35 bloków PowerSh
 Zastosowane migracje bez diff, niezmienione refs main/vision-camera, brak śledzonych
 runtime/data-runs. Przejrzano konkretne nazwy staged plików oraz git diff --cached
 --check przed commitem dokumentacji. Hash tego commita w końcowej odpowiedzi.
+
+## Etap 6 — poprawka nieudanego startu, 2026-10-13
+
+Przegląd dotyczył **4d30c8bec1586604313a838413e6fc64818f7ae7**.
+Pełny prompt użytkownika (zachowano treść, pominięto końcowe spacje w wierszach):
+
+```text
+poprawa etapu 6 — naprawa nieudanego startu nagrywania i końcowy odbiór
+
+kontynuuj w istniejącym worktree codex/school-app
+nie zaczynaj etapu 7
+
+przeczytaj obowiązujące AGENTS.md oraz docs/school-app/contract.md, stage6.md, stages.md, run.md i ai-usage.md
+
+przegląd dotyczył commita
+4d30c8bec1586604313a838413e6fc64818f7ae7
+
+sprawdź aktualny head, status i staging
+zachowaj niezwiązane zmiany użytkownika
+
+nie zmieniaj main ani codex/vision-camera
+nie czytaj prywatnego data/runs/ ani starego runtime/school/
+wszystkie próby na nowych syntetycznych danych
+nie zmieniaj solvera, formatu loggera ani warunków rekomendacji live
+nie przepisuj historii, nie pushuj i nie scalaj automatycznie
+
+co zostało znalezione
+
+Recording.start najpierw zapisuje w db przejazd STARTING oraz PENDING START
+
+potem przygotowuje ścieżkę przez storage.run i tworzy RunLogger
+
+ten fragment jest przed try obsługującym nieudany start
+
+jeśli przygotowanie ścieżki lub loggera zgłosi wyjątek, request kończy się błędem, ale przejazd pozostaje STARTING
+
+globalna rezerwacja pozostaje zajęta mimo braku nagrywania
+
+dokładny niezależny reproduktor
+
+utwórz nowy trip SIMULATION
+
+na czas POST /school/api/v1/navigation wstrzyknij OSError z storage.run
+błąd ma wystąpić po zatwierdzeniu intencji START w db
+
+wynik obecnego kodu
+
+start → 503
+trip → STARTING
+po usunięciu wstrzykniętej awarii start drugiego trip → 409
+
+restart może odzyskać stan, ale zwykły błąd startu nie powinien wymagać restartowania całego serwera
+
+krok 1 — test przed poprawką
+
+dodaj test integracyjny rzeczywistego http z tymczasową db
+
+odtwórz dokładnie powyższy przypadek
+
+potwierdź, że błąd występuje po zapisaniu intencji, a nie przed rezerwacją
+
+test oczekuje docelowo
+
+pierwszy start → neutralny błąd 503
+pierwszy trip → INTERRUPTED
+jego pending START → FAILED
+brak aktywnego kontekstu i otwartego loggera
+start drugiego trip po ustąpieniu awarii → 201 bez restartu serwera
+
+zapisz wynik testu przed poprawką
+
+krok 2 — obejmij cały start obsługą błędów
+
+przejrzyj Recording.start w greenwave/school_records/recording.py
+
+obsługa nieudanego startu ma obejmować cały fragment po zatwierdzeniu db intent
+
+przygotowanie bezpiecznej ścieżki
+
+konstrukcję loggera
+
+utworzenie i rejestrację kontekstu
+
+utworzenie plików
+
+pierwsze append i flush
+
+przejście db do RECORDING oraz START APPLIED
+
+nie zakładaj, że logger lub ctx już istnieje
+inicjalizuj je jawnie albo zastosuj równoważną czytelną strukturę
+
+cleanup nie może zgłosić błędu przez odwołanie do nieutworzonego loggera
+
+zachowaj kontrolę sesji przed przejściem STARTING → RECORDING
+
+błąd przed zatwierdzeniem rezerwacji nie może tworzyć plików ani fałszywego audytu przerwanego nagrania
+
+krok 3 — cleanup po nieudanym starcie
+
+jeżeli logger powstał, zamknij go bez fabrykowania complete.json
+
+usuń lub unieważnij częściowo zarejestrowany kontekst
+nie usuwaj dowodów zapisu ani nie nadpisuj plików
+
+jeżeli db działa
+
+atomowo ustaw właściwy trip na INTERRUPTED
+
+oznacz jego niezakończoną intencję START jako FAILED
+
+zapisz audyt systemowy nieudanego startu
+
+zwolnij globalną rezerwację przez poprawny stan db
+
+nie oznaczaj innych przejazdów ani operacji jako failed
+
+nie pozostawiaj loggera otwartego, nawet jeśli zapis stanu błędu w db zgłosi wyjątek
+
+cleanup powinien zachować diagnostykę przyczyny bez ujawniania ścieżek, sekretów lub treści danych w publicznej odpowiedzi
+
+krok 4 — gdy db zawiedzie również podczas cleanup
+
+nie udawaj, że globalna rezerwacja została zwolniona, jeśli nie zapisano tego w db
+
+zachowaj trwałą intencję oraz informację potrzebną do ponowienia cleanup
+
+zapewnij kontrolowane ponowienie w działającym procesie po ustąpieniu awarii db
+nie opieraj go wyłącznie na obecności aktywnego ctx, bo błąd mógł wystąpić przed jego utworzeniem
+
+dopiero po poprawnym cleanup kolejny start może dostać 201
+
+zachowaj startup recovery jako zabezpieczenie po awarii procesu
+
+nie wznawiaj automatycznie nieudanego nagrania
+retry tego samego nieudanego START nie tworzy kolejnego runu ani nie udaje sukcesu
+nowy start odbywa się na nowym PLANNED trip zgodnie z dotychczasowym kontraktem
+
+ponowienie cleanup ma być idempotentne
+nie dopisuj tego samego audytu przy każdym przebiegu watchdog
+
+jeśli potrzebna jest niewielka zmiana architektury cleanup, opisz ją
+nie dodawaj publicznego endpointu naprawczego
+
+krok 5 — testy granic awarii
+
+dodaj testy dla
+
+storage.run zgłasza OSError po commit intencji
+
+konstrukcja RunLogger zgłasza wyjątek
+
+błąd po rejestracji ctx, przed utworzeniem plików
+
+błąd po częściowym utworzeniu plików
+
+błąd podczas przejścia do RECORDING
+
+błąd podczas zamykania częściowego loggera
+
+db cleanup zawodzi, następnie db odzyskuje sprawność i cleanup zostaje ponowiony bez restartu
+
+restart po nieudanym cleanup rozstrzyga pozostałą intencję
+
+kolejny użytkownik może wystartować po poprawnym cleanup
+
+równoległe poprawne starty nadal dopuszczają tylko jedną aktywną sesję
+
+retry tego samego nieudanego startu nie tworzy duplikatu
+
+brak fałszywego complete.json oraz brak utraty zapisanych plików
+
+sesja cofnięta podczas startu nie może przejść do RECORDING
+
+do sterowania wyścigami używaj event lub barrier
+nie uzależniaj poprawności testu od przypadkowego sleep
+
+nie osłabiaj containment, blokady procesu, polityki sesji ani rezerwacji sqlite
+
+krok 6 — regresja
+
+uruchom wszystkie test_school_records.py
+
+uruchom całą szkolną suite
+
+uruchom pełną regresję python w izolowanym eksporcie
+
+ponów testy js i rzeczywisty http scenariusz zapisu
+
+ponownie zmierz coverage szkolnych pakietów oraz telemetry tak jak w etapie 6
+branch=True, per moduł, bez wyłączania nowych ścieżek błędów
+
+brak tkinter albo przeglądarki raportuj jako ograniczenie środowiska
+nie ukrywaj testów i nie deklaruj sprawdzeń, których nie wykonano
+
+krok 7 — dokumentacja i commity
+
+zaktualizuj stage6.md
+
+opisz przyczynę, rozwiązanie oraz zachowanie przy działającej i niedostępnej db
+
+doprecyzuj run.md o ręczny odbiór nieudanego startu, jeśli jest potrzebny
+
+uzupełnij ai-usage.md o ten pełny prompt i faktyczne wyniki
+
+w stages.md wpisz wcześniejszy hash
+4d30c8bec1586604313a838413e6fc64818f7ae7
+
+etap 6 oznacz jako przygotowany do ponownego odbioru
+etapy 7–12 nadal do zrobienia
+
+małe sensowne commity
+staging konkretnych plików
+
+żadnych runtime, db, nagrań, mailboxów, sekretów i środowisk w git
+
+nie pushuj automatycznie
+nie scalaj z main
+nie zaczynaj etapu 7
+
+na końcu podaj
+
+wynik dokładnego reproduktora przed i po poprawce
+
+stany trip i START intent po każdej granicy awarii
+
+dowód, że kolejny trip startuje bez restartu po ustąpieniu błędu
+
+dowód zamknięcia loggera i braku osieroconego aktywnego kontekstu
+
+wynik cleanup retry oraz startup recovery
+
+wyniki regresji i coverage
+
+hashe commitów, git status i ograniczenia
+
+to jest całość promptu
+doprowadź poprawkę do działającego i sprawdzonego końca, potem zatrzymaj się przed etapem 7
+```
+
+Działania AI: potwierdzono czysty HEAD i staging zgodny z przeglądem. Przeczytano
+obowiązujący pusty AGENTS oraz dokumentację. Dodano dokładny reproduktor HTTP
+storage.run po commit intencji; przed zmianą FAIL (503, STARTING, PENDING, 409)
+zamiast oczekiwanego (503, INTERRUPTED, FAILED, 201), 1 test, 3.231 s.
+Po zmianie dokładny test PASS, 3.176 s. Nie dodano odczytu/poprzedniego recovery
+mogącego ukryć błąd. Baza i pliki tylko z nowego TemporaryDirectory.
+
+Przeniesiono przygotowanie ścieżki/loggera/kontekstu do obsługi błędów po intent.
+Dodano oddzielne failed_starts i idempotentny cleanup z watchdog/start/shutdown.
+Logger zamykany przed transakcją cleanup, z fallback do uchwyconego stream;
+kontekst natychmiast usuwany. Trip, konkretna START i audyt systemowy aktualizowane
+atomowo; niedostępna DB zachowuje rezerwację i retry niezależnie od aktywnego ctx.
+Diagnostyka tylko klas wyjątków, bez ścieżek/sekretów/payloadów. Zachowano startup
+recovery i kontrolę sesji przed RECORDING. Wrapped OSError RunLoggera mapowany na
+neutralne 503 bez zmiany loggera/formatu. Nie zmieniono schematu ani migracji.
+
+Dodano 10 testów (część z wieloma subTest) rzeczywistego HTTP dla granic filesystem,
+loggera, transakcji, cleanup DB, zamykania stream, watchdog, restart, retry i
+revokacji podczas startu. Wyścigi Event/Barrier, nie sleep. Sprawdzane są stany,
+zamknięte stream, brak active context, zachowanie plików i pojedynczy audyt.
+Wstępny zestaw 9 testów PASS 35.141 s, po nim dodano realne częściowe I/O/append.
+Wyniki: 35 records PASS 140.332 s, 143 szkolne (142 PASS, 1 skip) 360.229 s.
+Coverage branch=True/zero exclusions: cztery pakiety 2740/2876 linii, 776/1042 gałęzi,
+combined 89.7397%; z telemetry 2831/3009 linii, 784/1072 gałęzi, combined 88.5812%.
+Pełny per-module raport w końcowej sekcji stage6.md. Node 7/7 i mobile_flow PASS,
+browser accounts/resources desktop i phone PASS. Rzeczywisty HTTP scenariusz
+zapisu/restart z test_school_records PASS. Pełna regresja w izolowanym eksporcie commita kodu: 369 testów (368 PASS, 1 skip),
+393.470 s.
+Kod: 1827dd8dfdf2d930bf610c84786c1ddded5553dc.
+Bez subagentów/innych czatów, prywatnych danych, push/merge/rewrite lub etapu 7.
+
+Końcowe kontrole: kod eksportu zgodny bajtowo z poprawionymi plikami, UTF-8/fences/
+odnośniki oraz 38 bloków PowerShell PASS, migracje bez zmian, main/vision-camera
+niezmienione, staged wyłącznie cztery konkretne dokumenty. Jedyny skip Windows
+symlink WinError 1314, junction PASS; Tkinter i browser działały. Linux, Docker i
+sprzęt nie były wykonane. Bez runtime/DB/mailboxów/sekretów w Git, push/merge/rewrite.
+Etap 6 przygotowany do ponownego odbioru; nie rozpoczęto etapu 7.
