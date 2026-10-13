@@ -19,6 +19,20 @@ FORMS={
  '/auth/reauth':{'password'},'/auth/change-password':{'current_password','new_password','password_confirmation'},
  '/auth/logout':set(),'/auth/logout-all':set()}
 STATIC={'/':'index.html','/school/static/account.js':'account.js','/school/static/account.css':'account.css'}
+STATIC.update({
+    '/school/static/portal/state.mjs':'portal/state.mjs',
+    '/school/static/portal/dates.mjs':'portal/dates.mjs',
+    '/school/static/portal/validation.mjs':'portal/validation.mjs',
+    '/school/static/portal/api.mjs':'portal/api.mjs',
+    '/school/static/portal/filters.mjs':'portal/filters.mjs',
+    '/school/static/portal/dom.mjs':'portal/dom.mjs',
+    '/school/static/portal/auth.mjs':'portal/auth.mjs',
+    '/school/static/portal/records.mjs':'portal/records.mjs',
+    '/school/static/portal/lists.mjs':'portal/lists.mjs',
+    '/school/static/portal/forms.mjs':'portal/forms.mjs',
+    '/school/static/portal/details.mjs':'portal/details.mjs',
+    '/school/static/portal/navigation.mjs':'portal/navigation.mjs',
+})
 
 
 def duplicate_checked(pairs):
@@ -167,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
             path=parsed.path;svc=self.server.service;cookies=self.cookies()
             if not mutation and path in STATIC:
                 asset=Path(__file__).parent/'web'/STATIC[path]
-                mime='text/html; charset=utf-8' if path=='/' else ('application/javascript; charset=utf-8' if path.endswith('.js') else 'text/css; charset=utf-8')
+                mime='text/html; charset=utf-8' if path=='/' else ('application/javascript; charset=utf-8' if path.endswith(('.js','.mjs')) else 'text/css; charset=utf-8')
                 self.reply(200,content=asset.read_bytes(),mime=mime);return
             if not mutation and path==PREFIX+'/health':
                 self.reply(200,{'data':{'ok':True,'deployment_mode':svc.config.profile},'request_id':request_id});return

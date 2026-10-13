@@ -1,150 +1,25 @@
-"use strict";
-
-const prefix="/school/api/v1",screen=document.querySelector("#screen"),message=document.querySelector("#message");
-
-let session=null,preauth=null,linkToken=null,view="login",busy=false;
-
-const fragment=new URLSearchParams(location.hash.slice(1));
-
-if(fragment.has("reset")){view="reset-password";
-linkToken=fragment.get("reset");
+import {SessionState} from './portal/state.mjs';
+import {API,errorText} from './portal/api.mjs';
+import {Accounts} from './portal/auth.mjs';
+import {Records} from './portal/records.mjs';
+import {action} from './portal/dom.mjs';
+class Portal {
+  constructor() {
+    this.screen=document.querySelector('#screen');this.state=new SessionState();this.api=new API(this.state);
+    this.active='login';this.accounts=new Accounts(this);this.records=new Records(this);
+    this.state.listeners.add(value=>{this.api.abort();this.records.clear();for(const d of document.querySelectorAll('dialog')){d.close();d.remove();}
+      this.accounts.linkToken=null;if(value)this.accounts.account();else{this.accounts.show('login');this.message('Zaloguj się, aby otworzyć własne dane.');}});
+    window.addEventListener('hashchange',()=>this.accounts.link());
+  }
+  message(text) { document.querySelector('#message').textContent=text; }
+  fail(error) { this.message(errorText(error)); }
+  menu() {
+    const nav=document.querySelector('nav');nav.replaceChildren();
+    const items=this.state.value?[['Moje przejazdy','trips'],['Moje obserwacje','observations'],['Konto','account']]:[['Logowanie','login'],['Rejestracja','register'],['Reset hasła','request-reset']];
+    for(const [label,name] of items) {const button=action(label,()=>{this.message('');if(name==='account')this.accounts.account();else if(['trips','observations'].includes(name))this.records.list(name);else this.accounts.show(name);},'nav-button');
+      button.dataset.view=name;if(this.active===name)button.setAttribute('aria-current','page');nav.append(button);}
+    document.querySelector('#identity').textContent=this.state.value?this.state.value.user.display_name+' · '+this.state.value.user.role:'Prywatny portal danych';
+  }
+  async init() {if(this.accounts.link())return;try{const data=await this.api.request('/auth/me');this.state.set(data);}catch{if(!this.state.value)this.accounts.show('login');}}
 }
-if(fragment.has("verify")){view="verify-email";
-linkToken=fragment.get("verify");
-}
-history.replaceState(null,"",location.pathname);
-
-const definitions={login:["Logowanie",[["email","Email","email"],["password","Hasło","password"]]],register:["Utwórz konto kierowcy",[["display_name","Nazwa","text"],["email","Email","email"],["password","Hasło","password"],["password_confirmation","Powtórz hasło","password"]]],"request-reset":["Odzyskaj dostęp",[["email","Email","email"]]],"reset-password":["Ustaw nowe hasło",[["password","Nowe hasło","password"],["password_confirmation","Powtórz hasło","password"]]],"change-password":["Zmień hasło",[["current_password","Obecne hasło","password"],["new_password","Nowe hasło","password"],["password_confirmation","Powtórz nowe hasło","password"]]],reauth:["Potwierdź tożsamość",[["password","Hasło","password"]]],"verify-email":["Aktywacja email",[]]};
-
-function element(tag,text){const node=document.createElement(tag);
-if(text)node.textContent=text;
-return node;
-}
-async function api(path,body){const options={credentials:"same-origin",cache:"no-store"};
-if(body!==undefined){options.method="POST";
-options.headers={"Content-Type":"application/json","X-CSRF-Token":session?.csrf||preauth?.csrf||""};
-options.body=JSON.stringify(body);
-}const response=await fetch(prefix+path,options);
-const payload=response.status===204?{}:await response.json();
-if(!response.ok){if(response.status===401){session=null;
-preauth=null;
-screen.replaceChildren();
-view="login";
-render();
-}throw {status:response.status,...payload.error};
-}return payload.data;
-}
-async function preflight(){preauth=await api("/auth/preflight");
-}
-function show(value){message.textContent=value;
-}
-function render(){screen.replaceChildren();
-document.querySelectorAll("nav button").forEach(b=>b.hidden=Boolean(session));
-if(session){screen.append(element("h2","Twoje konto"));
-const dl=element("dl");
-for(const [name,value] of [["Nazwa",session.user.display_name],["Email",session.user.email],["Rola",session.user.role]])dl.append(element("dt",name),element("dd",value));
-screen.append(dl,element("p","Dostępne: konto, zmiana hasła i sesje. Przejazdy, nawigacja oraz GPS/CV nie są jeszcze częścią portalu."));
-const actions=element("div");
-actions.className="actions";
-for(const [label,target] of [["Zmień hasło","change-password"],["Potwierdź tożsamość","reauth"],["Wyloguj","logout"],["Wyloguj wszystkie sesje","logout-all"]]){const button=element("button",label);
-button.onclick=()=>target.startsWith("logout")?submit(target,{}):form(target);
-actions.append(button);
-}screen.append(actions);
-return;
-}form(view);
-}
-function form(target){view=target;
-screen.replaceChildren();
-const [title,fields]=definitions[target]||definitions.login;
-screen.append(element("h2",title));
-const node=element("form");
-node.noValidate=true;
-for(const [name,label,type] of fields){const wrap=element("label",label),input=element("input");
-input.name=name;
-input.type=type;
-input.required=true;
-input.autocomplete=type==="password"?(target==="register"||target==="reset-password"||name!=="current_password"&&target==="change-password"?"new-password":"current-password"):name==="email"?"email":"nickname";
-if(type==="password"){input.maxLength=256;
-}if(name==="display_name")input.maxLength=80;
-if(name==="email")input.maxLength=254;
-const error=element("span");
-error.className="error";
-error.dataset.error=name;
-wrap.append(input,error);
-node.append(wrap);
-}const button=element("button",target==="verify-email"?"Potwierdź aktywację":"Potwierdź");
-button.type="submit";
-node.append(button);
-node.onsubmit=e=>{e.preventDefault();
-const body=Object.fromEntries(new FormData(node));
-const errors={};
-for(const input of node.querySelectorAll("input")){if(!input.checkValidity())errors[input.name]="Sprawdź poprawność i długość pola.";
-if(input.type==="password"&&(Array.from(input.value).length<12||Array.from(input.value).length>128))errors[input.name]="Hasło: 12–128 znaków Unicode.";
-if(input.type==="password"&&new TextEncoder().encode(input.value).length>512)errors[input.name]="Maksymalnie 512 bajtów UTF-8.";
-if(input.name==="email"){const value=input.value.trim(),parts=value.split("@");
-if(!/^[\x00-\x7f]+$/.test(value)||value.length>254||parts.length!==2||parts[0].length>64||!parts[1]?.includes(".")||parts[0].startsWith(".")||parts[0].endsWith(".")||parts[0].includes("..")||parts[1].split(".").some(p=>! /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(p)))errors.email="Podaj poprawny adres email.";
-}if(input.name==="display_name"&&(input.value!==input.value.trim()||/[\x00-\x1f\x7f]/.test(input.value)))errors[input.name]="Nazwa bez znaków sterujących i skrajnych spacji.";
-}if(body.password_confirmation!==(body.new_password||body.password)&&"password_confirmation" in body)errors.password_confirmation="Hasła muszą być identyczne.";
-for(const span of node.querySelectorAll("[data-error]"))span.textContent=errors[span.dataset.error]||"";
-if(Object.keys(errors).length)return;
-if(target==="verify-email"||target==="reset-password"){if(!/^[A-Za-z0-9_-]{43}$/.test(linkToken||"")){show("Otwórz poprawny link z poczty.");
-return;
-}body.token=linkToken;
-}submit(target,body,node);
-};
-screen.append(node);
-if(session){const back=element("button","Powrót do konta");
-back.type="button";
-back.onclick=()=>{render();
-show("");
-};
-screen.append(back);
-}if(target==="verify-email")screen.append(element("p","Samo otwarcie linku nie aktywuje konta. Potwierdź przyciskiem."));
-}
-async function submit(target,body,node){if(busy)return;
-busy=true;
-document.querySelectorAll("button").forEach(b=>b.disabled=true);
-show("Trwa operacja…");
-try{if(!session)await preflight();
-const data=await api("/auth/"+target,body);
-if(target==="login"||target==="reauth"){session=data;
-render();
-show("Zalogowano.");
-}else if(target==="logout"||target==="logout-all"||target==="change-password"||target==="reset-password"){session=null;
-preauth=null;
-linkToken=null;
-view="login";
-render();
-show("Operacja zakończona. Zaloguj się ponownie.");
-}else if(target==="verify-email"){linkToken=null;
-view="login";
-render();
-show("Konto aktywne. Zaloguj się.");
-}else{view="login";
-render();
-show(data.message+" Demo: lokalna skrzynka poczty operatora.");
-}}catch(error){show(error.status===429?"Za dużo prób. Spróbuj później.":error.status===401?"Brak aktywnej sesji lub nieprawidłowe dane logowania.":error.status===403?"Sesja formularza wygasła. Spróbuj ponownie.":error.code==="INVALID_TOKEN"?"Link jest nieprawidłowy lub wygasł.":"Operacja nie powiodła się. Sprawdź formularz.");
-for(const [name,text] of Object.entries(error.fields||{})){const span=node?.querySelector(`[data-error="${name}"]`);
-if(span)span.textContent=text;
-}}finally{busy=false;
-document.querySelectorAll("button").forEach(b=>b.disabled=false);
-}}
-document.querySelectorAll("[data-view]").forEach(button=>button.onclick=()=>{view=button.dataset.view;
-linkToken=null;
-show("");
-render();
-});
-
-window.addEventListener("hashchange",()=>{const link=new URLSearchParams(location.hash.slice(1));
-if(link.has("verify")||link.has("reset")){view=link.has("verify")?"verify-email":"reset-password";
-linkToken=link.get(link.has("verify")?"verify":"reset");
-session=null;
-preauth=null;
-history.replaceState(null,"",location.pathname);
-render();
-}});
-
-(async()=>{if(!linkToken){try{session=await api("/auth/me");
-}catch{session=null;
-}}render();
-})();
+new Portal().init();

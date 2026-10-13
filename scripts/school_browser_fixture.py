@@ -29,6 +29,17 @@ def main():
             if os.environ.get('GW_RESOURCE_FIXTURE')=='1':
                 from scripts.school_resource_fixtures import populate
                 fixture=populate(service.repo,service.passwords.hash('Browser password 123!'))
+                if os.environ.get('GW_SCHOOL_UI_FIXTURE')=='1':
+                    from greenwave.school_data import Actor
+                    actor=Actor(fixture['users']['driver']['id'])
+                    admin=Actor(fixture['users']['admin']['id'],service.repo.clock())
+                    route=service.repo.create_config(admin,'ROUTE','Warszawa-demo',{'synthetic':True,'stop_lines':[{'stop_line_id':'synthetic-light'}]})
+                    service.repo.publish_config(admin,route['id'],route['revision'])
+                    for index in range(28):
+                        trip=service.repo.create_trip(actor,'Historia demonstracyjna '+str(index),note='Tylko syntetyczne dane testowe.')
+                        obs=service.repo.add_observation(actor,fixture['trips']['private']['id'],'synthetic-light','RED','STATE_SEEN','ui-history-'+str(index),historical=True)
+                        with db.transaction() as c:c.execute("UPDATE observations SET journaling_state='APPLIED' WHERE id=?",(obs['id'],))
+
             server=AccountsHTTPServer(('127.0.0.1',port),service)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             print(json.dumps({'url':cfg.base_url,'mailbox':f'http://127.0.0.1:{mailbox.server_port}', 'trips':None if fixture is None else {k:v['id'] for k,v in fixture['trips'].items()}}),flush=True)
