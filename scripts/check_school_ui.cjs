@@ -6,7 +6,7 @@ const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_
 let stderr='';child.stderr.on('data',d=>stderr+=d);const PASS='Browser password 123!';
 (async()=>{
  const config=await new Promise((resolve,reject)=>{const rl=readline.createInterface({input:child.stdout});rl.once('line',line=>{rl.close();resolve(JSON.parse(line));});child.once('exit',code=>reject(new Error('Fixture exited '+code)));});
- const browser=await chromium.launch({channel:'msedge',headless:true});const out=path.resolve('docs/school-app/screenshots');fs.mkdirSync(out,{recursive:true});
+ const browser=await chromium.launch({channel:'msedge',headless:true});const out=path.resolve(process.env.GW_SCREENSHOT_ROOT||'docs/school-app/screenshots');fs.mkdirSync(out,{recursive:true});
  const report=[];
  try {
   for(const [label,width,height] of [['desktop',1360,900],['phone',390,844],['narrow',320,844]]) {

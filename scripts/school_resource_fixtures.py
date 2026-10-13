@@ -58,8 +58,8 @@ def populate(repo, password_hash):
                   {'kind':'VISION_EVENTS','filename':'events.jsonl','sha256':sha(cv/'events.jsonl')}]}
         (cv/'manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
     share=repo.share_trip(Actor(users['driver']['id']),trips['shared']['id'],'analyst@example.test')
-    draft=repo.create_config(Actor(users['analyst']['id']),'MODEL','synthetic',{'diagnostic_only':True})
-    published=repo.create_config(Actor(users['admin']['id']),'MODEL','synthetic-public',{'diagnostic_only':True})
+    draft=repo.create_config(Actor(users['analyst']['id']),'MODEL','synthetic',{'schema_version':1,'settings':{'horizon_seconds':240},'relations':[]})
+    published=repo.create_config(Actor(users['admin']['id']),'MODEL','synthetic-public',{'schema_version':1,'settings':{'horizon_seconds':240},'relations':[]})
     published=repo.publish_config(Actor(users['admin']['id'],repo.clock()),published['id'],published['revision'])
     return {'users':users,'trips':trips,'observations':observations,'captures':captures,'share':share,
             'draft':draft,'published':published}

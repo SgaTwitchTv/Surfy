@@ -6,6 +6,7 @@ export function errorText(error) {
   if(error.code==='ARTIFACT_INVALID') return 'Integralność plików nie została potwierdzona. Eksport jest niedostępny.';
   if(error.status===409) return 'Konflikt danych lub zajęta sesja. Odśwież stan i świadomie ponów zapis.';
   if(error.status===404) return 'Zasób lub kontekst jest niedostępny. Nie można wznowić dawnego nagrania.';
+  if(error.code==='REAUTH_REQUIRED') return 'Potwierdź tożsamość hasłem i świadomie ponów operację.';
   if(error.status===403) return 'Brak uprawnienia lub wygasła sesja formularza.';
   if(error.status===429) return 'Za dużo prób. Spróbuj później.';
   if(error.code==='INVALID_TOKEN') return 'Link jest nieprawidłowy lub wygasł.';

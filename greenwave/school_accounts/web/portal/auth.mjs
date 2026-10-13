@@ -30,7 +30,7 @@ export class Accounts {
     this.app.records.leave();this.app.active='account';this.app.menu();const screen=this.app.screen,user=this.app.state.value.user;
     screen.replaceChildren(el('p','Ustawienia i bezpieczeństwo','eyebrow'),el('h2','Twoje konto'));
     const dl=el('dl');for(const [name,value] of [['Nazwa',user.display_name],['Email',user.email],['Rola',user.role]])dl.append(el('dt',name),el('dd',value));screen.append(dl);
-    screen.append(notice('Każda rola ma własne dane. Rola administratora nie daje dostępu do cudzych przejazdów. Dodatkowe widoki ról: etap 8.'));
+    screen.append(notice('Każda rola ma własne dane. Rola administratora nie daje dostępu do cudzych przejazdów. Dodatkowe widoki wynikają z bieżącej roli; publikacja konfiguracji nie potwierdza danych terenowych.'));
     const actions=el('div','','actions');for(const [label,target] of [['Zmień hasło','change-password'],['Potwierdź tożsamość','reauth'],['Wyloguj','logout'],['Wyloguj wszystkie sesje','logout-all']])actions.append(action(label,async()=>{
       if(!target.startsWith('logout')) {this.show(target);return;}
       const button=actions.querySelectorAll('button');button.forEach(b=>b.disabled=true);

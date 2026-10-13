@@ -21,6 +21,9 @@ FORMS={
  '/auth/logout':set(),'/auth/logout-all':set()}
 STATIC={'/':'index.html','/school/static/account.js':'account.js','/school/static/account.css':'account.css'}
 STATIC.update({
+    '/school/static/portal/roles.mjs':'portal/roles.mjs',
+    '/school/static/portal/role_views.mjs':'portal/role_views.mjs',
+    '/school/static/portal/laboratory.mjs':'portal/laboratory.mjs',
     '/school/static/portal/state.mjs':'portal/state.mjs',
     '/school/static/portal/dates.mjs':'portal/dates.mjs',
     '/school/static/portal/validation.mjs':'portal/validation.mjs',
@@ -149,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get('Content-Type','').lower() not in {'application/json','application/json; charset=utf-8'}:raise AuthError(415,'CONTENT_TYPE')
         try:size=int(self.headers.get('Content-Length','-1'))
         except ValueError:raise AuthError(400,'BAD_REQUEST') from None
-        if size>8192:raise AuthError(413,'BODY_TOO_LARGE')
+        if size>(270336 if self.path.startswith(PREFIX+'/config/versions') else 8192):raise AuthError(413,'BODY_TOO_LARGE')
         if size<0:raise AuthError(400,'BAD_REQUEST')
         self.body_read=True
         try:

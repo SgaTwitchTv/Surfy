@@ -29,11 +29,15 @@ def main():
             if os.environ.get('GW_RESOURCE_FIXTURE')=='1':
                 from scripts.school_resource_fixtures import populate
                 fixture=populate(service.repo,service.passwords.hash('Browser password 123!'))
+                if os.environ.get('GW_SCHOOL_ROLE_FIXTURE')=='1':
+                    service.repo.create_user('synthetic-long-email-'+('x'*40)+'@example.test','Długa nazwa '+('W'*68),fixture['users']['driver']['password_hash'],status='ACTIVE',verified_at=service.repo.clock())
                 if os.environ.get('GW_SCHOOL_UI_FIXTURE')=='1':
                     from greenwave.school_data import Actor
                     actor=Actor(fixture['users']['driver']['id'])
                     admin=Actor(fixture['users']['admin']['id'],service.repo.clock())
-                    route=service.repo.create_config(admin,'ROUTE','Warszawa-demo',{'synthetic':True,'stop_lines':[{'stop_line_id':'synthetic-light'}]})
+                    from greenwave.school_admin.validation import payload
+                    route_payload={'schema_version':1,'route_id':'Warszawa-demo','geometry_version':'v1','name':'Warszawa demo','direction_description':'North','source':{'attribution':'Synthetic'},'coordinates':[[21,52],[21.001,52.001]],'stop_lines':[{'stop_line_id':'synthetic-light','segment_index':0,'coordinates':[[21.0004,52.0006],[21.0006,52.0004]],'position_uncertainty_m':1,'source':{'attribution':'Synthetic'}}]}
+                    route=service.repo.create_config(admin,'ROUTE','Warszawa-demo',payload('ROUTE',route_payload))
                     service.repo.publish_config(admin,route['id'],route['revision'])
                     for index in range(28):
                         trip=service.repo.create_trip(actor,'Historia demonstracyjna '+str(index),note='Tylko syntetyczne dane testowe.')

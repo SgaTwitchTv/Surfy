@@ -1,7 +1,8 @@
 import {STATES,EVENTS,statuses,text} from './validation.mjs';
 import {dayRange} from './dates.mjs';
-export function filters(body,kind) {
-  const result={scope:'own',limit:'25',sort:body.sort||'desc'};
+export function filters(body,kind,scope='own') {
+  const result={scope,limit:'25',sort:body.sort||'desc'};
+  if(!['own','shared'].includes(scope))throw new Error('Nieprawidłowy zakres.');
   if(!['asc','desc'].includes(result.sort)) throw new Error('Wybierz sortowanie.');
   Object.assign(result,dayRange(body.from,body.to));
   const names=kind==='trips'?['route_id','status','archived']:['trip_id','route_id','signal_id','state','event_type','source','valid'];
