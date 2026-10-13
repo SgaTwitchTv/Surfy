@@ -13,6 +13,7 @@ from .mail import Mailer
 class AccountsService:
     def __init__(self,repo,config,passwords=None,transport=None,mail_capacity=100):
         self.repo,self.config=repo,config.validate()
+        self.credential_observers=[]
         self.passwords=passwords or Passwords()
         self.limits=Limits(repo,config.rate_key)
         self.sessions=Sessions(repo,config.csrf_key)
@@ -23,6 +24,11 @@ class AccountsService:
 
     def close(self):
         self.mailer.close()
+
+    def credentials_changed(self):
+        for callback in list(self.credential_observers):
+            try:callback()
+            except Exception:pass  # Durable revocation remains; recording watchdog retries.
 
     def address(self,value):
         try:normalized=email(value)
@@ -109,6 +115,7 @@ class AccountsService:
                 c.execute('UPDATE users SET password_hash=?,security_version=security_version+1,revision=revision+1,updated_at=? WHERE id=?',(encoded,now,row['user_id']))
                 self.revoke_all(c,row['user_id'],now)
             self.repo.audit(c,Actor(row['user_id']),'AUTH_'+purpose,'USER',row['user_id'])
+        if purpose=='RESET':self.credentials_changed()
         return {'message':'Operacja zakończona. Zaloguj się ponownie.'}
 
     def login(self,body,ip):
@@ -166,6 +173,7 @@ class AccountsService:
             c.execute('UPDATE users SET password_hash=?,security_version=security_version+1,revision=revision+1,updated_at=? WHERE id=?',(encoded,now,user['id']))
             self.revoke_all(c,user['id'],now)
             self.repo.audit(c,Actor(user['id']),'AUTH_PASSWORD_CHANGED','USER',user['id'])
+        self.credentials_changed()
         return {'message':'Hasło zmienione. Zaloguj się ponownie.'}
 
     def logout(self,row,all_sessions=False):
@@ -177,6 +185,8 @@ class AccountsService:
                 c.execute("UPDATE devices SET token_hash=NULL,status='REVOKED',revoked_at=? WHERE parent_session_id=?",(now,row['id']))
                 c.execute('UPDATE pairing_challenges SET revoked_at=COALESCE(revoked_at,?) WHERE parent_session_id=?',(now,row['id']))
             self.repo.audit(c,Actor(row['user_id']),'AUTH_LOGOUT_ALL' if all_sessions else 'AUTH_LOGOUT','USER',row['user_id'])
+
+        self.credentials_changed()
 
     def bootstrap(self,address,name,value):
         address=self.address(address);text(name,1,80);encoded=self.passwords.hash(value)

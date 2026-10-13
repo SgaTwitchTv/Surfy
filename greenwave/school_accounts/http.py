@@ -149,15 +149,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):self.dispatch(False)
     def do_POST(self):self.dispatch(True)
-    def do_PATCH(self):self.reply(404,{'error':{'code':'NOT_FOUND'}})
+    def do_PATCH(self):self.dispatch(True)
+    def do_unavailable(self):self.reply(404,{'error':{'code':'NOT_FOUND'}})
     def do_DELETE(self):self.dispatch(True)
-    do_PUT=do_PATCH
-    do_OPTIONS=do_PATCH
-    do_HEAD=do_PATCH
+    do_PUT=do_unavailable
+    do_OPTIONS=do_unavailable
+    do_HEAD=do_unavailable
 
     def dispatch(self,mutation):
         self.body_read=False
         request_id=secrets.token_hex(8)
+        self.request_id=request_id
         try:
             ip=self.check_request(mutation)
             parsed=urlsplit(self.path)

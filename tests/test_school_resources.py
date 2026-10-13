@@ -94,8 +94,8 @@ class ResourceTests(Fixture):
         rows=self.get('/observations?trip_id='+self.tid+'&state=GREEN')[1]['data']['items']
         self.assertEqual(len(rows),1);self.assertEqual(rows[0]['effective']['state'],'GREEN')
         for q in ['limit=0','limit=101','offset=-1','from=NaN','from=true','from=1&to=1','owner_id=x','scope=all','limit=1&limit=2','cursor=x','status=BOGUS','archived=1']:
-            self.assertEqual(self.get('/trips?'+q)[0],422,q)
-        self.assertEqual(self.get('/observations')[0],422)
+            self.assertEqual(self.get('/trips?'+q)[0],400 if q=='cursor=x' else 422,q)
+        self.assertEqual(self.get('/observations')[0],200)
         self.assertEqual(self.get('/observations?trip_id='+self.tid+'&scope=shared')[0],403)
         self.assertEqual(self.get('/observations/'+self.oid+'/corrections?limit=1')[1]['data']['items'][0]['before']['state'],'RED')
 
@@ -191,7 +191,7 @@ class ResourceTests(Fixture):
                      PREFIX+'/devices',PREFIX+'/admin/users',PREFIX+'/navigation',PREFIX+'/device/session',
                      PREFIX+'/trips/'+self.tid+'/cv/captures/'+self.cid+'/frames/0']:
             self.assertEqual(self.request('GET',path)[0],404)
-        self.assertEqual(self.post('/trips',{'title':'fake','owner_id':self.users['driver']['id']})[0],404)
+        self.assertEqual(self.post('/trips',{'title':'fake','owner_id':self.users['driver']['id']})[0],422)
 
     def test_policy_reauth_default_deny_and_transfer_revocation(self):
         self.use('driver');raw=self.cookies['gw_session'];policy=Policy(self.service)
@@ -287,7 +287,7 @@ class ResourceTests(Fixture):
             self.assertEqual(self.get('/trips/'+self.tid+'/cv/captures/'+self.cid+'/media/0')[0],409,name)
         from greenwave.school_data.errors import Denied,Conflict,Invalid
         for error,status in [(Denied('synthetic'),404),(Conflict('synthetic'),409),(Invalid('synthetic'),422)]:
-            with patch.object(self.server.resources.reads,'trips',side_effect=error):self.assertEqual(self.get('/trips')[0],status)
+            with patch.object(self.server.resources.lists,'read',side_effect=error):self.assertEqual(self.get('/trips')[0],status)
 
     def test_bounded_contexts_configs_and_failure_paths(self):
         self.use('driver');raw=self.cookies['gw_session'];contexts=self.server.resources.contexts

@@ -50,7 +50,7 @@ class Fixture(unittest.TestCase):
         c=http.client.HTTPConnection('127.0.0.1',self.cfg.port,timeout=10)
         h={'Cookie':'; '.join(k+'='+v for k,v in self.cookies.items())}
         payload=None
-        if method in {'POST','DELETE'}:
+        if method in {'POST','DELETE','PATCH'}:
             payload=json.dumps(body if body is not None else {})
             h.update({'Content-Type':'application/json','Origin':self.cfg.origin,'X-CSRF-Token':self.csrf})
         h.update(headers or {})
