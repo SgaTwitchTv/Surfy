@@ -102,29 +102,55 @@ class Contexts:
     def job_dto(job):
         return {k: job[k] for k in ('id', 'trip_id', 'type', 'status', 'report_id')}
 
-    def job_authorize(self, raw, job, *, execution=False):
-        row, actor = self.policy.session(raw)
-        if job['authorization_invalid']: raise AuthError(404, 'NOT_FOUND')
-        # Validate the job's original authorization even for owner management.
-        # Owner access to an existing job does not change its execution grant.
-        try:
-            with self.repo.database.transaction(False) as c:
-                trip = c.execute('SELECT * FROM trips WHERE id=?', (job['trip_id'],)).fetchone()
-                if trip is None: raise AuthError(404, 'NOT_FOUND')
-                self.policy.check_basis(c, job['authorization'], trip)
-                if trip['status'] != 'COMPLETE' or trip['archived_at'] is not None:
-                    raise AuthError(404, 'NOT_FOUND')
-                trip = dict(trip)
-        except AuthError:
+    def invalidate_job_execution(self, job):
+        """Invalid execution is permanent; completed results remain completed."""
+        with self.lock:
             job['authorization_invalid'] = True
             job['cancelled'] = True
-            if job['status'] in {'QUEUED','RUNNING'}: job['status'] = 'CANCELLED'
-            raise
-        requester = (actor.user_id == job['actor_id'] and row['id'] == job['session_id']
-                     and row['secret_hash'] == job['credential'])
-        if not requester and (execution or trip['owner_id'] != actor.user_id):
+            if job['status'] in {'QUEUED', 'RUNNING'}:
+                job['status'] = 'CANCELLED'
+
+    def execution_trip(self, c, job):
+        """Original actor/session/credential/grant, never the managing owner."""
+        if job['authorization_invalid']: raise AuthError(404, 'NOT_FOUND')
+        trip = c.execute('SELECT * FROM trips WHERE id=?', (job['trip_id'],)).fetchone()
+        if trip is None: raise AuthError(404, 'NOT_FOUND')
+        self.policy.check_basis(c, job['authorization'], trip)
+        if trip['status'] != 'COMPLETE' or trip['archived_at'] is not None:
             raise AuthError(404, 'NOT_FOUND')
-        return trip
+        session = c.execute('SELECT s.*,u.status,u.security_version AS current_version FROM browser_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.user_id=? AND s.secret_hash=?',
+                            (job['session_id'], job['actor_id'], job['credential'])).fetchone()
+        now = self.repo.clock()
+        if (session is None or session['status'] != 'ACTIVE' or session['revoked_at'] is not None
+                or session['security_version'] != session['current_version']
+                or session['absolute_expiry'] <= now or session['last_activity_at'] + 1800000 <= now):
+            raise AuthError(404, 'NOT_FOUND')
+        return dict(trip)
+
+    def authorize_job_execution(self, raw, job):
+        row, actor = self.policy.session(raw)
+        if (actor.user_id != job['actor_id'] or row['id'] != job['session_id']
+                or row['secret_hash'] != job['credential']):
+            raise AuthError(404, 'NOT_FOUND')
+        try:
+            with self.repo.database.transaction(False) as c:
+                return self.execution_trip(c, job)
+        except AuthError:
+            self.invalidate_job_execution(job)
+            raise
+
+    def authorize_job_management(self, raw, job):
+        row, actor = self.policy.session(raw)
+        with self.repo.database.transaction(False) as c:
+            trip = c.execute('SELECT * FROM trips WHERE id=?', (job['trip_id'],)).fetchone()
+            if trip is None: raise AuthError(404, 'NOT_FOUND')
+            # Ownership is independent of closed/archive/share/execution flags.
+            if trip['owner_id'] == actor.user_id:
+                try: self.execution_trip(c, job)
+                except AuthError: self.invalidate_job_execution(job)
+                return dict(trip)
+        # Nonowners retain the original requester/session/grant policy.
+        return self.authorize_job_execution(raw, job)
 
     def job_create(self, raw, tid, body):
         if body != {'type': 'GPS_QUALITY'}: raise AuthError(422, 'ANALYSIS_TYPE_UNAVAILABLE')
@@ -149,16 +175,17 @@ class Contexts:
             with self.lock:
                 if job['cancelled']: job['status'] = 'CANCELLED'; return
                 job['status'] = 'RUNNING'
-            self.job_authorize(raw, job, execution=True)
+            self.authorize_job_execution(raw, job)
             trip, logger, _, _ = self.files.run(raw, job['trip_id'], basis=job['authorization'])
-            self.job_authorize(raw, job, execution=True)
+            self.authorize_job_execution(raw, job)
             analysis = RunAnalysis(logger).analyze(trip['run_id'])
-            self.job_authorize(raw, job, execution=True)
+            self.authorize_job_execution(raw, job)
             with self.lock:
                 if job['cancelled']: job['status'] = 'CANCELLED'; return
                 # Serialize the last session/grant check and manifest publication
                 # against revoke/archive/security changes using BEGIN IMMEDIATE.
                 with self.repo.database.transaction() as c:
+                    self.execution_trip(c, job)
                     current, _, trip, _ = self.policy.bound_trip(raw, job['authorization'], connection=c)
                     if current['id'] != job['session_id'] or current['secret_hash'] != job['credential']:
                         raise AuthError(404, 'NOT_FOUND')
@@ -185,7 +212,7 @@ class Contexts:
         with self.lock:
             self.purge(); job = self.jobs.get(resource_id(jid))
             if not job: raise AuthError(404, 'NOT_FOUND')
-            self.job_authorize(raw, job)
+            self.authorize_job_management(raw, job)
             return self.job_dto(job)
 
     def job_cancel(self, raw, jid):

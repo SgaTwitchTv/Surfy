@@ -133,15 +133,142 @@ class ShareContextTests(Fixture):
         with self.assertRaises(AuthError):policy.bound_trip(raw,basis)
 
     def test_regrant_after_last_check_before_publication_is_denied(self):
-        contexts=self.server.resources.contexts;original=contexts.job_authorize;calls=[]
+        contexts=self.server.resources.contexts;original=contexts.authorize_job_execution;calls=[]
         def intercepted(raw,job,**kwargs):
             result=original(raw,job,**kwargs)
-            if kwargs.get('execution'):
-                calls.append(1)
-                if len(calls)==3:self.regrant()  # Last check succeeded, then revoke.
+            calls.append(1)
+            if len(calls)==3:self.regrant()  # Last check succeeded, then revoke.
             return result
-        with patch.object(contexts,'job_authorize',intercepted):
+        with patch.object(contexts,'authorize_job_execution',intercepted):
             status,data,_=self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})
             self.assertEqual(status,202);jid=data['data']['id'];self.await_status(jid,'CANCELLED')
         self.assertIsNone(contexts.jobs[jid]['report_id'])
         self.assertFalse(self.storage.derived(self.users['driver']['id'],self.tid).exists())
+
+    def completed_analyst_job(self):
+        contexts=self.server.resources.contexts;finished=threading.Event();original=contexts.execute
+        def execute(*args):
+            try:return original(*args)
+            finally:finished.set()
+        self.use('analyst')
+        with patch.object(contexts,'execute',execute):
+            status,data,_=self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})
+            self.assertEqual(status,202);self.assertTrue(finished.wait(10),'Worker did not finish')
+        job=contexts.jobs[data['data']['id']]
+        self.assertEqual(job['status'],'COMPLETE')
+        return job['id'],job['report_id']
+
+    def test_owner_status_reproducer_before_and_after_analyst_denial(self):
+        for regrant in [False,True]:
+            jid,rid=self.completed_analyst_job()
+            self.use('driver');self.assertEqual(self.get('/analysis-jobs/'+jid)[0],200)
+            owner=Actor(self.users['driver']['id'])
+            if regrant:self.regrant()
+            else:self.repo.revoke_share(owner,self.tid,self.fixture['share'])
+            with self.subTest(regrant=regrant,phase='before analyst read'):
+                self.assertEqual(self.get('/analysis-jobs/'+jid)[0],200)
+            self.use('analyst');self.assertEqual(self.get('/analysis-jobs/'+jid)[0],404)
+            self.use('driver')
+            with self.subTest(regrant=regrant,phase='after analyst read'):
+                self.assertEqual(self.get('/analysis-jobs/'+jid)[0],200)
+            self.assertEqual(self.get('/trips/'+self.tid+'/reports/'+rid)[0],200)
+            if not regrant:
+                self.fixture['share']=self.repo.share_trip(owner,self.tid,'analyst@example.test')
+
+    def job_identity(self,jid):
+        job=self.server.resources.contexts.jobs[jid]
+        return {key:job[key] for key in ['actor_id','session_id','credential','authorization']}
+
+    def test_owner_completed_cancel_and_access_matrix_after_regrant(self):
+        jid,rid=self.completed_analyst_job();identity=self.job_identity(jid)
+        self.regrant();path='/analysis-jobs/'+jid
+        for who in ['driver','analyst','other','admin',None]:
+            self.use(who)
+            expected=200 if who=='driver' else 401 if who is None else 404
+            self.assertEqual(self.get(path)[0],expected,who)
+            expected=204 if who=='driver' else 401 if who is None else 404
+            self.assertEqual(self.request('DELETE',PREFIX+path,{})[0],expected,who)
+        self.use('driver')
+        for _ in range(2):self.assertEqual(self.request('DELETE',PREFIX+path,{})[0],204)
+        data=self.get(path)[1]['data'];self.assertEqual(data['status'],'COMPLETE')
+        self.assertEqual(data['report_id'],rid);self.assertEqual(self.get('/trips/'+self.tid+'/reports/'+rid)[0],200)
+        self.assertEqual(self.job_identity(jid),identity)
+        self.assertEqual(set(data),{'id','trip_id','type','status','report_id'})
+        new_id,_=self.completed_analyst_job();self.assertNotEqual(jid,new_id)
+
+    def test_owner_cancel_queued_after_revoke_without_execution(self):
+        contexts=self.server.resources.contexts;release=threading.Event()
+        started=[threading.Event(),threading.Event()];finished=threading.Event();original=contexts.execute
+        def blocker(index):started[index].set();release.wait(10)
+        def execute(*args):
+            try:return original(*args)
+            finally:finished.set()
+        for index in range(2):contexts.pool.submit(blocker,index)
+        self.addCleanup(release.set)
+        for event in started:self.assertTrue(event.wait(3))
+        with patch.object(contexts,'execute',execute),patch.object(RunAnalysis,'analyze') as analyze:
+            status,data,_=self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})
+            self.assertEqual(status,202);jid=data['data']['id'];identity=self.job_identity(jid)
+            self.repo.revoke_share(Actor(self.users['driver']['id']),self.tid,self.fixture['share'])
+            self.use('driver');status,data,_=self.get('/analysis-jobs/'+jid)
+            self.assertEqual(status,200);self.assertEqual(data['data']['status'],'CANCELLED')
+            self.assertEqual(self.request('DELETE',PREFIX+'/analysis-jobs/'+jid,{})[0],204)
+            self.assertEqual(self.job_identity(jid),identity)
+            release.set();self.assertTrue(finished.wait(3));analyze.assert_not_called()
+        self.assertIsNone(contexts.jobs[jid]['report_id'])
+
+    def test_owner_cancel_running_after_revoke_prevents_publication(self):
+        contexts=self.server.resources.contexts;entered=threading.Event();release=threading.Event();finished=threading.Event()
+        original_execute=contexts.execute;original_analyze=RunAnalysis.analyze
+        def analyze(instance,runid):entered.set();release.wait(10);return original_analyze(instance,runid)
+        def execute(*args):
+            try:return original_execute(*args)
+            finally:finished.set()
+        self.addCleanup(release.set)
+        with patch.object(contexts,'execute',execute),patch.object(RunAnalysis,'analyze',analyze):
+            status,data,_=self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})
+            self.assertEqual(status,202);jid=data['data']['id'];identity=self.job_identity(jid)
+            self.assertTrue(entered.wait(3));self.regrant()
+            # Owner can cancel immediately, before an analyst denial sets flags.
+            self.use('driver');self.assertEqual(self.request('DELETE',PREFIX+'/analysis-jobs/'+jid,{})[0],204)
+            self.assertEqual(self.get('/analysis-jobs/'+jid)[1]['data']['status'],'CANCELLED')
+            self.use('analyst');self.assertEqual(self.get('/analysis-jobs/'+jid)[0],404)
+            self.use('driver');self.assertEqual(self.get('/analysis-jobs/'+jid)[0],200)
+            self.assertEqual(self.job_identity(jid),identity)
+            release.set();self.assertTrue(finished.wait(3))
+        self.assertIsNone(contexts.jobs[jid]['report_id'])
+        self.assertFalse(self.storage.derived(self.users['driver']['id'],self.tid).exists())
+
+    def test_owner_own_job_after_archive_and_handle_ttl(self):
+        contexts=self.server.resources.contexts;finished=threading.Event();original=contexts.execute
+        def execute(*args):
+            try:return original(*args)
+            finally:finished.set()
+        self.use('driver')
+        with patch.object(contexts,'execute',execute):
+            status,data,_=self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})
+            self.assertEqual(status,202);self.assertTrue(finished.wait(3))
+        jid=data['data']['id'];identity=self.job_identity(jid)
+        self.repo.archive_trip(Actor(self.users['driver']['id']),self.tid,self.trips['shared']['revision'])
+        self.assertEqual(self.get('/analysis-jobs/'+jid)[0],200)
+        self.assertEqual(self.request('DELETE',PREFIX+'/analysis-jobs/'+jid,{})[0],204)
+        self.assertEqual(self.job_identity(jid),identity)
+        self.assertEqual(self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'GPS_QUALITY'})[0],409)
+        self.now+=1800000
+        # Fresh active owner session, but memory handle TTL has elapsed.
+        self.preflight();_,data,_=self.auth('login',{'email':'driver@example.test','password':PASS});self.csrf=data['data']['csrf']
+        self.assertEqual(self.get('/analysis-jobs/'+jid)[0],404)
+
+    def test_owner_job_management_session_csrf_origin_and_revocation(self):
+        jid,_=self.completed_analyst_job();self.regrant();self.use('driver');path='/analysis-jobs/'+jid
+        for headers in [{'X-CSRF-Token':''},{'X-CSRF-Token':'bad'},{'Origin':'http://evil.test'}]:
+            self.assertEqual(self.request('DELETE',PREFIX+path,{},headers)[0],403)
+        raw=self.cookies['gw_session']
+        self.now+=1800000
+        for method in ['GET','DELETE']:
+            self.cookies={'gw_session':raw}
+            self.assertEqual(self.request(method,PREFIX+path,{} if method=='DELETE' else None)[0],401)
+        self.now-=1800000;self.use('driver');self.assertEqual(self.auth('logout',{})[0],204)
+        for method in ['GET','DELETE']:
+            self.cookies={'gw_session':raw}
+            self.assertEqual(self.request(method,PREFIX+path,{} if method=='DELETE' else None)[0],401)
