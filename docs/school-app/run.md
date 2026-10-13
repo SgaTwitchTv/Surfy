@@ -508,8 +508,33 @@ python -m unittest discover -s tests -p 'test_school*.py' -v
 
 Sprawdź stare read/control/close404,nowy replay200,własny replay200;queued oraz
 running job po revoke→reshare CANCELLED bez nowego manifestu. Status/cancel
-starego joba404. Stary grant nie zmienia się na nowy w żadnym kontekście.
+starego joba analityka404;właściciel status200 i cancel204. Stary grant nie zmienia się na nowy w żadnym kontekście.
 Raport poprawnie opublikowany przed revokacją pozostaje właścicielowi;nowe
 udostępnienie pozwala na świeży dozwolony odczyt raportu,ale nie starego joba.
 Pełna regresja jak sekcja3 w nowym eksporcie. Bez zmian komend serwera,
 schematu v2/14 tabel,poczty,formatu raw.csv ani warunków rekomendacji live.
+
+
+### Końcowy odbiór owner management — status → revoke → status → cancel
+
+Zatrzymany serwer i nowa syntetyczna fixture z sekcji10;nie importuj starych danych.
+Revoke/share HTTP należy do etapu6,więc powtarzalny scenariusz używa wewnętrznego
+repozytorium w izolowanym teście,a wszystkie status/cancel wykonywane są przez
+rzeczywiste HTTP,cookies,Origin i CSRF:
+
+```powershell
+python -m unittest discover -s tests -p 'test_school_share_contexts.py' -k owner_status_reproducer -v
+python -m unittest discover -s tests -p 'test_school_share_contexts.py' -v
+python -m unittest discover -s tests -p 'test_school_resources.py' -v
+python -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage run --branch --source=greenwave.school_resources,greenwave.school_accounts,greenwave.school_data --data-file=artifacts/stage5-owner.coverage -m unittest discover -s tests -p 'test_school*.py' -v
+.venv-school/Scripts/python.exe -m coverage report --data-file=artifacts/stage5-owner.coverage -m
+```
+
+OwnerGET200 przed revoke,ownerGET200 po revoke i po regrant,ownerDELETE204.
+AnalystGET/DELETE starego joba404,niezależnie od wcześniejszego owner odczytu.
+Queued/running CANCELLED bez publikacji,completed COMPLETE/report_id zachowane.
+Owner archived parent status200/cancel204 doTTL;nowa analiza archive409.
+Other/adminforeign404,anonymous/expired/revoked401,DELETE badCSRF/Origin403.
+Polecenia serwera/poczty i bazowego GreenWave nie zmieniają się. Nie ma nowego
+provisioning/revoke/resume endpointu,nowych tabel ani trwałej historii jobów.

@@ -1224,3 +1224,305 @@ pełnepermodule wstage5.md. Same3pakietyetapowe,nie końcowyM8/CV/JSzakres.
 Dokumenty/spójnośćUTF8/linki/PowerShellsyntax/stagednames/diffcheck sprawdzone.
 Main/CVrefsniezmienione;trackedruntime/data/runsbrak. Nadalczekamy na brakującą
 końcówkępromptu;odbiórpozostaje dla otrzymanegozakresu,nie nieznanychwymagań.
+
+
+## Etap 5 — korekta owner management (pełny prompt)
+
+Poniższy kompletny prompt zastępuje brakującą końcówkę poprzedniej wiadomości.
+
+```text
+etap 5 — jeszcze jedna korekta uprawnień właściciela do jobów analizy
+
+pracuj dalej w istniejącym worktree na codex/school-app
+nie zaczynaj etapu 6
+
+najpierw przeczytaj obowiązujące AGENTS.md oraz docs/school-app/contract.md, stage5.md, stages.md, run.md i ai-usage.md
+
+sprawdź aktualny head, git status i staging
+zachowaj wszystkie niezwiązane zmiany użytkownika
+
+przegląd dotyczy commita
+20d9be8437be5977d85948cdc456bcfbf430183b
+
+ważne — poprzedni prompt dostałeś urwany
+ten prompt jest kompletnym poleceniem dotyczącym pozostałej korekty
+nie trzeba ponownie pytać o brakującą część poprzedniego promptu
+
+co już działa i czego nie ruszamy
+
+replay i job analityka są związane z konkretnym share_id
+
+po cofnięciu share i ponownym udostępnieniu temu samemu analitykowi stare uchwyty nie odzyskują dostępu
+
+nowe udostępnienie pozwala tworzyć nowe konteksty, ale nie ożywia starych
+
+job z cofniętym share nie może wykonać analizy ani opublikować wyniku na podstawie nowego share
+
+wcześniej poprawnie opublikowany raport pozostaje danymi właściciela
+
+te zachowania mają zostać zachowane
+
+co jest jeszcze źle
+
+właściciel przejazdu traci dostęp do statusu i anulowania joba utworzonego przez analityka, gdy share użyty przez tego analityka zostaje cofnięty
+
+niezależnie odtworzono taki wynik
+
+właściciel czyta status joba przed cofnięciem share → 200
+
+właściciel cofa share i ponownie udostępnia przejazd analitykowi
+
+analityk czyta stary job → 404, to jest poprawne
+
+właściciel czyta ten sam job → 404, to jest niepoprawne
+
+właściciel czyta wcześniej opublikowany raport → 200, to jest poprawne
+
+przyczyna jest w job_authorize
+
+funkcja najpierw sprawdza authorization_invalid i pierwotną podstawę wykonania joba
+dopiero później rozważa dostęp właściciela
+
+przez to nieważny share analityka blokuje również właściciela
+
+musimy rozdzielić prawo wykonania joba od prawa zarządzania jobem
+
+krok 1 — odtwórz problem przed poprawką
+
+dodaj test regresyjny z rzeczywistym http i tymczasową bazą
+
+właściciel udostępnia ukończony przejazd analitykowi
+
+analityk tworzy job
+
+właściciel może odczytać jego status
+
+właściciel cofa share
+
+właściciel nadal powinien dostać 200 przy odczycie statusu
+
+analityk powinien dostać 404
+
+powtórz ten scenariusz także z ponownym udostępnieniem temu samemu analitykowi
+
+nie polegaj na wcześniejszym odczycie analityka, który przypadkowo ustawi authorization_invalid
+sprawdź zachowanie zarówno przed takim odczytem, jak i po nim
+
+zapisz wynik testu przed zmianą kodu
+
+krok 2 — rozdziel dwie polityki
+
+pierwsza polityka to uprawnienie wykonania joba
+
+dotyczy workera, odczytu źródła do obliczeń oraz publikacji wyniku
+
+nadal wymaga pierwotnej podstawy OWN albo konkretnego SHARE
+
+dla joba utworzonego przez analityka cofnięcie pierwotnego share unieważnia wykonanie
+
+nowy share nie zastępuje starego
+
+właściciel czytający lub anulujący job nie może zmienić podstawy wykonania na OWN
+
+nie wolno zmieniać actor_id, session_id, credential ani authorization joba na dane właściciela
+
+druga polityka to uprawnienie zarządzania jobem
+
+dotyczy get /analysis-jobs/{job_id} oraz delete /analysis-jobs/{job_id}
+
+aktywny i uwierzytelniony właściciel parent trip może odczytać bezpieczny status oraz anulować job dotyczący jego przejazdu
+
+to prawo nie zależy od ważności share analityka ani od authorization_invalid joba
+
+właściciel nie przejmuje joba, nie wznawia go i nie przywraca analitykowi dostępu
+
+pozostali użytkownicy nadal dostają 404
+
+administrator nie ma wyjątku dla cudzych danych
+
+analityk nadal potrzebuje właściwej sesji i credential oraz pierwotnego, nadal ważnego share
+
+krok 3 — popraw strukturę kodu
+
+przejrzyj job_authorize, job_read, job_cancel i execute w greenwave/school_resources/contexts.py oraz potrzebne funkcje policy.py
+
+możesz rozdzielić obecne job_authorize na osobne funkcje wykonania i zarządzania
+nazwy dobierz czytelnie
+
+nie naprawiaj tego przez pomijanie kontroli w workerze
+
+authorization_invalid ma oznaczać nieważność pierwotnego uprawnienia wykonania
+nie może oznaczać zakazu wszystkich operacji właściciela
+
+przy zarządzaniu najpierw sprawdź aktualną sesję, aktywny status konta i rzeczywistą własność parent trip
+
+właściciel wynika z db
+nie przyjmuj owner_id, role ani actor_id z klienta
+
+nie używaj polityki closed=True jako powodu do odebrania właścicielowi odczytu statusu lub anulowania istniejącego joba po archiwizacji przejazdu
+
+archiwizacja nadal blokuje wykonanie i nowe analizy
+właściciel może zobaczyć stan starego joba i go anulować, dopóki jego pamięciowy uchwyt istnieje
+
+dla niewłaściciela zachowaj aktualne ograniczenia complete, nonarchive i share
+
+jeśli job wygasł przez ttl, został usunięty albo serwer uruchomiono ponownie, 404 pozostaje prawidłowe
+nie dodawaj trwałej historii jobów ani nowych tabel tylko na potrzeby tej poprawki
+
+krok 4 — zachowanie statusu i anulowania
+
+właściciel powinien widzieć bezpieczne dto statusu joba również po cofnięciu share
+
+jeżeli job był queued albo running i jego pierwotna podstawa została unieważniona, nie pokazuj go jako zdolnego do dalszej publikacji
+
+worker i kontrole uprawnień nadal muszą doprowadzić go do cancelled
+
+wcześniej zakończony job może nadal pokazywać complete oraz report_id, jeśli raport rzeczywiście został poprawnie opublikowany przed cofnięciem
+
+authorization_invalid nie usuwa ani nie fałszuje takiego raportu
+
+delete wykonywany przez właściciela ustawia anulowanie joba oczekującego lub działającego
+nie zabija wątku pythona
+nie przywraca uprawnienia wykonania
+nie usuwa wcześniej opublikowanego raportu
+
+dla joba już zakończonego zachowaj bezpieczne, idempotentne zachowanie anulowania i obecny kontrakt 204
+nie udawaj cofnięcia już wykonanej analizy
+
+nie dodawaj endpointu restartowania ani wznawiania starego joba
+nowa analiza wymaga nowego joba
+
+krok 5 — zachowaj zabezpieczenia publikacji
+
+nie osłabiaj związania joba z pierwotnym share_id
+
+zachowaj kontrole przed wykonaniem, dostępem do plików, po obliczeniu oraz przed publikacją
+
+zachowaj synchronizację końcowej kontroli i publikacji z revoke, archive oraz zmianami security_version
+
+odczyt statusu przez właściciela nie może wpłynąć na wynik tych kontroli
+
+nie deklaruj transakcyjnego recovery db i filesystem
+to nadal osobna integracja kolejnych etapów
+
+krok 6 — testy
+
+dodaj testy na tymczasowej db i syntetycznych danych
+
+właściciel odczytuje status joba analityka po revoke → 200
+
+właściciel odczytuje status po revoke i regrant → 200
+
+właściciel anuluje queued job analityka po revoke → 204 i brak wykonania
+
+właściciel anuluje running job analityka po revoke → 204 i brak publikacji
+
+właściciel zachowuje dostęp niezależnie od tego, czy analityk wcześniej wykonał żądanie ustawiające authorization_invalid
+
+właściciel może zarządzać własnym jobem po archiwizacji trip, dopóki uchwyt istnieje
+
+analityk nie odzyskuje starego joba po regrant → read i cancel 404
+
+nowy job na podstawie nowego share działa
+
+drugi kierowca i administrator wobec cudzego joba → 404
+
+anonimowa, wygasła lub cofnięta sesja → 401
+
+delete bez csrf lub z błędnym origin → 403
+
+wcześniej opublikowany raport pozostaje dostępny właścicielowi
+
+status i anulowanie przez właściciela nie zmieniają pierwotnego actor, credential, session ani authorization joba
+
+stary replay nadal nie odzyskuje dostępu po regrant
+
+do sterowania kolejką i obliczeniem używaj event lub barrier
+nie opieraj testów na przypadkowym czasie sleep
+
+krok 7 — regresja
+
+uruchom wszystkie testy school_resources i school_share_contexts
+
+uruchom regresję school_accounts, haseł i school_data
+
+uruchom pełną regresję python w izolowanym eksporcie
+
+ponów odpowiednie testy js oraz smoke rzeczywistego http
+
+jeśli środowisko pozwala, ponów browser smoke desktop i phone
+jeśli nie pozwala, jasno podaj blokadę
+
+nie ukrywaj błędu brakującej biblioteki tkinter przez zmianę istniejącego testu
+
+ponownie zmierz coverage trzech szkolnych pakietów z branch=True i raportem per moduł
+nie wyłączaj nowych ścieżek
+
+krok 8 — dokumentacja i commit
+
+zaktualizuj stage5.md oraz contract.md
+
+opisz osobno execution authorization i owner management authorization
+
+usuń nieaktualne stwierdzenie, że nieważny share odbiera właścicielowi status i cancel
+
+zaktualizuj run.md o scenariusz właściciel → status → revoke → status → cancel
+
+uzupełnij ai-usage.md o ten pełny prompt i faktycznie wykonane działania
+
+w stages.md wpisz wcześniejszy hash
+20d9be8437be5977d85948cdc456bcfbf430183b
+
+etap 5 oznacz jako przygotowany do końcowego odbioru
+etapy 6–12 pozostają do zrobienia
+
+zrób małe sensowne commity
+staging tylko konkretnych plików
+
+nie dodawaj runtime, db, nagrań, mailboxów, sekretów ani środowisk do gita
+
+nie pushuj automatycznie
+nie scalaj z main
+nie zaczynaj etapu 6
+
+na końcu podaj
+
+wynik reproduktora przed i po poprawce
+
+tabelę wyników dla owner, analyst, other driver, admin i anonymous
+
+dowód, że owner management nie zmienia uprawnienia wykonania joba
+
+wyniki queued, running i completed jobs
+
+wyniki regresji i coverage oraz ograniczenia środowiska
+
+hashe commitów i git status
+
+krótką checklistę końcowego odbioru etapu 5
+
+to jest całość promptu
+wykonaj tę korektę do działającego i sprawdzonego końca, a potem zatrzymaj się
+```
+
+Działania AI:odtworzenie4wariantów HTTP404!=200 przed zmianą kodu;oddzielne
+execution i management z aktualnym owner DB,bez zmiany tożsamości joba;
+refresh queued/running doCANCELLED,completed/report_id zachowane. Nie zmieniono
+pinned share,końcowej transakcji publikacji,migracji,loggera,solvera ani live gate.
+Dodano6regressiontests zEvent i snapshotem4niezmiennychpól;14sharetestsPASS48.536s.
+Pełna regresja,coverage i browser wyniki są w końcowej sekcji stage5.md.
+Nie proszono ponownie o urwaną końcówkę;ten prompt jest kompletny.
+Bez innychczatów/agentów,prywatnych danych,push/merge/rewrite. Etap6nierozpoczęty.
+
+
+Wyniki faktyczne końcowej korekty:reproducer przed1test/4subTestFAIL404!=200,
+3.255s;poPASS3.779s. 14sharetestsPASS48.536s;108schooltests107PASS1skip195.816s;
+334fullisolatedtests333PASS1skip221.207s. Windows symlinkskipWinError1314,junction
+PASS,Tkinterbezbłędu,bezLinuxclaim. Browserresource i accountsdesktop/phonePASS,
+Node7PASS/mobileflowPASS. ActualHTTPownerstatus/cancelmatrixprzeszedł.
+Coverage3pakietówbranchTrue2219/2313linie95.9360%,621/808gałęzie76.8564%,combined
+90.9965%,zeroexclusions;pełnypermodule stage5.md,nie końcowyM8/CV/JSwynik.
+Codecommit5ce716c28c1014e97ec19f058c870fa1c9925984;docscommitpodanywodpowiedzi.
+Kontrola dokumentów,PowerShellsyntax i stageddiffnames;bezDB/runtime/sekretów,
+bezmain/CVchanges/push/merge,rewrite. Etap5przygotowany do końcowego odbioru;
+6–12Dozrobienia. Ten kompletnyprompt zamknąłkwestięurwanejwiadomości.

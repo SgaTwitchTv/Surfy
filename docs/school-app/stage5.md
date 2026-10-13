@@ -325,9 +325,9 @@ pierwszej odmowie;sam zapisany share_id już uniemożliwia jego ożywienie bez
 wcześniejszego odczytu. Nowy replay na nowymgrancie200,własnyownerreplay200.
 Rotacja/logout/expiry nadal egzekwowane istniejącą regresją etapu5.
 Jobs po nieważnym grancie mają trwałą flagę authorization_invalid/cancelled;
-read/cancel404. Owner management nie zamienia podstawy wykonania joba na OWN.
-Właściciel może nadal zarządzać zadaniem z ważną podstawą,ale nie przywraca
-nieważnej podstawy cudzego zadania. Raport poprawnie opublikowany przed revoke
+read/cancel analityka404. Owner management nie zamienia podstawy wykonania na OWN.
+Właściciel zachowuje status/cancel niezależnie od ważności pierwotnej podstawy;
+wcześniejszą błędną odmowę właścicielowi skorygowano w następnym przeglądzie. Raport poprawnie opublikowany przed revoke
 pozostaje danymi właściciela. Świeży odczyt raportu to osobne O/S;nowy grant może
 go dopuścić,bez przywrócenia starego handle joba.
 
@@ -413,4 +413,129 @@ Raport lokalny ignorowany artifacts/stage5-share-final-coverage.json;
 pełne polecenia w run.md. Nadal nie końcowe szerokie pokrycie M8/CV ani JS.
 Dokumentacyjny commit poprawki: `git log -1 --format=%H -- docs/school-app/stage5.md`.
 Bezpush/merge/rewrite;status po commicie czysty,etap6nierozpoczęty.
-Dalsza część promptu pozostaje do przekazania;nie deklarujemy jej odbioru.
+Kompletne polecenie kolejnej korekty zastępuje brakującą końcówkę poprzedniego promptu.
+
+
+## Końcowa korekta — zarządzanie jobem przez właściciela
+
+Przegląd: **20d9be8437be5977d85948cdc456bcfbf430183b**. HEAD zgodny,worktree i
+staging czyste. AGENTS przeczytany;nie zmieniono main/CV,schematu,loggera,solvera
+ani live gate. Tylko nowe dane syntetyczne;bez prywatnego data/runs/starego runtime.
+Nowy prompt jest kompletny;nie ma dalszego pytania o poprzednią końcówkę.
+
+Przed poprawką HTTP reproduktor test_owner_status_reproducer_before_and_after_analyst_denial:
+1 test,4 subTest FAIL404!=200,3.255s. Revoke i revoke→regrant,każdy przed i po
+odczycie analityka ustawiającym authorization_invalid. Owner status przed revoke
+był200;published report owner200. Problem był w kolejności job_authorize:
+pierwotny grant blokował również prawo właściciela.
+Po poprawce ten sam test PASS3.779s.
+
+Kod rozdziela authorize_job_execution od authorize_job_management.
+Execution sprawdza pierwotnego requester/session/credential i dokładny OWN/SHARE
+przed plikami,obliczeniem,po obliczeniu i w końcowej transakcji publikacji.
+Management najpierw sprawdza aktualną sesję i własność parent w DB. Owner dostaje
+status/cancel bez closed=True i bez zależności od authorization_invalid.
+Niewłaściciel nadal wymaga pierwotnej sesji i ważnego share;ADMIN foreign404.
+Owner management odświeża ważność wykonania bez zmiany jego tożsamości:
+actor_id/session_id/credential/authorization pozostają identyczne w testach.
+Nieważne queued/running pokazuje CANCELLED;completed zachowuje COMPLETE/report_id.
+Cancel204 jest idempotentny,nie usuwa opublikowanego raportu i nie zabija wątku.
+Archiwizacja zabrania wykonania/nowego joba,ale nie zarządzania istniejącym handle.
+
+|Po revoke/regrant starego joba analityka|GET status|DELETE cancel|
+|---|---:|---:|
+|Aktywny owner|200|204|
+|Analityk-requester|404|404|
+|Drugi kierowca|404|404|
+|ADMIN,cudzy trip|404|404|
+|Anonymous/expired/revoked session|401|401|
+|Owner,błędnyCSRF/Origin|200 dla poprawnegoGET|403|
+
+Nowe testy używają Event do zablokowania kolejki i obliczeń oraz potwierdzenia
+zakończenia workera;nie sterują nim przez przypadkowe sleep.
+14/14 share/context tests PASS48.536s (8dotychczasowych+6owner regression).
+Queued cancel po revoke204,analyze nigdy niewywołane. Running cancel204 bezmanifestu.
+Completed status200/cancel204 i report200;stary analyst404,nowy job działa.
+Owner ownjob po archive200/204,nowa analiza409;handlepoTTL404.
+Session/CSRF/Origin oraz old replay revoke→regrant denial zachowane.
+
+Końcowe własne wyniki Windows/Python3.14.4:
+- `python -m unittest discover -s tests -p test_school_share_contexts.py -v`:
+  14/14PASS48.536s;17resources wykonane również w pełnym szkolnym suite.
+- coverage command z run.md:108tests107PASS1skip195.816s;obejmuje accounts/SMTP/
+  passwords/data/resources/share i owner management.
+- pełny izolowany eksport20d9be+wyłącznie contexts.py i test_school_share_contexts.py:
+  334tests333PASS1skip221.207s;źródła zgodne z5ce716c28c1014e97ec19f058c870fa1c9925984.
+- skip w obu suite:Windows symlink WinError1314;Windows junction PASS.
+  Tkinter jest dostępny,brak importerror. Linux nie uruchamiano w tej korekcie.
+- `node scripts/check_school_resources.cjs` i `node scripts/check_school_accounts.cjs`:
+  desktop1280x900 i phone390x844 PASS,prawdziwyHTTP/fetch/sesje i realny KDF.
+  Browser obejmuje istniejący UI kont i odczytów;nie deklaruje nieistniejącego UIjobów.
+- `node --test tests/driver_ui.cjs tests/vision_workbench_ui.cjs`:7/7PASS;
+  `node tests/mobile_flow.cjs`:PASS.
+Nie ma blokady środowiska poza jednym jawnie pominiętym symlink testem.
+Nie wyłączano Tkinter ani trudnych ścieżek w testach lub coverage.
+Etap5 przygotowany do końcowego odbioru;etapy6–12 Do zrobienia.
+
+### Aktualny raport coverage po owner management
+
+Całe trzy szkolne pakiety,branch=True,bezomit/exclude:
+linie **2219/2313=95.9360%**,
+gałęzie **621/808=76.8564%**,
+combined **90.9965%**,excluded_lines0.
+
+|Moduł|Linie wykonane/wszystkie|Gałęzie wykonane/wszystkie|Combined|
+|---|---:|---:|---:|
+|school_accounts/__init__.py|0/0|0/0|100.0000%|
+|school_accounts/__main__.py|56/67|9/12|82.2785%|
+|school_accounts/config.py|51/55|16/20|89.3333%|
+|school_accounts/crypto.py|60/62|16/18|95.0000%|
+|school_accounts/demo_mail.py|70/80|30/38|84.7458%|
+|school_accounts/errors.py|4/4|0/0|100.0000%|
+|school_accounts/http.py|212/237|68/98|83.5821%|
+|school_accounts/limits.py|28/28|2/2|100.0000%|
+|school_accounts/mail.py|57/60|6/8|92.6471%|
+|school_accounts/service.py|163/169|25/34|92.6108%|
+|school_accounts/sessions.py|58/60|13/14|95.9459%|
+|school_data/__init__.py|3/3|0/0|100.0000%|
+|school_data/__main__.py|32/33|7/8|95.1220%|
+|school_data/accounts.py|50/50|19/20|98.5714%|
+|school_data/backup.py|71/74|9/12|93.0233%|
+|school_data/configurations.py|38/38|10/16|88.8889%|
+|school_data/database.py|59/62|8/8|95.7143%|
+|school_data/errors.py|11/11|0/0|100.0000%|
+|school_data/locking.py|33/37|5/8|84.4444%|
+|school_data/migrations.py|110/111|43/44|98.7097%|
+|school_data/observations.py|78/78|26/40|88.1356%|
+|school_data/repositories.py|8/8|0/0|100.0000%|
+|school_data/repository_base.py|37/37|12/12|100.0000%|
+|school_data/security_records.py|94/94|16/22|94.8276%|
+|school_data/storage.py|48/49|15/16|96.9231%|
+|school_data/time_units.py|26/26|14/14|100.0000%|
+|school_data/trips.py|133/133|45/62|91.2821%|
+|school_data/validation.py|39/39|16/16|100.0000%|
+|school_resources/__init__.py|0/0|0/0|100.0000%|
+|school_resources/api.py|61/61|37/42|95.1456%|
+|school_resources/contexts.py|199/202|43/62|91.6667%|
+|school_resources/files.py|154/161|48/72|86.6953%|
+|school_resources/policy.py|63/64|23/28|93.4783%|
+|school_resources/reads.py|113/120|40/62|84.0659%|
+
+
+To coverage etapowe,nie końcowy szeroki M8/CV ani pomiar JS. Lokalne raporty
+artifacts/stage5-owner* są ignorowane,bez danych użytkownika w commitach.
+
+Commity korekty:
+1.5ce716c28c1014e97ec19f058c870fa1c9925984 — execution i management,6newtests,
+  aktualizacja testu końcowej publikacji do czytelnej nazwy funkcji.
+2.Commit dokumentacji końcowego odbioru: `git log -1 --format=%H -- docs/school-app/stage5.md`.
+Przegląd dotyczył20d9be8437be5977d85948cdc456bcfbf430183b;bezpush/merge/rewrite.
+
+Końcowa checklista:
+- [ ] Reproduktor owner status:4FAILprzed,wszystkie wariantyPASSpo poprawce.
+- [ ] Owner200/204;analyst staryjob404;other/adminforeign404;anon/expired/revoked401.
+- [ ] Queued bezexecute,running bezpublication,completed zachowuje report200.
+- [ ] Tożsamość joba niezmieniona;archived owner status/cancel doTTL.
+- [ ] CSRF/Origin403,nowy grant/newjob działa,stary replay nadal404.
+- [ ] Pełna regresja/permodulecoverage i review2commitów.
+- [ ] Akceptacja etapu5;dopiero kolejny prompt może rozpocząć6.

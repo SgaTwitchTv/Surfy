@@ -717,8 +717,9 @@ w istniejącym replay/jobie. Nie ma automatycznego fallbacku do innej podstawy.
 Revoke → ponowny share bez odczytu pomiędzy tymi mutacjami nadal unieważnia
 stary kontekst. Read/control/close starego replay dają neutralne404; nowy replay
 może powstać na nowym grancie. Jobs sprawdzają dokładny grant przed plikami,
-analizą, publikacją, odczytem statusu i cancel. Nieważny job jest oznaczany jako
-trwale nieważny/cancelled. Sesja, credential, expiry i security_version nadal
+analizą i publikacją. Nieważna podstawa wykonania jest oznaczana jako
+authorization_invalid;queued/running przechodzi do CANCELLED. Zarządzanie
+właściciela jest odrębnym prawem opisanym poniżej. Sesja, credential, expiry i security_version nadal
 obowiązują niezależnie od podstawy. Właściciel nie zmienia podstawy wykonania
 cudzego zadania przez odczyt jego statusu lub próbę zamknięcia.
 
@@ -729,3 +730,26 @@ pozostają jak w etapie5, pełna koordynacja nagrania w etapie6.
 Raport już poprawnie opublikowany jest danymi właściciela. Jego świeży odczyt
 jest niezależną operacją O/S; nowe udostępnienie może pozwolić czytać taki
 raport, lecz nigdy nie ożywia starego handle zadania.
+
+
+## Etap 5 — execution authorization i owner management authorization
+
+Wykonanie: worker, odczyt źródła i publikacja używają wyłącznie pierwotnych
+actor_id,session_id,credential i AuthorizationBasis OWN/SHARE. Revoke konkretnego
+share,archive albo utrata aktywnej sesji blokują dalsze wykonanie. Nowy grant
+nie zastępuje starego. Końcowa kontrola i manifest pozostają synchronizowane
+z revokacją w transakcji BEGIN IMMEDIATE,bez deklaracji recovery DB/filesystem.
+
+Zarządzanie: GET i DELETE /analysis-jobs/{job_id} najpierw uwierzytelniają bieżącą
+sesję i sprawdzają rzeczywiste owner_id parent trip w DB. Aktywny właściciel
+ma safe status200 i idempotent cancel204 także po revoke,regrant lub archive,
+dopóki pamięciowy handle istnieje. Jego dostęp nie zależy od authorization_invalid
+ani ważności share analityka. Nie przejmuje actor/session/credential/basis joba.
+Dla niewłaściciela obowiązuje pierwotna sesja/credential i nadal ważny konkretny
+share na COMPLETE nonarchive. ADMIN nie ma wyjątku dla cudzych jobów.
+
+Owner status odświeża ważność pierwotnego wykonania;queued/running z nieważną
+podstawą pokazuje CANCELLED. completed zachowuje COMPLETE i report_id prawidłowo
+opublikowanego raportu. Cancel nie usuwa raportu,nie zabija wątku i nie cofa CPU.
+Nie ma resume/restart endpointu;nowa analiza wymaga nowego joba. TTL/usunięcie/
+restart serwera nadal daje404,anonymous/expired/revoked sesja401.
