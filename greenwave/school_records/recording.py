@@ -1,5 +1,6 @@
 """SQLite intentions plus immutable RunLogger artifacts; no cross-store transaction claim."""
 import threading
+import json
 from greenwave.telemetry import RunLogger
 from greenwave.school_accounts.errors import AuthError
 from greenwave.school_data.errors import Conflict
@@ -68,6 +69,8 @@ class Recording:
             with self.repo.atomic(request_id) as (repo,c):
                 row,actor=self.policy.accounts.sessions.lookup(raw,connection=c)
                 trip=repo.own_trip(c,actor,body['trip_id'])
+                route=c.execute('SELECT id,payload,payload_hash FROM config_versions WHERE id=?',(trip['route_version_id'],)).fetchone() if trip['route_version_id'] else None
+                route_snapshot=None if route is None else {'version_id':route['id'],'payload':json.loads(route['payload']),'payload_hash':route['payload_hash']}
                 old=c.execute("SELECT * FROM recording_operations WHERE actor_id=? AND kind='START' AND idempotency_key=?",(actor.user_id,key)).fetchone()
                 if old:
                     if old['trip_id']!=trip['id'] or old['request_hash']!=request_hash(body):raise Conflict('Changed start key')
@@ -88,7 +91,7 @@ class Recording:
                 self.contexts[nid]=ctx
                 self.fault('start-intent')
                 now=utc(repo.clock())
-                logger.start({'start_time':now,'corridor_id':'school-synthetic','timebase':'SIMULATION','dataset':'SYNTHETIC','school_owner_id':actor.user_id,'school_trip_id':trip['id']},run_id=run_id)
+                logger.start({'start_time':now,'corridor_id':'school-synthetic','timebase':'SIMULATION','dataset':'SYNTHETIC','school_owner_id':actor.user_id,'school_trip_id':trip['id'],'school_route_snapshot':route_snapshot},run_id=run_id)
                 self.fault('start-files')
                 if not logger.append('RUN_START',timestamp=now,simulation_seconds=0,model_seconds=0):raise OSError('Logger start failed')
                 if not logger.append('TELEMETRY',timestamp=now,simulation_seconds=0,model_seconds=0,source='SIMULATION',current_corridor_position=0,speed_mps=0):raise OSError('Logger sample failed')

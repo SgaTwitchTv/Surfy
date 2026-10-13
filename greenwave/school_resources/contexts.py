@@ -17,13 +17,35 @@ class Contexts:
         self.repo = policy.repo
         self.lock = threading.RLock()
         self.replays, self.jobs = {}, {}
+        self.policy.accounts.credential_observers.append(self.reconcile_credentials)
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix='school-analysis')
 
     def close(self):
+        try: self.policy.accounts.credential_observers.remove(self.reconcile_credentials)
+        except ValueError: pass  # Server close/restart cleanup is idempotent.
         with self.lock:
             for job in self.jobs.values(): job['cancelled'] = True
             self.replays.clear()
         self.pool.shutdown(wait=True, cancel_futures=True)
+
+    def reconcile_credentials(self):
+        """Proactive cancellation after durable account/session revocation.
+
+        This never substitutes an owner's identity for the original execution basis.
+        Completed reports remain owner data, and owner management remains available.
+        """
+        with self.lock, self.repo.database.transaction(False) as c:
+            for job in self.jobs.values():
+                try: self.execution_trip(c,job)
+                except AuthError: self.invalidate_job_execution(job)
+            now=self.repo.clock()
+            for hid,context in list(self.replays.items()):
+                session=c.execute('SELECT s.*,u.status,u.security_version AS current_version FROM browser_sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.secret_hash=?',
+                                  (context['session_id'],context['credential'])).fetchone()
+                if (not session or session['status']!='ACTIVE' or session['revoked_at'] is not None
+                        or session['security_version']!=session['current_version']
+                        or session['absolute_expiry']<=now or session['last_activity_at']+1800000<=now):
+                    del self.replays[hid]
 
     def purge(self):
         now = self.repo.clock()

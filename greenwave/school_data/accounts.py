@@ -30,7 +30,7 @@ class Accounts:
             row=c.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
             return dict(row) if row else None
 
-    def change_account(self, actor, user_id, expected_revision, *, role=None, status=None, password_hash=None):
+    def change_account(self, actor, user_id, expected_revision, *, role=None, status=None, password_hash=None, reason=""):
         with self.database.transaction() as c:
             admin=self.user(c,actor,{"ADMIN"},reauth=True)
             target=c.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
@@ -40,6 +40,8 @@ class Accounts:
             new_status=target["status"] if status is None else status
             if new_role not in {"DRIVER","ANALYST","ADMIN"} or new_status not in {"ACTIVE","BLOCKED","PENDING_VERIFICATION"}:
                 raise Invalid("Invalid account state")
+            if new_status=="ACTIVE" and target["verified_email_at"] is None:
+                raise Invalid("Active account requires verified email")
             if target["revision"]!=expected_revision:
                 raise Conflict("Account revision conflict")
             if target["role"]=="ADMIN" and target["status"]=="ACTIVE" and (new_role!="ADMIN" or new_status!="ACTIVE"):
@@ -55,5 +57,5 @@ class Accounts:
             c.execute("UPDATE pairing_challenges SET revoked_at=COALESCE(revoked_at,?) WHERE owner_id=?",(now,user_id))
             if new_role!="ANALYST" or new_status!="ACTIVE":
                 c.execute("UPDATE trip_shares SET revoked_at=COALESCE(revoked_at,?) WHERE analyst_id=?",(now,user_id))
-            self.audit(c,actor,"ADMIN_ACCOUNT_CHANGED","USER",user_id)
+            self.audit(c,actor,"ADMIN_ACCOUNT_CHANGED","USER",user_id,reason)
             return dict(c.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone())

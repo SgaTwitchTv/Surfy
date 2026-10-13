@@ -103,25 +103,30 @@ class Reads:
                 'page': {'limit': limit, 'offset': offset}}
 
     def configs(self, raw, q, cid=None):
+        from greenwave.school_records.paging import Paging
+        from greenwave.school_admin.service import config_dto
         row, actor = self.policy.session(raw)
-        status = q.get('status', 'PUBLISHED')
-        if status not in {'PUBLISHED', 'DRAFT', 'ARCHIVED'}: raise AuthError(422, 'VALIDATION')
-        if status != 'PUBLISHED': self.policy.role(raw, {'ANALYST', 'ADMIN'})
-        limit, offset = pagination(q)
-        clauses, values = ['status=?'], [status]
-        if cid:
-            clauses, values = ['id=?'], [resource_id(cid)]
-        for col in ['kind', 'logical_id']:
+        status=q.get('status','PUBLISHED')
+        if status not in {'PUBLISHED','DRAFT','ARCHIVED'}:raise AuthError(422,'VALIDATION')
+        if status!='PUBLISHED':self.policy.role(raw,{'ANALYST','ADMIN'})
+        paging=Paging(self.repo,self.policy.accounts.config.csrf_key)
+        limit,_,page=paging.page(actor,'config-versions',q)
+        offset=integer(q,'offset',0,10000)
+        if offset and 'cursor' in q:raise AuthError(422,'VALIDATION')
+        clauses,values=['status=?','created_at<=?'],[status,page['as_of']]
+        if cid:clauses,values=['id=?'],[resource_id(cid)]
+        for col in ('kind','logical_id'):
             if col in q:
-                if col == 'kind' and q[col] not in {'ROUTE', 'SIGNAL', 'MODEL'}: raise AuthError(422, 'VALIDATION')
-                clauses.append(col + '=?'); values.append(q[col])
+                if col=='kind' and q[col] not in {'ROUTE','SIGNAL','MODEL'}:raise AuthError(422,'VALIDATION')
+                clauses.append(col+'=?');values.append(q[col])
+        if not cid and page['last']:clauses.append('(created_at,id)<(?,?)');values.extend(page['last'])
         with self.repo.database.transaction(False) as c:
-            self.repo.user(c, actor)
-            rows = c.execute('SELECT * FROM config_versions WHERE ' + ' AND '.join(clauses) + ' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?', (*values, limit, offset)).fetchall()
-        if cid and not rows: raise AuthError(404, 'NOT_FOUND')
-        if any(r['status'] != 'PUBLISHED' for r in rows) and row['role'] == 'DRIVER': raise AuthError(403, 'FORBIDDEN')
-        result = [{**pick(r, CONFIG_FIELDS), 'payload': public_config(json.loads(r['payload'])), 'publication_is_field_verification': False} for r in rows]
-        return result[0] if cid else {'items': result, 'page': {'limit': limit, 'offset': offset}}
+            self.policy.session(raw,c);self.repo.user(c,actor,{'ANALYST','ADMIN'} if not cid and status!='PUBLISHED' else None)
+            rows=[dict(r) for r in c.execute('SELECT * FROM config_versions WHERE '+' AND '.join(clauses)+' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?',(*values,limit+1,offset))]
+        if cid and not rows:raise AuthError(404,'NOT_FOUND')
+        if any(r['status']!='PUBLISHED' for r in rows) and row['role']=='DRIVER':raise AuthError(403,'FORBIDDEN')
+        rows,result=paging.result(rows,limit,page,'created_at')
+        return config_dto(rows[0]) if cid else {'items':[config_dto(r) for r in rows],'page':{**result,'offset':offset}}
 
 
 def duplicate_checked(pairs):

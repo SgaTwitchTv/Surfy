@@ -31,7 +31,7 @@ class Policy:
         row, actor = self.session(raw)
         if row['role'] not in roles:
             raise AuthError(403, 'FORBIDDEN')
-        if reauth and not 0 <= self.repo.clock() - actor.reauthenticated_at <= 300000:
+        if reauth and (actor.reauthenticated_at is None or not 0 <= self.repo.clock() - actor.reauthenticated_at <= 300000):
             raise AuthError(403, 'REAUTH_REQUIRED')
         return row, actor
 

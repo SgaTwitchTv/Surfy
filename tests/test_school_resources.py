@@ -12,7 +12,7 @@ from test_school_accounts import Fixture, PASS, NEW, PREFIX
 from scripts.school_resource_fixtures import populate
 
 
-class ResourceTests(Fixture):
+class ResourceFixture(Fixture):
     def setUp(self):
         super().setUp()
         self.fixture=populate(self.repo,self.service.passwords.hash(PASS))
@@ -53,6 +53,8 @@ class ResourceTests(Fixture):
             time.sleep(.01)
         self.assertEqual(data['data']['status'],'COMPLETE');return jid,data['data']['report_id']
 
+
+class ResourceTests(ResourceFixture):
     def test_get_matrix_all_active_resource_endpoints(self):
         jid,rid=self.create_job()
         self.use('driver');status,data,_=self.post('/trips/'+self.tid+'/replays',{'mode':'GPS'})
@@ -188,9 +190,10 @@ class ResourceTests(Fixture):
             self.assertEqual(self.get(path)[0],404,path)
         self.use('other');self.assertEqual(self.request('GET',PREFIX+'/trips/'+self.tid,headers={'X-Owner-ID':self.users['driver']['id'],'X-Role':'ADMIN'})[0],404)
         for path in ['/api/state','/api/runs','/api/vision/media','/runtime/school.sqlite3','/backups/x.sqlite3',
-                     PREFIX+'/devices',PREFIX+'/admin/users',PREFIX+'/navigation',PREFIX+'/device/session',
+                     PREFIX+'/devices',PREFIX+'/navigation',PREFIX+'/device/session',
                      PREFIX+'/trips/'+self.tid+'/cv/captures/'+self.cid+'/frames/0']:
             self.assertEqual(self.request('GET',path)[0],404)
+        self.assertEqual(self.get('/admin/users')[0],403)  # Stage8 implements admin API; DRIVER remains forbidden.
         self.assertEqual(self.post('/trips',{'title':'fake','owner_id':self.users['driver']['id']})[0],422)
 
     def test_policy_reauth_default_deny_and_transfer_revocation(self):

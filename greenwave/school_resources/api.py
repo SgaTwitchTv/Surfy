@@ -14,6 +14,8 @@ from greenwave.school_records.writes import Writes
 class ResourceAPI:
     def __init__(self, accounts):
         self.policy = Policy(accounts)
+        from greenwave.school_admin.service import Administration
+        self.admin = Administration(self.policy)
         self.reads = Reads(self.policy)
         self.files = Files(self.policy)
         self.contexts = Contexts(self.policy, self.files)
@@ -40,6 +42,13 @@ class ResourceAPI:
     def dispatch(self, handler, route, query_string, raw):
         method = handler.command
         routes = [
+            ('GET',r'/admin/users',{'email','role','status','limit','cursor'},'admin_users'),
+            ('PATCH',r'/admin/users/([^/]+)',set(),'admin_change'),
+            ('GET',r'/admin/audit',{'actor','action','from','to','limit','cursor'},'admin_audit'),
+            ('POST',r'/config/versions',set(),'config_create'),
+            ('PATCH',r'/config/versions/([^/]+)',set(),'config_edit'),
+            ('POST',r'/config/versions/([^/]+)/publish',set(),'config_publish'),
+            ('DELETE',r'/config/versions/([^/]+)',set(),'config_archive'),
             ('POST',r'/trips',set(),'create'),
             ('PATCH',r'/trips/([^/]+)',set(),'edit'),
             ('DELETE',r'/trips/([^/]+)',set(),'archive'),
@@ -56,7 +65,7 @@ class ResourceAPI:
             ('GET', r'/observations/([^/]+)/corrections', {'limit','offset'}, 'corrections'),
             ('GET', r'/trips/([^/]+)/export', set(), 'export'),
             ('HEAD', r'/trips/([^/]+)/export', set(), 'export_check'),
-            ('GET', r'/config/versions', {'kind','logical_id','status','limit','offset'}, 'configs'),
+            ('GET', r'/config/versions', {'kind','logical_id','status','limit','offset','cursor'}, 'configs'),
             ('GET', r'/config/versions/([^/]+)', set(), 'config'),
             ('POST', r'/trips/([^/]+)/replays', set(), 'replay_create'),
             ('GET', r'/replays/([^/]+)', set(), 'replay_read'),
@@ -81,7 +90,12 @@ class ResourceAPI:
                 if method not in {'GET','HEAD'}:
                     self.policy.accounts.sessions.check_csrf(raw, row, handler.headers.get('X-CSRF-Token',''))
                     body = handler.resource_body()
-                if operation in {'create','edit','archive','observe','correct','share','revoke'}:
+                if operation=='admin_users':data=self.admin.accounts(raw,q)
+                elif operation=='admin_audit':data=self.admin.audit(raw,q)
+                elif operation=='admin_change':data=self.admin.account_change(raw,args[0],body,handler.request_id)
+                elif operation in {'config_create','config_edit','config_publish','config_archive'}:
+                    data=self.admin.config_write(raw,args[0] if args else None,operation[7:],body,handler.request_id)
+                elif operation in {'create','edit','archive','observe','correct','share','revoke'}:
                     data=getattr(self.writes,operation)(raw,*args,body,handler.request_id)
                 elif operation in {'nav_start','nav_finish'}:
                     if len(handler.headers.get_all('Idempotency-Key',[]))!=1:raise AuthError(422,'IDEMPOTENCY_KEY_REQUIRED')
@@ -114,5 +128,5 @@ class ResourceAPI:
                     if len(handler.headers.get_all('Range', [])) > 1: raise AuthError(416, 'RANGE_INVALID')
                     return True, self.files.media(raw, args[0], args[1], segment, handler.headers.get('Range')), 200
                 if operation=='observe' and data['journaling_state']!='APPLIED':return True,data,202
-                return True, data, 201 if operation in {'replay_create','create','correct','observe','share','nav_start'} else 202 if operation == 'job_create' else 204 if operation in {'replay_close','job_cancel','archive','revoke'} else 200
+                return True, data, 201 if operation in {'config_create','replay_create','create','correct','observe','share','nav_start'} else 202 if operation == 'job_create' else 204 if operation in {'config_archive','replay_close','job_cancel','archive','revoke'} else 200
         return False, None, None
