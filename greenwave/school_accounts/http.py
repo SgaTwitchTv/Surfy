@@ -1,5 +1,6 @@
 import ipaddress
 import json
+import re
 import secrets
 import ssl
 import sqlite3
@@ -112,14 +113,17 @@ class Handler(BaseHTTPRequestHandler):
         body=content if content is not None else (b'' if status==204 else json.dumps(data,ensure_ascii=True,allow_nan=False).encode())
         self.send_response(status)
         self.send_header('Connection','close');self.close_connection=True
-        self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(body)))
+        self.send_header('Content-Type',mime)
+        if self.command!='HEAD' or status!=200:self.send_header('Content-Length',str(len(body)))
+        if self.command=='HEAD' and isinstance(data,dict) and 'error' in data:self.send_header('X-School-Error',data['error']['code'])
         self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Referrer-Policy','no-referrer')
         self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         if self.server.service.config.secure:self.send_header('Strict-Transport-Security','max-age=31536000')
         for value in cookies:self.send_header('Set-Cookie',value)
         for key,value in (headers or {}).items():self.send_header(key,str(value))
-        self.end_headers();self.wfile.write(body)
+        self.end_headers()
+        if self.command!='HEAD':self.wfile.write(body)
 
     def check_request(self,mutation=False):
         cfg=self.server.service.config
@@ -168,7 +172,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):self.dispatch(True)
     do_PUT=do_unavailable
     do_OPTIONS=do_unavailable
-    do_HEAD=do_unavailable
+    def do_HEAD(self):
+        if re.fullmatch(PREFIX+r'/trips/[a-f0-9]{32}/export',urlsplit(self.path).path):self.dispatch(False)
+        else:self.do_unavailable()
 
     def dispatch(self,mutation):
         self.body_read=False
@@ -191,6 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             if handled:
                 from greenwave.school_resources.files import Transfer
                 if isinstance(data,Transfer):self.transfer(data,request_id)
+                elif self.command=='HEAD':self.reply(status,content=b'',mime='application/zip')
                 else:self.reply(status,{'data':data,'request_id':request_id})
                 return
             if parsed.query:raise AuthError(400,'BAD_REQUEST')

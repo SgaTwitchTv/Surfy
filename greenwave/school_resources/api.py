@@ -55,6 +55,7 @@ class ResourceAPI:
             ('GET', r'/observations', {'trip_id','scope','from','to','signal_id','state','event_type','route_id','source','valid','limit','cursor','sort'}, 'observations'),
             ('GET', r'/observations/([^/]+)/corrections', {'limit','offset'}, 'corrections'),
             ('GET', r'/trips/([^/]+)/export', set(), 'export'),
+            ('HEAD', r'/trips/([^/]+)/export', set(), 'export_check'),
             ('GET', r'/config/versions', {'kind','logical_id','status','limit','offset'}, 'configs'),
             ('GET', r'/config/versions/([^/]+)', set(), 'config'),
             ('POST', r'/trips/([^/]+)/replays', set(), 'replay_create'),
@@ -77,7 +78,7 @@ class ResourceAPI:
                 q = query(query_string, allowed)
                 args = match.groups()
                 body = None
-                if method != 'GET':
+                if method not in {'GET','HEAD'}:
                     self.policy.accounts.sessions.check_csrf(raw, row, handler.headers.get('X-CSRF-Token',''))
                     body = handler.resource_body()
                 if operation in {'create','edit','archive','observe','correct','share','revoke'}:
@@ -97,6 +98,7 @@ class ResourceAPI:
                 elif operation == 'corrections': data = self.reads.corrections(raw, args[0], q)
                 elif operation == 'configs': data = self.reads.configs(raw, q)
                 elif operation == 'config': data = self.reads.configs(raw, q, args[0])
+                elif operation == 'export_check':self.files.run(raw,args[0],True);data=None
                 elif operation == 'export': return True, self.export(raw, args[0]), 200
                 elif operation.startswith('replay_') or operation in {'job_create','job_cancel','job_read'}:
                     if operation in {'replay_close','job_cancel'} and body != {}: raise AuthError(422, 'VALIDATION')

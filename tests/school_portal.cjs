@@ -53,7 +53,7 @@ test('errors are explicit for conflicts, expiry, invalid token and unknown netwo
 
 test('download checks errors before native cookie download and never creates a Blob',async()=>{const {state:s,api:a}=await mods();const store=new s.SessionState();store.set({csrf:'s'});let cancelled=0,clicked=0;
  const previous=global.document;global.document={createElement:()=>({click(){clicked++;},remove(){}}),body:{append(){}}};
- try {const client=new a.API(store,async()=>({ok:true,status:200,body:{cancel:async()=>cancelled++}}));await client.download('/trips/id/export');assert.equal(cancelled,1);assert.equal(clicked,1);
+ try {const client=new a.API(store,async()=>({ok:true,status:200,body:{cancel:async()=>cancelled++}}));await client.download('/trips/id/export');assert.equal(cancelled,0);assert.equal(clicked,1);
   await assert.rejects(new a.API(store,async()=>response(503)).download('/trips/id/export'),e=>e.status===503);
   await assert.rejects(new a.API(store,async()=>response(401)).download('/trips/id/export'),e=>e.status===401);assert.equal(store.value,null);
   store.set({csrf:'new'});let resolve;const old=new a.API(store,()=>new Promise(r=>resolve=r));const pending=old.download('/trips/id/export');store.clear();resolve({ok:true,status:200,body:{cancel:async()=>{}}});await assert.rejects(pending,e=>e.name==='AbortError');assert.equal(clicked,1);
@@ -66,3 +66,7 @@ test('API timeout aborts rather than pretending a mutation failed to commit',asy
 test('default generated operation keys and arrays are controlled and canonical',async()=>{const {state:s}=await mods();const k=new s.OperationKeys();const id=k.key('manual',{values:[true,1,'x']});assert.match(id,/^[a-f0-9]{32}$/);assert.equal(k.key('manual',{values:[true,1,'x']}),id);});
 
 test('network loss has an explicit unknown-outcome error, not an automatic retry',async()=>{const {state:s,api:a}=await mods();let count=0;const client=new a.API(new s.SessionState(),async()=>{count++;throw new TypeError('fetch failed');});await assert.rejects(client.request('/trips',{method:'POST',body:{title:'Trip'}}),e=>e.status===0&&e.code==='NETWORK_ERROR');assert.equal(count,1);});
+
+test('filter field rules report invalid date/id/enum on the corresponding inputs',async()=>{const {filters:f,validation:v}=await mods();const body={from:'2026-02-29',to:'2026-01-01',trip_id:'no',signal_id:' x ',state:'wrong',event_type:'wrong',source:'wrong',valid:'wrong',sort:'wrong',route_id:' x '};const errors=v.validate(body,f.filterRules('observations'));for(const name of Object.keys(body))assert.ok(errors[name],name);const trip=v.validate({status:'bad',archived:'bad'},f.filterRules('trips'));assert.ok(trip.status);assert.ok(trip.archived);assert.deepEqual(v.validate({from:'',to:'',signal_id:'',sort:'asc'},f.filterRules('observations')),{});});
+
+test('late unauthorized HEAD from the previous account cannot clear the new account',async()=>{const {state:s,api:a}=await mods();const store=new s.SessionState();store.set({user:{id:'old'}});let resolve;const client=new a.API(store,()=>new Promise(r=>resolve=r));const pending=client.download('/trips/id/export');store.set({user:{id:'new'}});resolve(response(401));await assert.rejects(pending,e=>e.name==='AbortError');assert.equal(store.value.user.id,'new');});
