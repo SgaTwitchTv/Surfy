@@ -18,6 +18,7 @@ final class TelemetryQueue<T> {
     }
     synchronized T peek() { return values.peekFirst(); }
     synchronized T poll() { return values.pollFirst(); }
+    synchronized void clear() { dropped += values.size(); values.clear(); }
     synchronized int size() { return values.size(); }
     synchronized int dropped() { return dropped; }
 }

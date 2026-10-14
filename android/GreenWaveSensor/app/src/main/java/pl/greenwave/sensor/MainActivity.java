@@ -49,7 +49,7 @@ public final class MainActivity extends Activity {
     private void pair() {
         String url = serverUrl.getText().toString();
         String code = pairingCode.getText().toString();
-        if (code.length() != 6) { StatusStore.lastError = "Wpisz sześciocyfrowy kod parowania"; return; }
+        if (!code.trim().matches("[0-9]{6}")) { StatusStore.lastError = "Wpisz sześciocyfrowy kod parowania"; return; }
         StatusStore.lastError = "Parowanie…";
         worker.execute(() -> {
             try {

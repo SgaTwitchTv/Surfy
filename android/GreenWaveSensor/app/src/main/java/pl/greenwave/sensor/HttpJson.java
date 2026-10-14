@@ -15,16 +15,19 @@ final class HttpJson {
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        if (token != null && !token.isEmpty()) connection.setRequestProperty("X-GreenWave-Token", token);
+        if (token != null && !token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
         byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
         connection.setFixedLengthStreamingMode(bytes.length);
         try (OutputStream stream = connection.getOutputStream()) { stream.write(bytes); }
         return response(connection);
     }
 
-    static Response get(String url) throws Exception {
+    static Response get(String url) throws Exception { return get(url, null); }
+
+    static Response get(String url, String token) throws Exception {
         HttpURLConnection connection = open(url);
         connection.setRequestMethod("GET");
+        if (token != null && !token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
         return response(connection);
     }
 

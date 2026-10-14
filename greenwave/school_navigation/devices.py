@@ -101,6 +101,7 @@ class Devices:
                 token=secret();did=repo.bind_device(Actor(challenge['owner_id']),challenge['id'],body['client_device_id'],token_hash(token),self.recorder.boot)
                 c.execute('UPDATE devices SET label=? WHERE id=?',(body['label'],did))
         except Denied:raise AuthError(403,'PAIR_UNAVAILABLE') from None
+        self.recorder.reconcile_credentials()
         return {'device_token':token,'device_id':did,'app_session_id':None,'server_version':'school-navigation-9'}
 
     def authenticate(self, header, c):
@@ -115,7 +116,7 @@ class Devices:
         except (ValueError,Denied,AuthError):raise AuthError(403,'DEVICE_REPAIR_REQUIRED') from None
 
     def active(self, device):
-        return next((ctx for ctx in self.recorder.contexts.values() if ctx.get('device_id')==device['id'] and ctx['session_id']==device['parent_session_id'] and ctx.get('drive') and not ctx['drive'].closed),None)
+        return next((ctx for ctx in self.recorder.contexts.values() if ctx.get('device_id')==device['id'] and ctx.get('device_credential')==device['token_hash'] and ctx['session_id']==device['parent_session_id'] and ctx.get('drive') and not ctx['drive'].closed),None)
 
     def session(self,header):
         with self.recorder.lock,self.repo.database.transaction(False) as c:

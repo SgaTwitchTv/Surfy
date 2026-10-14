@@ -62,7 +62,8 @@ public final class LocationForegroundService extends Service {
             @Override public void onLocationResult(LocationResult result) {
                 for (android.location.Location location : result.getLocations()) {
                     StatusStore.location(location);
-                    transmitter.enqueue(new TelemetrySample(location, deviceId, streamId, sequence++));
+                    if (location.getElapsedRealtimeNanos() < ConfigStore.sessionBoundaryNanos()) continue;
+                    transmitter.enqueue(new TelemetrySample(location, deviceId, streamId, sequence++, ConfigStore.sessionId(LocationForegroundService.this), SessionEpoch.fingerprint(ConfigStore.token(LocationForegroundService.this))));
                 }
             }
         };

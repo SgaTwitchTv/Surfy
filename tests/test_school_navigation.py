@@ -232,6 +232,22 @@ class NavigationTests(RecordsTests):
         self.assertIsNone(state['live_recommendation'])
 
 
+    def test_repair_does_not_rebind_an_old_active_navigation(self):
+        self.real_proxy();device,_=self.pair()
+        from greenwave.school_data import Actor
+        from pathlib import Path
+        cfg=self.repo.create_config(Actor(self.users['admin']['id']),'ROUTE','repair-test',json.loads(Path('data/routes/zwirki_wigury_draft.json').read_text(encoding='utf-8')))
+        cfg=self.repo.publish_config(Actor(self.users['admin']['id'],self.now),cfg['id'],cfg['revision'])
+        trip=self.post('/trips',{'title':'First credential epoch','mode':'LIVE','route_version_id':cfg['id']})[1]['data']
+        nav=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id'],'device_id':device['device_id']},{'Idempotency-Key':'E'*32})[1]['data']
+        replacement,_=self.pair();self.assertEqual(replacement['device_id'],device['device_id'])
+        self.assertEqual(self.get('/navigation/'+nav['id'])[0],404)
+        self.assertEqual(self.get('/trips/'+trip['id'])[1]['data']['status'],'COMPLETE')
+        self.assertEqual(self.request('GET',PREFIX+'/device/session',headers={'Authorization':'Bearer '+device['device_token']})[0],403)
+        status,data,_=self.request('GET',PREFIX+'/device/session',headers={'Authorization':'Bearer '+replacement['device_token']})
+        self.assertEqual(status,200);self.assertFalse(data['data']['active']);self.assertIsNone(data['data']['app_session_id'])
+
+
 
 def load_tests(loader, tests, pattern):
     suite=unittest.TestSuite()

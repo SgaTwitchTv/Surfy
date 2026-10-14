@@ -42,14 +42,17 @@ final class TelemetryTransmitter {
         if (token.isEmpty()) { StatusStore.lastError = "Brak parowania z serwerem"; return; }
         try {
             String base = ConfigStore.serverUrl(context);
-            HttpJson.Response response = HttpJson.post(base + "/api/position",
+            if (ConfigStore.sessionId(context).isEmpty()) { refreshSession(base); queue.clear();updateQueueStatus();return; }
+            if (!SessionEpoch.belongs(sample.appSessionId,sample.credentialEpoch,ConfigStore.sessionId(context),token)) {queue.clear();updateQueueStatus();return;}
+            HttpJson.Response response = HttpJson.post(base + "/school/api/v1/device/position",
                     sample.toJson(ConfigStore.sessionId(context), SystemClock.elapsedRealtimeNanos()), token);
             if (response.status == 409 && refreshSession(base)) {
+                queue.clear();updateQueueStatus();
                 schedule(0);
                 return;
             }
             if (response.status != 200) {
-                if (response.status == 403) StatusStore.lastError = "Serwer odrzucił token. Sparuj ponownie.";
+                if (response.status == 403) {ConfigStore.clearPairing(context);queue.clear();updateQueueStatus();StatusStore.lastError = "Parowanie cofnięte lub nowy boot. Sparuj ponownie.";}
                 else retry("HTTP " + response.status + ": " + response.json.optString("error", "błąd serwera"));
                 return;
             }
@@ -61,15 +64,18 @@ final class TelemetryTransmitter {
             updateQueueStatus();
             if (queue.peek() != null) schedule(0);
         } catch (Exception error) {
-            retry(error.getClass().getSimpleName() + ": " + error.getMessage());
+            retry("Błąd transportu: " + error.getClass().getSimpleName());
         }
     }
 
     private boolean refreshSession(String base) {
         try {
-            HttpJson.Response response = HttpJson.get(base + "/api/state");
+            HttpJson.Response response = HttpJson.get(base + "/school/api/v1/device/session", ConfigStore.token(context));
+            if (response.status == 403) { ConfigStore.clearPairing(context); queue.clear();updateQueueStatus();StatusStore.lastError="Sparuj ponownie";return false;}
             if (response.status != 200) return false;
-            ConfigStore.saveSession(context, response.json.getString("session_id"));
+            JSONObject data=response.json.getJSONObject("data");
+            ConfigStore.saveSession(context, data.isNull("app_session_id") ? "" : data.getString("app_session_id"));
+            queue.clear();updateQueueStatus();
             StatusStore.lastError = "Sesja serwera została odświeżona";
             return true;
         } catch (Exception error) {

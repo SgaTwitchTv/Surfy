@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application android:allowBackup="false" android:label="GreenWave Sensor"
-        android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
+        android:theme="@style/AppTheme" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

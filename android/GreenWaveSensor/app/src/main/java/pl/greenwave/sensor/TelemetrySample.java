@@ -10,18 +10,22 @@ final class TelemetrySample {
     final String deviceId;
     final String streamId;
     final long sequence;
+    final String appSessionId;
+    final String credentialEpoch;
 
-    TelemetrySample(Location location, String deviceId, String streamId, long sequence) {
+    TelemetrySample(Location location, String deviceId, String streamId, long sequence, String appSessionId, String credentialEpoch) {
         this.location = new Location(location);
         this.deviceId = deviceId;
         this.streamId = streamId;
         this.sequence = sequence;
+        this.appSessionId = appSessionId;this.credentialEpoch=credentialEpoch;
     }
 
     JSONObject toJson(String sessionId, long sentElapsedRealtimeNanos) throws JSONException {
         captureAgeNanos(location.getElapsedRealtimeNanos(), sentElapsedRealtimeNanos);
         JSONObject json = new JSONObject();
-        json.put("session_id", sessionId);
+        if (!appSessionId.equals(sessionId)) throw new IllegalArgumentException("Queued sample belongs to an old session");
+        json.put("session_id", appSessionId);
         json.put("timestamp_seconds", location.getTime() / 1000.0);
         json.put("elapsed_realtime_nanos", location.getElapsedRealtimeNanos());
         json.put("sent_elapsed_realtime_nanos", sentElapsedRealtimeNanos);

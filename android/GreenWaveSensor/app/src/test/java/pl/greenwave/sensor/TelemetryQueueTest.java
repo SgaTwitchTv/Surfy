@@ -18,4 +18,11 @@ public class TelemetryQueueTest {
         assertEquals(Integer.valueOf(2), queue.poll());
         assertEquals(Integer.valueOf(3), queue.poll());
     }
+    @Test public void sessionChangeDiscardsOldBootAndRunSamples() {
+        TelemetryQueue<Integer> queue=new TelemetryQueue<>(3);
+        queue.offer(1);queue.offer(2);queue.clear();
+        assertNull(queue.peek());assertEquals(0,queue.size());assertEquals(2,queue.dropped());
+        queue.clear();assertEquals(2,queue.dropped());queue.offer(3);
+        assertEquals(Integer.valueOf(3),queue.poll());
+    }
 }

@@ -44,7 +44,7 @@ class Recording:
                     if row['id']!=ctx['session_id'] or row['secret_hash']!=ctx['credential']:raise AuthError(401,'UNAUTHORIZED')
                     if ctx.get('device_id'):
                         with self.repo.database.connection() as c:
-                            if not c.execute("SELECT 1 FROM devices WHERE id=? AND status='ACTIVE' AND revoked_at IS NULL AND expiry>? AND boot_id=? AND security_version=?",(ctx['device_id'],self.repo.clock(),self.boot,row['security_version'])).fetchone():raise AuthError(401,'UNAUTHORIZED')
+                            if not c.execute("SELECT 1 FROM devices WHERE id=? AND token_hash=? AND status='ACTIVE' AND revoked_at IS NULL AND expiry>? AND boot_id=? AND security_version=?",(ctx['device_id'],ctx['device_credential'],self.repo.clock(),self.boot,row['security_version'])).fetchone():raise AuthError(401,'UNAUTHORIZED')
                 except AuthError:self.finish_context(ctx,'credentials-revoked',system=True);continue
                 drive=ctx.get('drive')
                 if drive and not drive.closed:
@@ -117,6 +117,7 @@ class Recording:
                     if device is None:raise AuthError(404,'NOT_FOUND')
                 elif 'device_id' in body:raise AuthError(422,'VALIDATION')
                 if trip['status']!='PLANNED' or trip['archived_at'] is not None:raise Conflict('Trip not planned')
+                if c.execute("SELECT 1 FROM trips WHERE status IN ('STARTING','RECORDING','FINALIZING') LIMIT 1").fetchone():raise AuthError(409,'ACTIVE_SESSION_BUSY')
                 run_id=repo.new_id();nid=repo.new_id()
                 repo.transition_trip(actor,trip['id'],trip['revision'],'STARTING',run_id=run_id)
                 c.execute("INSERT INTO recording_operations(id,trip_id,actor_id,kind,idempotency_key,request_hash,state,created_at,parent_session_id,boot_id) VALUES(?,?,?,'START',?,?,'PENDING',?,?,?)",(nid,trip['id'],actor.user_id,key,request_hash(body),repo.clock(),row['id'],self.boot))
@@ -124,7 +125,7 @@ class Recording:
             try:
                 self.fault('start-path')
                 logger=RunLogger(self.storage.run(actor.user_id,trip['id'],run_id).parent)
-                ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock(),'device_id':None if device is None else device['id']}
+                ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock(),'device_id':None if device is None else device['id'],'device_credential':None if device is None else device['token_hash']}
                 self.contexts[nid]=ctx
                 self.fault('start-intent')
                 now=utc(repo.clock())
