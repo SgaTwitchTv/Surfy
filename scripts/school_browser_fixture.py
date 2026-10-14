@@ -24,7 +24,10 @@ def main():
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         cfg=Config(f'http://127.0.0.1:{port}',(f'127.0.0.1:{port}',),b'a'*32,b'b'*32,port=port,smtp_port=smtp.server_address[1])
         with Database(storage) as db:
-            service=AccountsService(Repository(db),cfg)  # real N131072, never test injection
+            from greenwave.school_data.time_units import now_ms
+            controlled=os.environ.get('GW_REAUTH_FIXTURE')=='1'
+            clock=[now_ms()]
+            service=AccountsService(Repository(db,clock=lambda:clock[0]) if controlled else Repository(db),cfg)  # real N131072, never test injection
             fixture=None
             if os.environ.get('GW_RESOURCE_FIXTURE')=='1':
                 from scripts.school_resource_fixtures import populate
@@ -46,8 +49,33 @@ def main():
 
             server=AccountsHTTPServer(('127.0.0.1',port),service)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
-            print(json.dumps({'url':cfg.base_url,'mailbox':f'http://127.0.0.1:{mailbox.server_port}', 'trips':None if fixture is None else {k:v['id'] for k,v in fixture['trips'].items()}}),flush=True)
-            try:input()
+            print(json.dumps({'url':cfg.base_url,'mailbox':f'http://127.0.0.1:{mailbox.server_port}', 'draft':None if fixture is None else fixture['draft']['id'], 'trips':None if fixture is None else {k:v['id'] for k,v in fixture['trips'].items()}}),flush=True)
+            try:
+                if not controlled:input()
+                else:
+                    from greenwave.school_data import Actor
+                    for line in __import__('sys').stdin:
+                        if line.strip()=='stop':break
+                        command=json.loads(line);op=command['operation']
+                        if op=='advance':clock[0]+=command['milliseconds']
+                        elif op=='user-change':
+                            who=command.get('user','other');target=service.repo.get_user(fixture['users'][who]['id'])
+                            with db.connection() as c:operator=c.execute("SELECT id FROM users WHERE role='ADMIN' AND status='ACTIVE' LIMIT 1").fetchone()['id']
+                            service.repo.change_account(Actor(operator,clock[0]),target['id'],target['revision'],role=command.get('role'),status=command.get('status'))
+                            service.credentials_changed()
+                        elif op=='config-edit':
+                            target=fixture['draft']
+                            if command.get('id'):
+                                with db.connection() as c:target=dict(c.execute('SELECT * FROM config_versions WHERE id=?',(command['id'],)).fetchone())
+                            target=service.repo.edit_config(Actor(fixture['users']['admin']['id'],clock[0]),target['id'],command['revision'],{'schema_version':1,'settings':{'horizon_seconds':180},'relations':[]})
+                            fixture['draft']=target
+                        elif op=='config-archive':
+                            with db.transaction() as c:c.execute("UPDATE config_versions SET status='ARCHIVED',revision=revision+1 WHERE id=?",(command.get('id',fixture['draft']['id']),))
+                        elif op=='second-admin':
+                            with db.connection() as c:exists=c.execute("SELECT 1 FROM users WHERE email_normalized='second@example.test'").fetchone()
+                            if not exists:service.repo.create_user('second@example.test','Second admin',fixture['users']['admin']['password_hash'],role='ADMIN',status='ACTIVE',verified_at=clock[0])
+                        else:raise ValueError('Unknown fixture command')
+                        print(json.dumps({'ack':op}),flush=True)
             finally:
                 server.shutdown();server.server_close();service.close()
                 for receiver in [smtp,mailbox]:receiver.shutdown();receiver.server_close()

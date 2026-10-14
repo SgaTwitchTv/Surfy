@@ -8,6 +8,7 @@ export class Accounts {
     this.app.state.clear();this.linkToken=p.get(kind);this.show(kind==='reset'?'reset-password':'verify-email');return true;
   }
   show(target='login') {
+    if(target!=='reauth')this.app.roles.drafts.clear();
     this.app.records.leave();this.app.active=target;this.app.menu();
     const screen=this.app.screen;screen.replaceChildren();const [title,fields]=definitions[target];screen.append(el('p','Dostęp do Twoich danych','eyebrow'),el('h2',title));
     const validation={},specs=fields.map(([name,label,type])=>{validation[name]=name==='password_confirmation'?(v,b)=>v===(b.new_password||b.password)?'':'Hasła muszą być identyczne.':rules[name]||rules.password;
@@ -15,18 +16,25 @@ export class Accounts {
     const node=form(specs,validation,async body=>{
       if(!this.app.state.value) this.app.state.preauth=await this.app.api.request('/auth/preflight');
       if(['verify-email','reset-password'].includes(target)) { if(!/^[A-Za-z0-9_-]{43}$/.test(this.linkToken||''))throw new Error('Otwórz poprawny link z poczty.');body.token=this.linkToken; }
-      const data=await this.app.api.request('/auth/'+target,{method:'POST',body});
-      if(['login','reauth'].includes(target)) { this.app.state.set(data);this.app.message('Zalogowano.'); }
+      let data;try{data=await this.app.api.request('/auth/'+target,{method:'POST',body});}finally{if(target==='reauth')node.elements.password.value='';}
+      if(['login','reauth'].includes(target)) { const pending=target==='reauth'?this.app.roles.drafts.take(data.user.id):null;this.app.state.set(data);this.app.message('Zalogowano.');if(pending)await this.app.roles.resume(pending); }
       else if(['change-password','reset-password'].includes(target)) { this.linkToken=null;this.app.state.clear();this.app.message('Operacja zakończona. Zaloguj się ponownie.'); }
       else if(target==='verify-email') {this.linkToken=null;this.show('login');this.app.message('Konto aktywne. Zaloguj się.');}
       else {this.show('login');this.app.message(data.message+' Sprawdź pocztę.');}
     },target==='verify-email'?'Potwierdź aktywację':'Potwierdź');
     for(const input of node.querySelectorAll('input'))input.autocomplete=input.type==='password'?(['register','reset-password'].includes(target)||input.name==='new_password'||input.name==='password_confirmation'?'new-password':'current-password'):input.name==='email'?'email':'nickname';
     screen.append(node);
+    if(target==='reauth'){
+      const cancel=()=>{this.app.roles.drafts.clear();this.account();document.querySelector('nav [data-view=account]')?.focus();};
+      if(this.app.roles.drafts.has(this.app.state.value?.user.id))node.append(action('Zrezygnuj z powrotu',cancel));
+      node.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();cancel();}});
+      requestAnimationFrame(()=>{if(node.isConnected)node.elements.password.focus();});
+    }
     if(target==='verify-email')screen.append(notice('Samo otwarcie linku nie aktywuje konta. Potwierdź przyciskiem.'));
     if(this.app.state.value)screen.append(action('Powrót do konta',()=>this.account()));
   }
   account() {
+    this.app.roles.drafts.clear();
     this.app.records.leave();this.app.active='account';this.app.menu();const screen=this.app.screen,user=this.app.state.value.user;
     screen.replaceChildren(el('p','Ustawienia i bezpieczeństwo','eyebrow'),el('h2','Twoje konto'));
     const dl=el('dl');for(const [name,value] of [['Nazwa',user.display_name],['Email',user.email],['Rola',user.role]])dl.append(el('dt',name),el('dd',value));screen.append(dl);

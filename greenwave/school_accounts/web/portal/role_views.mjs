@@ -1,3 +1,4 @@
+import {AdministrativeDraft} from './state.mjs';
 import {el,action,notice,table,form,dialog} from './dom.mjs';
 import {stamp,dayRange} from './dates.mjs';
 import {text,email,rules} from './validation.mjs';
@@ -7,7 +8,7 @@ const auditLabels={ACCOUNT_PROVISIONED:'Utworzenie konta',BOOTSTRAP_ADMIN:'Pierw
 function auditReason(value){if(!value)return '—';const d=el('details');d.append(el('summary','Powód · '+value.length+' znaków'),el('p',value));return d;}
 const templates={MODEL:{schema_version:1,settings:{horizon_seconds:240},relations:[]},ROUTE:{schema_version:1,route_id:'demo',geometry_version:'v1',name:'Trasa syntetyczna',direction_description:'North',source:{attribution:'Synthetic'},coordinates:[[21,52],[21.001,52.001]],stop_lines:[],speed_sections:[]},SIGNAL:{schema_version:1,id:'demo',name:'Syntetyczny korytarz',direction:'N',speed_limit_mps:10,signals:[{id:'a',name:'Światło A',direction:'N',movement:'STRAIGHT',signal_type:'FIXED_TIME',road_position_m:100,cycle_seconds:60,green_duration:20,offset:0,yellow_duration:3,latitude:52,longitude:21,confidence:null,source:'synthetic',notes:''}]}};
 export class RoleViews{
- constructor(app){this.app=app;}
+ constructor(app){this.app=app;this.drafts=new AdministrativeDraft();}
  async show(kind){const app=this.app;app.records.leave();const serial=app.records.serial,epoch=app.state.epoch,valid=()=>currentView(app.state,epoch,app.records,serial);app.active=kind;app.menu();const screen=app.screen;screen.replaceChildren(el('h2',{users:'Konta użytkowników',audit:'Audyt administracyjny',configs:'Konfiguracje'}[kind]));
   screen.append(notice(kind==='configs'?'Publikacja oznacza dostępność, nie weryfikację drogową. DRAFT / UNVERIFIED nie odblokowuje rekomendacji live.':'Administracja nie daje dostępu do prywatnych przejazdów, GPS ani filmów.'));
   const content=el('div'),feedback=notice(''),pager=el('div','','pagination');let query={limit:'25'},cursor=null;
@@ -23,16 +24,63 @@ export class RoleViews{
     let headers,rows;if(kind==='users'){headers=['Nazwa','Email','Rola','Status','Rewizja','Akcje'];rows=data.items.map(u=>[u.display_name,u.email,u.role,u.status,u.revision,action('Zarządzaj kontem',()=>this.accountForm(u))]);}
     else if(kind==='audit'){headers=['Czas','Autor · ID','Akcja','Zasób','Powód'];rows=data.items.map(a=>[stamp(a.server_at),a.actor_id||'System',auditLabels[a.action]||a.action,a.resource_type+' · '+a.resource_id,auditReason(a.reason)]);}
     else{headers=['Rodzaj','Nazwa · ID','Wersja','Stan','Akcje'];rows=data.items.map(c=>[c.kind,c.logical_id,c.version,c.status,action('Szczegóły konfiguracji',()=>this.configDetail(c))]);}
-    content.replaceChildren(rows.length?table(headers,rows):notice('Brak danych.'));cursor=data.page.next_cursor;next.disabled=!cursor;feedback.textContent=cursor?'Dostępna kolejna strona.':'Koniec wyników.';
-   }catch(e){if(valid()&&mine===generation){content.replaceChildren(notice('Nie udało się wczytać danych.'));app.fail(e);}}};await load();
+    content.replaceChildren(rows.length?table(headers,rows):notice('Brak danych.'));cursor=data.page.next_cursor;next.disabled=!cursor;feedback.textContent=cursor?'Dostępna kolejna strona.':'Koniec wyników.';return true;
+   }catch(e){if(valid()&&mine===generation){content.replaceChildren(notice('Nie udało się wczytać danych.'));app.fail(e);}return false;}};return await load();
  }
- async guarded(path,options,feedback){try{return await this.app.api.request(path,options);}catch(e){if(requiresReauth(e)){feedback.textContent='Potwierdź hasło w Koncie, wróć do tego panelu i świadomie ponów operację. Żądanie nie jest ponawiane automatycznie.';feedback.after(action('Potwierdź tożsamość',()=>this.app.accounts.show('reauth')));return false;}throw e;}}
- accountForm(user){const app=this.app;let revision=user.revision;
+ async guarded(path,options,feedback,context){
+  try{return await this.app.api.request(path,options);}catch(error){
+    if(!requiresReauth(error))throw error;
+    feedback.textContent='Potwierdź tożsamość. Draft wróci do przeglądu; zapis wymaga ponownego kliknięcia.';
+    let button=feedback.parentNode.querySelector('[data-reauth-return]');
+    if(!button){
+      button=action('Potwierdź tożsamość',()=>{
+        const context=button.returnContext,form=feedback.closest('form');
+        const fields=Object.fromEntries(Object.keys(context.fields).map(key=>[key,form.elements.namedItem(key).value]));
+        this.drafts.save(this.app.state.value.user.id,{...context,fields});
+        const modal=feedback.closest('dialog');modal?.close();modal?.remove();
+        this.app.accounts.show('reauth');
+      });button.dataset.reauthReturn='true';feedback.after(button);
+    }
+    button.returnContext=context;
+    return false;
+  }
+ }
+ async resume(saved){
+  const app=this.app,epoch=app.state.epoch;
+  const valid=()=>app.state.epoch===epoch&&app.state.value?.user.id===saved.userId;
+  try{
+    const me=await app.api.request('/auth/me');if(!valid())return;
+    if(me.user.id!==saved.userId||me.user.role!=='ADMIN')throw new Error('Uprawnienie do operacji nie jest dostępne.');
+    let current;
+    if(saved.kind==='account'){
+      const page=await app.api.request('/admin/users',{query:{email:saved.email}});current=page.items.find(row=>row.id===saved.id);
+    }else current=await app.api.request('/config/versions/'+saved.id);
+    if(!valid())return;
+    if(!current||saved.kind==='publish'&&current.status!=='DRAFT'||saved.kind==='archive'&&current.status==='ARCHIVED')throw new Error('Zasób lub operacja nie jest dostępna.');
+    const shown=await this.show(saved.kind==='account'?'users':'configs');if(!shown||!valid())return;
+    document.querySelector('nav [data-view='+ (saved.kind==='account'?'users':'configs') +']')?.focus();
+    if(saved.kind==='account')this.accountForm(current,saved);else this.configAction(current,saved.kind,saved);
+  }catch(error){if(valid())app.message('Nie można przywrócić formularza: zasób lub uprawnienie nie jest dostępne.');}
+ }
+ reviewReturn(node,current,saved,adopt){
+  let required=Boolean(saved&&(saved.expected_revision!==current.revision||saved.expected_status!==current.status));
+  if(saved){
+    for(const [key,value]of Object.entries(saved.fields))node.elements.namedItem(key).value=value;
+    const summary=notice(required?`Dane zmieniły się: stan ${current.status}, rewizja ${current.revision}. Przyjmij je świadomie przed zapisem.`:'Przywrócono draft do przeglądu. Zapis nie został wykonany.');node.prepend(summary);
+    if(required){
+      const data=el('details');data.append(el('summary','Aktualne dane zasobu'),el('pre',JSON.stringify(current,null,2)));node.prepend(data);
+      const button=action('Użyj aktualnej rewizji',()=>{adopt();required=false;button.disabled=true;summary.textContent='Przyjęto aktualny stan. Przejrzyj draft i ponownie kliknij zapis.';});node.prepend(button);
+    }
+  }
+  return ()=>!required;
+ }
+ accountForm(user,saved=null){const app=this.app;let revision=saved?.expected_revision??user.revision;let reviewed=()=>true;
   const f=form([{name:'role',label:'Rola',options:['DRIVER','ANALYST','ADMIN'].map(v=>[v,v]),value:user.role},{name:'status',label:'Status',options:(user.status==='PENDING_VERIFICATION'?['PENDING_VERIFICATION','BLOCKED']:['ACTIVE','BLOCKED']).map(v=>[v,v]),value:user.status},{name:'reason',label:'Powód',max:500}],{role:v=>['DRIVER','ANALYST','ADMIN'].includes(v)?'':'Wybierz rolę.',status:v=>['ACTIVE','BLOCKED','PENDING_VERIFICATION'].includes(v)?'':'Wybierz status.',reason},async(b,node,feedback)=>{
+   if(!reviewed()){feedback.textContent='Najpierw świadomie przyjmij aktualną rewizję.';return false;}
    const body={expected_revision:revision,role:b.role,reason:b.reason};if(b.status!=='PENDING_VERIFICATION')body.status=b.status;
-   try{const result=await this.guarded('/admin/users/'+user.id,{method:'PATCH',body},feedback);if(result===false)return false;d.close();if(user.id===app.state.value.user.id){app.state.clear();app.message('Uprawnienia zmienione. Zaloguj się ponownie.');}else this.show('users');}
-   catch(e){if(e.status===409){const data=await app.api.request('/admin/users',{query:{email:user.email}});const latest=data.items.find(v=>v.id===user.id);if(latest){feedback.textContent=`Konflikt. Aktualnie: ${latest.role}, ${latest.status}, rewizja ${latest.revision}.`;feedback.after(action('Użyj aktualnej rewizji',()=>{revision=adoptRevision(latest);feedback.textContent='Przejrzyj wartości i świadomie zapisz.';}));return false;}}throw e;}
-  },'Zapisz zmianę konta');const d=dialog('Konto · '+user.email,f);
+   try{const result=await this.guarded('/admin/users/'+user.id,{method:'PATCH',body},feedback,{kind:'account',id:user.id,email:user.email,expected_revision:revision,expected_status:user.status,fields:{role:b.role,status:b.status,reason:b.reason}});if(result===false)return false;d.close();if(user.id===app.state.value.user.id){app.state.clear();app.message('Uprawnienia zmienione. Zaloguj się ponownie.');}else this.show('users');}
+   catch(e){if(e.status===409){const data=await app.api.request('/admin/users',{query:{email:user.email}});const latest=data.items.find(v=>v.id===user.id);if(latest){feedback.textContent=`Konflikt. Aktualnie: ${latest.role}, ${latest.status}, rewizja ${latest.revision}.`;feedback.after(action('Użyj aktualnej rewizji',()=>{revision=adoptRevision(latest);user=latest;feedback.textContent='Przejrzyj wartości i świadomie zapisz.';}));return false;}}throw e;}
+  },'Zapisz zmianę konta');reviewed=this.reviewReturn(f,user,saved,()=>{revision=adoptRevision(user);});const d=dialog('Konto · '+user.email,f);
  }
  configDetail(c){const app=this.app;app.records.leave();app.active='configs';app.menu();app.screen.replaceChildren(el('h2',c.logical_id+' · v'+c.version),notice(c.status+' · publikacja nie potwierdza danych terenowych.'),el('pre',JSON.stringify(c.payload,null,2)));
   if(canEditDraft(app.state.value.user.role,app.state.value.user.id,c))app.screen.append(action('Edytuj draft',()=>this.configForm(c)));
@@ -40,7 +88,20 @@ export class RoleViews{
   if(canPublish(app.state.value.user.role)){if(c.status==='DRAFT')app.screen.append(action('Opublikuj konfigurację',()=>this.configAction(c,'publish')));if(c.status!=='ARCHIVED')app.screen.append(action('Archiwizuj konfigurację',()=>this.configAction(c,'archive')));}
   app.screen.append(action('Powrót do konfiguracji',()=>this.show('configs')));
  }
- configAction(c,operation){const f=form([{name:'reason',label:'Powód',max:500}],{reason},async(b,n,feedback)=>{try{const result=await this.guarded('/config/versions/'+c.id+(operation==='publish'?'/publish':''),{method:operation==='publish'?'POST':'DELETE',body:{reason:b.reason,...(operation==='publish'?{expected_revision:c.revision}:{})}},feedback);if(result===false)return false;d.close();this.show('configs');}catch(e){if(e.status===409){const latest=await this.app.api.request('/config/versions/'+c.id);feedback.textContent=`Aktualny stan ${latest.status}, rewizja ${latest.revision}.`;feedback.after(action('Użyj aktualnej rewizji',()=>{c=latest;feedback.textContent='Przejrzyj stan i świadomie potwierdź.';}));return false;}throw e;}},operation==='publish'?'Potwierdź publikację':'Potwierdź archiwizację');const d=dialog('Konfiguracja · '+c.logical_id,f);}
+ configAction(c,operation,saved=null){
+  let revision=saved?.expected_revision??c.revision,reviewed=()=>true;
+  const f=form([{name:'reason',label:'Powód',max:500}],{reason},async(b,n,feedback)=>{
+    if(!reviewed()){feedback.textContent='Najpierw świadomie przyjmij aktualną rewizję.';return false;}
+    try{
+      const result=await this.guarded('/config/versions/'+c.id+(operation==='publish'?'/publish':''),{method:operation==='publish'?'POST':'DELETE',body:{reason:b.reason,...(operation==='publish'?{expected_revision:revision}:{})}},feedback,{kind:operation,id:c.id,expected_revision:revision,expected_status:c.status,fields:{reason:b.reason}});
+      if(result===false)return false;d.close();this.show('configs');
+    }catch(error){
+      if(error.status===409){const latest=await this.app.api.request('/config/versions/'+c.id);feedback.textContent=`Aktualny stan ${latest.status}, rewizja ${latest.revision}.`;feedback.after(action('Użyj aktualnej rewizji',()=>{c=latest;revision=adoptRevision(latest);feedback.textContent='Przejrzyj stan i świadomie potwierdź.';}));return false;}
+      throw error;
+    }
+  },operation==='publish'?'Potwierdź publikację':'Potwierdź archiwizację');
+  reviewed=this.reviewReturn(f,c,saved,()=>{revision=adoptRevision(c);});const d=dialog('Konfiguracja · '+c.logical_id,f);
+ }
  configForm(c=null,newVersion=false){const app=this.app;let revision=c?.revision;
   const f=form([{name:'kind',label:'Rodzaj',options:['MODEL','ROUTE','SIGNAL'].map(v=>[v,v]),value:c?.kind||'MODEL'},{name:'logical_id',label:'Identyfikator logiczny',value:c?.logical_id||'',max:120},{name:'payload',label:'Zaawansowana konfiguracja JSON · pola domenowe',type:'textarea',value:JSON.stringify(c?editablePayload(c.payload):templates.MODEL,null,2),max:262144},{name:'reason',label:'Powód',max:500}],{kind:v=>['MODEL','ROUTE','SIGNAL'].includes(v)?'':'Wybierz rodzaj.',logical_id:v=>text(v,1,120)?'':'Identyfikator: 1–120 znaków.',payload:(v,b)=>{try{configInput(b.kind,v);return '';}catch(e){return e.message;}},reason},async(b,n,feedback)=>{
     const body=c&&!newVersion?{expected_revision:revision,payload:configInput(b.kind,b.payload),reason:b.reason}:{kind:b.kind,logical_id:b.logical_id,payload:configInput(b.kind,b.payload),reason:b.reason,...(c?{base_version_id:c.id}:{})};

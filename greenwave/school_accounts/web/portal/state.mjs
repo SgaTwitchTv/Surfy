@@ -30,3 +30,23 @@ export class OperationKeys {
   done(name) { this.entries.delete(name); }
   clear() { this.entries.clear(); }
 }
+
+// One-shot administrative return, memory only; never an authentication credential.
+export class AdministrativeDraft {
+  constructor(){this.value=null;}
+  clear(){this.value=null;}
+  save(userId,context){
+    this.clear();
+    const fields=context.kind==='account'?['role','status','reason']:['reason'];
+    if(!['account','publish','archive'].includes(context.kind)||!/^[a-f0-9]{32}$/.test(userId)||!/^[a-f0-9]{32}$/.test(context.id)||!Number.isInteger(context.expected_revision)||context.expected_revision<1)throw new Error('Invalid return context');
+    if(Object.keys(context.fields).some(k=>!fields.includes(k))||fields.some(k=>typeof context.fields[k]!=='string'||[...context.fields[k]].length>500))throw new Error('Invalid draft fields');
+    if(typeof context.expected_status!=='string')throw new Error('Invalid draft status');
+    this.value={userId,kind:context.kind,id:context.id,expected_revision:context.expected_revision,expected_status:context.expected_status,fields:structuredClone(context.fields)};
+    if(context.kind==='account'){
+      if(typeof context.email!=='string'||context.email.length>254){this.clear();throw new Error('Invalid account lookup');}
+      this.value.email=context.email;
+    }
+  }
+  has(userId){return Boolean(this.value&&this.value.userId===userId);}
+  take(userId){const value=this.value;this.clear();return value?.userId===userId?structuredClone(value):null;}
+}
