@@ -326,7 +326,7 @@ bieżącego mock sample poprawiono etykietą diagnostycznego odrzucenia, nie gat
 - [Telefon — CV generated clip](screenshots/stage9-phone-cv.png)
 
 Ocena: dark/lime hierarchy i gauge czytelne, duży symbol nieznanej prędkości,
-zero page overflow w400 E2E/4 rozmiarach, kontrolowany scroll tabel. Po oględzinach
+zero page overflow w E2E/4 rozmiarach, kontrolowany scroll tabel. Po oględzinach
 powiększono komunikat braku pozycji i skrócono główny status do2 przyczyn;
 pełne quality/match/eligibility są w zamkniętym panelu Laboratorium. Nie ma
 nakładających się nazw distant lights, wszystkie nazwy/stany są na liście.
