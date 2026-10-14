@@ -8,7 +8,7 @@ class StaticUITests(Fixture):
             self.assertIn('application/javascript',dict(headers)['Content-Type'])
             self.assertNotIn('unsafe-inline',dict(headers)['Content-Security-Policy'])
         for path in ['/school/static/portal/missing.mjs','/school/static/portal/../../school.sqlite3','/school/static/portal/%2e%2e/secret','/school/static/portal/','/school/static/school.sqlite3','/runtime/school.sqlite3','/api/state']:
-            self.assertEqual(self.request('GET',path)[0],404,path)
+            self.assertEqual(self.request('GET',path)[0],403 if path=='/api/state' else 404,path)
         self.assertEqual(self.request('GET','/school/api/v1/trips')[0],401)
 
     def test_shell_uses_external_modules_and_retains_security_headers(self):

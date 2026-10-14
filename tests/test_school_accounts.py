@@ -135,7 +135,7 @@ class HTTPTests(Fixture):
         for header in [{'Origin':'http://evil.test'},{'X-CSRF-Token':'wrong'},{'Host':'evil.test'}]:
             self.assertEqual(self.request('POST',PREFIX+'/auth/request-reset',{'email':'x@example.test'},header)[0],403)
         for path in ['/api/state','/api/control','/api/recordings','/runtime/school.sqlite3','/backups/v1.sqlite3','/school/static/../../runtime/school.sqlite3']:
-            self.assertEqual(self.request('GET',path)[0],404)
+            self.assertEqual(self.request('GET',path)[0],403 if path=='/api/state' else 404)
         self.assertEqual(self.request('GET',PREFIX+'/admin/users')[0],401)  # Stage8 protected admin namespace.
         self.assertEqual(self.request('GET',PREFIX+'/trips')[0],401)
         status,data,headers=self.request('GET',PREFIX+'/health');self.assertEqual(status,200);self.assertEqual(data['data'],{'ok':True,'deployment_mode':'demo'})

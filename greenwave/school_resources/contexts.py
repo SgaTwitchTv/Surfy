@@ -57,10 +57,15 @@ class Contexts:
                 del self.jobs[jid]
 
     def replay_create(self, raw, tid, body):
-        if body != {'mode': 'GPS'}: raise AuthError(422, 'REPLAY_MODE_UNAVAILABLE')
+        if body not in ({'mode':'GPS'},{'mode':'SIMULATION'}):raise AuthError(422,'REPLAY_MODE_UNAVAILABLE')
         row, _, _, basis = self.policy.basis_trip(raw, tid, closed=True)
         trip, logger, _, _ = self.files.run(raw, tid, basis=basis)
-        replay = GPSReplaySession(logger)
+        if body['mode']=='SIMULATION':
+            from greenwave.replay import ReplaySession
+            metadata=json.loads((self.files.storage.run(trip['owner_id'],tid,trip['run_id'])/'metadata.json').read_text(encoding='utf-8'))
+            if metadata.get('timebase')!='SIMULATION':raise AuthError(409,'SIMULATION_REPLAY_UNAVAILABLE')
+            replay=ReplaySession(logger)
+        else:replay = GPSReplaySession(logger)
         try: replay.load(trip['run_id'])
         except ValueError: raise AuthError(409, 'GPS_REPLAY_UNAVAILABLE') from None
         self.policy.bound_trip(raw, basis)
@@ -71,7 +76,7 @@ class Contexts:
             if len(self.replays) >= 64: raise AuthError(503, 'REPLAY_BUSY')
             hid = self.repo.new_id()
             self.replays[hid] = {'session_id': row['id'], 'credential': row['secret_hash'], 'trip_id': tid, 'authorization': basis,
-                'expiry': self.repo.clock()+1800000, 'replay': replay, 'tick': time.monotonic()}
+                'mode':body['mode'],'expiry': self.repo.clock()+1800000, 'replay': replay, 'tick': time.monotonic()}
             return self.replay_read(raw, hid)
 
     def replay_context(self, raw, hid):
@@ -91,6 +96,8 @@ class Contexts:
             context = self.replay_context(raw, hid)
             # GET does not advance/mutate the playback timeline. Controls are explicit POST.
             state = context['replay'].state()
+            if context['mode']=='SIMULATION':
+                return {'id':hid,'trip_id':context['trip_id'],'mode':'SIMULATION','timeline_seconds':state['model_seconds'],'duration_seconds':state['duration'],'sample_count':len(context['replay'].rows),'running':state['running'],'rate':state['rate'],'position':{'road_position_m':state['position'],'speed_mps':state['speed_mps']},'diagnostic_only':True,'live_recommendation':None}
             sample = state['sample']
             position = None if sample is None else {k: sample['position'][k] for k in ('latitude', 'longitude', 'speed_mps')}
             return {'id': hid, 'trip_id': context['trip_id'], 'timeline_seconds': state['timeline_seconds'],
@@ -105,10 +112,10 @@ class Contexts:
         value = body.get('value')
         if command in {'SEEK', 'RATE'} and (type(value) not in {int, float} or not math.isfinite(value)):
             raise AuthError(422, 'VALIDATION')
-        # Existing M8 supports rates 1,2,5. Rate10 remains unavailable until stage9.
-        if command == 'RATE' and value not in {1, 2, 5}: raise AuthError(422, 'VALIDATION')
+        if command == 'RATE' and value not in {1, 2, 5, 10}: raise AuthError(422, 'VALIDATION')
         with self.lock:
             context = self.replay_context(raw, hid)
+            if command=='RATE' and value==10 and context['mode']!='SIMULATION':raise AuthError(422,'VALIDATION')
             now = time.monotonic()
             context['replay'].advance(min(30, max(0, now-context['tick'])))
             context['tick'] = now

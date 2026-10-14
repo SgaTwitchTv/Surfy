@@ -13,6 +13,7 @@ from greenwave.school_data.errors import DataError, Denied, Invalid, Conflict
 from .errors import AuthError
 
 PREFIX='/school/api/v1'
+DEVICE_ALIASES={'/api/pair':('POST','/device/pair'),'/api/position':('POST','/device/position'),'/api/state':('GET','/device/session')}
 FORMS={
  '/auth/register':{'email','display_name','password','password_confirmation'},
  '/auth/login':{'email','password'},'/auth/verify-email':{'token'},
@@ -184,10 +185,14 @@ class Handler(BaseHTTPRequestHandler):
         request_id=secrets.token_hex(8)
         self.request_id=request_id
         try:
-            ip=self.check_request(mutation)
+            alias=DEVICE_ALIASES.get(urlsplit(self.path).path)
+            device_route=(alias is not None and self.command==alias[0]) or urlsplit(self.path).path in {PREFIX+'/device/pair',PREFIX+'/device/position',PREFIX+'/device/session'}
+            ip=self.check_request(mutation and not device_route)
             parsed=urlsplit(self.path)
             if parsed.scheme or parsed.netloc or parsed.fragment:raise AuthError(400,'BAD_REQUEST')
-            path=parsed.path;svc=self.server.service;cookies=self.cookies()
+            path=parsed.path
+            if alias is not None and self.command==alias[0]:path=PREFIX+alias[1]
+            svc=self.server.service;cookies=self.cookies()
             if not mutation and path in STATIC:
                 asset=Path(__file__).parent/'web'/STATIC[path]
                 mime='text/html; charset=utf-8' if path=='/' else ('application/javascript; charset=utf-8' if path.endswith(('.js','.mjs')) else 'text/css; charset=utf-8')

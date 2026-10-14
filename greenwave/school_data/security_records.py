@@ -74,14 +74,15 @@ class SecurityRecords:
             user=self.user(c,actor)
             challenge=c.execute("SELECT * FROM pairing_challenges WHERE id=? AND owner_id=? AND boot_id=? AND expiry>? AND used_at IS NULL AND revoked_at IS NULL AND attempts<5",(challenge_id,actor.user_id,boot_id,self.clock())).fetchone()
             if not challenge: raise Denied("Pairing unavailable")
-            self.session(c,challenge["parent_session_id"],actor.user_id)
+            parent=self.session(c,challenge["parent_session_id"],actor.user_id)
+            expiry=min(self.clock()+28800000,parent["absolute_expiry"])
             now=self.clock(); did=self.new_id()
             existing=c.execute("SELECT id FROM devices WHERE owner_id=? AND client_device_id=?",(actor.user_id,client_device_id)).fetchone()
             if existing:
                 did=existing[0]
-                c.execute("UPDATE devices SET token_hash=?,parent_session_id=?,boot_id=?,security_version=?,expiry=?,status='ACTIVE',revoked_at=NULL,label=? WHERE id=?",(token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800000,challenge["label"],did))
+                c.execute("UPDATE devices SET token_hash=?,parent_session_id=?,boot_id=?,security_version=?,expiry=?,status='ACTIVE',revoked_at=NULL,label=? WHERE id=?",(token_hash,challenge["parent_session_id"],boot_id,user["security_version"],expiry,challenge["label"],did))
             else:
-                c.execute("INSERT INTO devices VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)",(did,actor.user_id,client_device_id,challenge["label"],'ACTIVE',token_hash,challenge["parent_session_id"],boot_id,user["security_version"],now+28800000))
+                c.execute("INSERT INTO devices VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL)",(did,actor.user_id,client_device_id,challenge["label"],'ACTIVE',token_hash,challenge["parent_session_id"],boot_id,user["security_version"],expiry))
             c.execute("UPDATE pairing_challenges SET used_at=? WHERE id=?",(now,challenge_id))
             self.audit(c,actor,"DEVICE_BOUND","DEVICE",did)
             return did

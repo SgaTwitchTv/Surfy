@@ -24,6 +24,10 @@ class Config:
     trusted_proxy: str=''
     tls_cert: str=''
     tls_key: str=''
+    cv_sources: tuple=()
+    cv_model: str=''
+    cv_python: str=''
+    cv_license_ack: str=''
 
     @property
     def secure(self):
@@ -69,4 +73,6 @@ class Config:
                    smtp_host=os.getenv('SCHOOL_SMTP_HOST','127.0.0.1'),smtp_port=int(os.getenv('SCHOOL_SMTP_PORT','1025')),
                    smtp_mode=os.getenv('SCHOOL_SMTP_MODE','plain'),smtp_sender=os.getenv('SCHOOL_SMTP_SENDER','greenwave@example.test'),
                    smtp_user=os.getenv('SCHOOL_SMTP_USER',''),smtp_password=os.getenv('SCHOOL_SMTP_PASSWORD',''),
-                   trusted_proxy=os.getenv('SCHOOL_TRUSTED_PROXY',''),tls_cert=os.getenv('SCHOOL_TLS_CERT',''),tls_key=os.getenv('SCHOOL_TLS_KEY','')).validate()
+                   trusted_proxy=os.getenv('SCHOOL_TRUSTED_PROXY',''),tls_cert=os.getenv('SCHOOL_TLS_CERT',''),tls_key=os.getenv('SCHOOL_TLS_KEY',''),
+                   cv_model=os.getenv('SCHOOL_CV_MODEL',''),cv_python=os.getenv('SCHOOL_CV_PYTHON',''),cv_license_ack=os.getenv('SCHOOL_CV_LICENSE_ACK',''),
+                   cv_sources=tuple(json.loads(Path(os.environ['SCHOOL_CV_SOURCES_FILE']).read_text(encoding='utf-8')).items()) if os.getenv('SCHOOL_CV_SOURCES_FILE') else ()).validate()

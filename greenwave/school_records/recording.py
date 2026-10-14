@@ -42,12 +42,26 @@ class Recording:
                 try:
                     row,_=self.policy.accounts.sessions.lookup(ctx['raw'],touch=False)
                     if row['id']!=ctx['session_id'] or row['secret_hash']!=ctx['credential']:raise AuthError(401,'UNAUTHORIZED')
-                except AuthError:self.finish_context(ctx,'credentials-revoked',system=True)
+                    if ctx.get('device_id'):
+                        with self.repo.database.connection() as c:
+                            if not c.execute("SELECT 1 FROM devices WHERE id=? AND status='ACTIVE' AND revoked_at IS NULL AND expiry>? AND boot_id=? AND security_version=?",(ctx['device_id'],self.repo.clock(),self.boot,row['security_version'])).fetchone():raise AuthError(401,'UNAUTHORIZED')
+                except AuthError:self.finish_context(ctx,'credentials-revoked',system=True);continue
+                drive=ctx.get('drive')
+                if drive and not drive.closed:
+                    try:
+                        drive.tick()
+                    except Exception:
+                        drive.close();self.close_failed_logger(ctx['logger']);self.interrupt(ctx['trip_id'],'ENGINE_FAILED');self.contexts.pop(ctx['id'],None);continue
+                if drive and not ctx['logger'].active:
+                    with self.repo.database.connection() as c:status=c.execute('SELECT status FROM trips WHERE id=?',(ctx['trip_id'],)).fetchone()[0]
+                    # Preserve successful user FINISH handles for identical retries.
+                    if status!='COMPLETE':self.finish_context(ctx,'engine-ended',system=True)
 
     def dto(self,ctx):
         with self.repo.database.connection() as c:t=c.execute('SELECT * FROM trips WHERE id=?',(ctx['trip_id'],)).fetchone()
         return {'id':ctx['id'],'trip_id':ctx['trip_id'],'status':t['status'],'revision':t['revision'],
-                'mode':'SIMULATION','live_recommendation':None,'diagnostic_only':True}
+                'mode':t['mode'],'live_recommendation':None,'diagnostic_only':True,
+                **(ctx['drive'].dto() if ctx.get('drive') else {})}
 
     def own_context(self,session,tid):
         ctx=next((v for v in self.contexts.values() if v['trip_id']==tid),None)
@@ -62,8 +76,23 @@ class Recording:
             self.policy.trip(raw,ctx['trip_id'],True)
             return self.dto(ctx)
 
+    def control(self,raw,nid,body):
+        fields(body,{'command','expected_revision'})
+        with self.lock:
+            self.navigation(raw,nid);ctx=self.contexts[nid]
+            if not ctx.get('drive'):raise AuthError(409,'NAVIGATION_CLOSED')
+            ctx['drive'].control(body['command'],body['expected_revision'])
+            return self.dto(ctx)
+
+    def simulation(self,raw,nid,body):
+        with self.lock:
+            self.navigation(raw,nid);ctx=self.contexts[nid]
+            if not ctx.get('drive'):raise AuthError(409,'NAVIGATION_CLOSED')
+            ctx['drive'].configure(body)
+            return self.dto(ctx)
+
     def start(self,raw,body,key,request_id):
-        fields(body,{'trip_id'});operation_key(key);identifier(body['trip_id'])
+        fields(body,{'trip_id'},{'device_id'});operation_key(key);identifier(body['trip_id'])
         with self.lock:
             self.retry_failed_starts()
             with self.repo.atomic(request_id) as (repo,c):
@@ -78,7 +107,12 @@ class Recording:
                     if not ctx:raise Conflict('Navigation requires a new planned trip after restart/failure')
                     if ctx['session_id']!=row['id'] or ctx['credential']!=row['secret_hash']:raise AuthError(404,'NOT_FOUND')
                     return self.dto(ctx)
-                if trip['mode']!='SIMULATION':raise AuthError(403,'LIVE_NOT_INTEGRATED')
+                device=None
+                if trip['mode']=='LIVE':
+                    self.devices.real()
+                    device=c.execute("SELECT * FROM devices WHERE id=? AND owner_id=? AND parent_session_id=? AND boot_id=? AND status='ACTIVE' AND revoked_at IS NULL AND expiry>? AND security_version=?",(resource_id(body.get('device_id')),actor.user_id,row['id'],self.boot,repo.clock(),row['security_version'])).fetchone()
+                    if device is None:raise AuthError(404,'NOT_FOUND')
+                elif 'device_id' in body:raise AuthError(422,'VALIDATION')
                 if trip['status']!='PLANNED' or trip['archived_at'] is not None:raise Conflict('Trip not planned')
                 run_id=repo.new_id();nid=repo.new_id()
                 repo.transition_trip(actor,trip['id'],trip['revision'],'STARTING',run_id=run_id)
@@ -87,23 +121,34 @@ class Recording:
             try:
                 self.fault('start-path')
                 logger=RunLogger(self.storage.run(actor.user_id,trip['id'],run_id).parent)
-                ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock()}
+                ctx={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,'session_id':row['id'],'credential':row['secret_hash'],'raw':raw,'logger':logger,'started_at':repo.clock(),'device_id':None if device is None else device['id']}
                 self.contexts[nid]=ctx
                 self.fault('start-intent')
                 now=utc(repo.clock())
-                logger.start({'start_time':now,'corridor_id':'school-synthetic','timebase':'SIMULATION','dataset':'SYNTHETIC','school_owner_id':actor.user_id,'school_trip_id':trip['id'],'school_route_snapshot':route_snapshot},run_id=run_id)
+                from greenwave.school_navigation.engine import Drive
+                drive=Drive(self,ctx,trip['mode']);ctx['drive']=drive
+                if trip['mode']=='LIVE':
+                    from greenwave.school_navigation.maps import snapshot_route
+                    selected=snapshot_route(self.storage,route_snapshot)
+                    from greenwave.school_navigation.maps import BoundRoutes
+                    drive.app.routes=BoundRoutes(selected)
+                    drive.app.selected_route=selected;drive.app.map_matcher.set_route(selected);drive.app.route_events.set_route(selected,nid)
+                logger.start({**drive.metadata(),'start_time':now,'timebase':'SIMULATION' if trip['mode']=='SIMULATION' else 'UTC_ELAPSED','school_owner_id':actor.user_id,'school_trip_id':trip['id'],'school_route_snapshot':route_snapshot},run_id=run_id)
                 self.fault('start-files')
                 if not logger.append('RUN_START',timestamp=now,simulation_seconds=0,model_seconds=0):raise OSError('Logger start failed')
-                if not logger.append('TELEMETRY',timestamp=now,simulation_seconds=0,model_seconds=0,source='SIMULATION',current_corridor_position=0,speed_mps=0):raise OSError('Logger sample failed')
+                if trip['mode']=='SIMULATION' and not logger.append('TELEMETRY',timestamp=now,simulation_seconds=0,model_seconds=0,source='SIMULATION',current_corridor_position=0,speed_mps=0):raise OSError('Logger sample failed')
                 self.fault('start-recording')
                 with self.repo.atomic(request_id) as (repo,c):
                     # A revoked credential cannot turn a STARTING intent into an active drive.
                     self.policy.accounts.sessions.lookup(raw,connection=c)
+                    if device is not None and not c.execute("SELECT 1 FROM devices WHERE id=? AND status='ACTIVE' AND revoked_at IS NULL AND expiry>?",(device['id'],repo.clock())).fetchone():raise AuthError(403,'DEVICE_REPAIR_REQUIRED')
                     t=repo.own_trip(c,actor,trip['id']);repo.transition_trip(actor,trip['id'],t['revision'],'RECORDING')
                     c.execute("UPDATE recording_operations SET state='APPLIED',result_ref=? WHERE id=?",(self.raw.root({**dict(t),'run_id':run_id}).relative_to(self.storage.root).as_posix(),nid))
+                drive.start()
             except Exception as error:
                 # The committed intention exists even if path/logger/context creation failed.
-                self.contexts.pop(nid,None)
+                failed_context=self.contexts.pop(nid,None)
+                if failed_context and failed_context.get('drive'):failed_context['drive'].close()
                 self.failed_starts[nid]={'id':nid,'trip_id':trip['id'],'owner_id':actor.user_id,
                     'run_id':run_id,'logger':logger,'request_id':request_id,
                     'cause':type(error.__cause__ if isinstance(error.__cause__,OSError) else error).__name__}
@@ -168,7 +213,7 @@ class Recording:
                 sequence=self.raw.journal_sequence(trip,obs)
                 if sequence is None:
                     if not ctx or not ctx['logger'].active or trip['status'] not in {'RECORDING','FINALIZING'}:raise OSError('No active raw writer')
-                    elapsed=max(0,self.repo.clock()-ctx['started_at'])/1000
+                    elapsed=ctx['drive'].app.clock.read().simulation_seconds if ctx.get('drive') else max(0,self.repo.clock()-ctx['started_at'])/1000
                     if not ctx['logger'].append('MANUAL_OBSERVATION',timestamp=utc(obs['server_received_at']),simulation_seconds=elapsed,model_seconds=elapsed,
                         signal_id=obs['signal_id'],source='MANUAL',payload={'observation_id':oid,'source_event_id':obs['source_event_id'],'state':obs['state'],'event_type':obs['event_type']}):raise OSError('Journal write failed')
                     sequence=ctx['logger'].sequence
@@ -215,9 +260,11 @@ class Recording:
         # Reconcile pending DB facts while raw is still writable, never after completion.
         with self.repo.database.connection() as c:pending=[r[0] for r in c.execute("SELECT id FROM observations WHERE trip_id=? AND historical=0 AND journaling_state!='APPLIED'",(trip['id'],))]
         for oid in pending:self.journal(oid,request_id)
+        if getattr(self,'vision',None):self.vision.close_trip(ctx['trip_id'])
+        if ctx.get('drive'):ctx['drive'].close()
         root=self.raw.root(trip)
         if not (root/'complete.json').exists():
-            elapsed=max(0,self.repo.clock()-ctx['started_at'])/1000
+            elapsed=ctx['drive'].app.clock.read().simulation_seconds if ctx.get('drive') else max(0,self.repo.clock()-ctx['started_at'])/1000
             ctx['logger'].finish('CREDENTIALS_REVOKED' if system else 'USER_STOP',timestamp=utc(self.repo.clock()),simulation_seconds=elapsed,model_seconds=elapsed)
         self.fault('finish-manifest')
         try:reference,raw_hash,manifest_hash=self.raw.validate(trip)

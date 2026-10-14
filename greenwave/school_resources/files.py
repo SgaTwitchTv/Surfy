@@ -147,7 +147,7 @@ class Files:
         if not re.fullmatch(r'[A-Za-z0-9_-]+\.(mp4|avi|mov|mkv|webm|m4v)', item.get('filename', '')):
             raise AuthError(409, 'ARTIFACT_INVALID')
         path = self.path(root, item['filename'])
-        validate = lambda: self.policy.trip(raw, tid, True, closed=True)
+        validate = lambda: self.policy.trip(raw, tid, True)
         if self.digest(path, validate) != item.get('sha256'): raise AuthError(409, 'ARTIFACT_INVALID')
         size = path.stat().st_size
         start, end, status = 0, size - 1, 200
@@ -170,7 +170,7 @@ class Files:
         item = matches[0]
         if item.get('filename') != 'events.jsonl': raise AuthError(409, 'ARTIFACT_INVALID')
         path = self.path(root, 'events.jsonl')
-        validate = lambda: self.policy.trip(raw, tid, True, closed=True)
+        validate = lambda: self.policy.trip(raw, tid, True)
         if self.digest(path, validate, 16*1024*1024) != item.get('sha256'): raise AuthError(409, 'ARTIFACT_INVALID')
         result, seen = [], 0
         with path.open(encoding='utf-8') as stream:
@@ -189,3 +189,20 @@ class Files:
                                        'frame_id': observation.detection.frame.frame_id, 'diagnostic_only': True})
                     seen += 1
         return {'items': result, 'page': {'limit': limit, 'offset': offset}}
+
+    def event_exists(self,raw,tid,cid,eid):
+        _,root,manifest=self.capture(raw,tid,cid)
+        item=next((v for v in manifest.get('artifacts',[]) if v.get('kind')=='VISION_EVENTS'),None)
+        if item is None:return False
+        if item.get('filename')!='events.jsonl':raise AuthError(409,'ARTIFACT_INVALID')
+        path=self.path(root,'events.jsonl');validate=lambda:self.policy.trip(raw,tid,True)
+        if self.digest(path,validate,16*1024*1024)!=item.get('sha256'):raise AuthError(409,'ARTIFACT_INVALID')
+        with path.open(encoding='utf-8') as stream:
+            while True:
+                validate();line=stream.readline(1048577)
+                if not line:return False
+                if len(line)>1048576:raise AuthError(409,'ARTIFACT_TOO_LARGE')
+                for event in json.loads(line).get('events',[]):
+                    obs=decode_vision(event['observation'])
+                    if not isinstance(obs,VisionObservation) or not re.fullmatch(re.escape(cid)+r'(?::[0-9]+)?',obs.detection.frame.session_id):raise AuthError(409,'ARTIFACT_INVALID')
+                    if obs.observation_id==eid:return True

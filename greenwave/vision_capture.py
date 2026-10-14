@@ -64,7 +64,7 @@ class CaptureController:
                       live_prediction_eligible=False)
         return result
 
-    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None, detection=False,seek_seconds=0):
+    def start(self, *, source_type, source, width=1280, height=720, fps=30, realtime=True, run_id=None, replay_of=None, expected_source_sha256=None, detection=False,seek_seconds=0,weights_path=None):
         if self.process is not None and self.process.poll() is None and self.status()['status'] in ('ENDED','STOPPED','FAILED'):
             try:self.process.wait(timeout=.3)
             except subprocess.TimeoutExpired:pass
@@ -76,7 +76,7 @@ class CaptureController:
         if type(realtime) is not bool:raise ValueError('realtime must be boolean')
         if type(detection) is not bool:raise ValueError('detection must be boolean')
         if isinstance(seek_seconds,bool) or not isinstance(seek_seconds,(int,float)) or not math.isfinite(seek_seconds) or not 0<=seek_seconds<=86400 or (source_type=='CAMERA' and seek_seconds):raise ValueError('Invalid video seek time')
-        weights=Path(__file__).resolve().parents[1]/'data/derived/vision-probe/best_traffic_nano_yolo.pt'
+        weights=Path(weights_path) if weights_path is not None else Path(__file__).resolve().parents[1]/'data/derived/vision-probe/best_traffic_nano_yolo.pt'
         if detection and not weights.is_file():raise ValueError('Local model missing; run tools/prepare_vision_probe.py first')
         session=uuid4().hex;self.root.mkdir(parents=True,exist_ok=True)
         directory=self.root/session;directory.mkdir()
@@ -88,8 +88,8 @@ class CaptureController:
         self.log=(directory/'worker.log').open('wb')
         try:
             process=subprocess.Popen([self.python,'-m','greenwave.vision_capture_worker','--directory',str(directory)],
-                cwd=Path(__file__).resolve().parents[1],stdout=self.log,stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+                cwd=Path(__file__).resolve().parents[1],stdin=subprocess.DEVNULL,stdout=self.log,stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,env={**os.environ,'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'})
         except OSError as error:
             self.log.close();self.log=None
             raise ValueError('Cannot launch CV runtime: '+str(error)) from error

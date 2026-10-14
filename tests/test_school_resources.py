@@ -141,7 +141,7 @@ class ResourceTests(ResourceFixture):
         for body in [{'command':'SEEK','value':-1},{'command':'RATE','value':10},{'command':'RATE','value':True},{'command':'PLAY','owner_id':'fake'},{'command':'PLAY','value':1}]:
             self.assertEqual(self.post('/replays/'+hid+'/control',body)[0],422)
         self.assertEqual(self.post('/replays/'+hid+'/control',{'command':'SEEK','value':2})[0],200)
-        self.assertEqual(self.post('/trips/'+self.tid+'/replays',{'mode':'SIMULATION'})[0],422)
+        self.assertEqual(self.post('/trips/'+self.tid+'/replays',{'mode':'SIMULATION'})[0],409)
         self.assertEqual(self.post('/trips/'+self.tid+'/analysis-jobs',{'type':'MAPPING'})[0],422)
 
     def test_shared_replay_job_and_revocation_cuts_all_contexts(self):
@@ -190,9 +190,12 @@ class ResourceTests(ResourceFixture):
             self.assertEqual(self.get(path)[0],404,path)
         self.use('other');self.assertEqual(self.request('GET',PREFIX+'/trips/'+self.tid,headers={'X-Owner-ID':self.users['driver']['id'],'X-Role':'ADMIN'})[0],404)
         for path in ['/api/state','/api/runs','/api/vision/media','/runtime/school.sqlite3','/backups/x.sqlite3',
-                     PREFIX+'/devices',PREFIX+'/navigation',PREFIX+'/device/session',
+
                      PREFIX+'/trips/'+self.tid+'/cv/captures/'+self.cid+'/frames/0']:
-            self.assertEqual(self.request('GET',path)[0],404)
+            self.assertEqual(self.request('GET',path)[0],403 if path=='/api/state' else 404)
+        self.assertEqual(self.get('/devices')[0],200)
+        self.assertEqual(self.get('/navigation')[1]['data'],None)
+        self.assertEqual(self.get('/device/session')[0],403)
         self.assertEqual(self.get('/admin/users')[0],403)  # Stage8 implements admin API; DRIVER remains forbidden.
         self.assertEqual(self.post('/trips',{'title':'fake','owner_id':self.users['driver']['id']})[0],422)
 
