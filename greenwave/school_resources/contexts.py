@@ -61,11 +61,13 @@ class Contexts:
         row, _, _, basis = self.policy.basis_trip(raw, tid, closed=True)
         trip, logger, _, _ = self.files.run(raw, tid, basis=basis)
         if body['mode']=='SIMULATION':
-            from greenwave.replay import ReplaySession
+            from greenwave.school_navigation.replay import SimulationReplay
             metadata=json.loads((self.files.storage.run(trip['owner_id'],tid,trip['run_id'])/'metadata.json').read_text(encoding='utf-8'))
             if metadata.get('timebase')!='SIMULATION':raise AuthError(409,'SIMULATION_REPLAY_UNAVAILABLE')
-            replay=ReplaySession(logger)
-        else:replay = GPSReplaySession(logger)
+            provenance='M8_SIMULATION' if metadata.get('school_engine')=='M8' else 'LEGACY_MINIMAL_SYNTHETIC'
+            replay=SimulationReplay(logger)
+        else:
+            replay = GPSReplaySession(logger);provenance='RECORDED_GPS'
         try: replay.load(trip['run_id'])
         except ValueError: raise AuthError(409, 'GPS_REPLAY_UNAVAILABLE') from None
         self.policy.bound_trip(raw, basis)
@@ -76,7 +78,7 @@ class Contexts:
             if len(self.replays) >= 64: raise AuthError(503, 'REPLAY_BUSY')
             hid = self.repo.new_id()
             self.replays[hid] = {'session_id': row['id'], 'credential': row['secret_hash'], 'trip_id': tid, 'authorization': basis,
-                'mode':body['mode'],'expiry': self.repo.clock()+1800000, 'replay': replay, 'tick': time.monotonic()}
+                'mode':body['mode'],'provenance':provenance,'expiry': self.repo.clock()+1800000, 'replay': replay, 'tick': time.monotonic()}
             return self.replay_read(raw, hid)
 
     def replay_context(self, raw, hid):
@@ -97,7 +99,7 @@ class Contexts:
             # GET does not advance/mutate the playback timeline. Controls are explicit POST.
             state = context['replay'].state()
             if context['mode']=='SIMULATION':
-                return {'id':hid,'trip_id':context['trip_id'],'mode':'SIMULATION','timeline_seconds':state['model_seconds'],'duration_seconds':state['duration'],'sample_count':len(context['replay'].rows),'running':state['running'],'rate':state['rate'],'position':{'road_position_m':state['position'],'speed_mps':state['speed_mps']},'diagnostic_only':True,'live_recommendation':None}
+                return {'id':hid,'trip_id':context['trip_id'],'mode':'SIMULATION','provenance':context['provenance'],'timeline_seconds':state['model_seconds'],'duration_seconds':state['duration'],'sample_count':len(context['replay'].rows),'running':state['running'],'rate':state['rate'],'position':{'road_position_m':state['position'],'speed_mps':state['speed_mps']},'diagnostic_only':True,'live_recommendation':None}
             sample = state['sample']
             position = None if sample is None else {k: sample['position'][k] for k in ('latitude', 'longitude', 'speed_mps')}
             return {'id': hid, 'trip_id': context['trip_id'], 'timeline_seconds': state['timeline_seconds'],

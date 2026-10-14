@@ -25,6 +25,7 @@ class NavigationTests(RecordsTests):
         self.assertEqual(status,200,data);self.assertEqual(data['data']['rate'],10)
         self.assertEqual(self.post('/navigation/'+nav['id']+'/control',{'command':'RESUME','expected_revision':rev+1})[0],200)
         self.assertEqual(self.finish(nav)[0],200)
+        self.assertEqual(self.get('/navigation/'+nav['id'])[0],409)
         self.assertEqual(self.get('/trips/'+trip['id']+'/export')[0],200)
         status,data,_=self.post('/trips/'+trip['id']+'/replays',{'mode':'SIMULATION'})
         self.assertEqual(status,201,data);hid=data['data']['id']
@@ -181,6 +182,54 @@ class NavigationTests(RecordsTests):
         self.assertEqual(self.get('/maps/../../school.sqlite3')[0],404)
         self.assertEqual(self.get('/maps/warsaw')[0],200)
         self.use(None);self.assertEqual(self.get('/maps/warsaw')[0],401)
+
+
+    def test_scoped_capture_frames_stop_range_and_missing_model(self):
+        import hashlib,types
+        from pathlib import Path
+        source=self.storage.root/'synthetic-source.avi';source.write_bytes(b'SYNTHETIC SOURCE')
+        vision=self.server.resources.vision;vision.sources={'synthetic':str(source)}
+        captured=[]
+        class Capture:
+            def __init__(inner,root,python=None):
+                inner.root=Path(root);inner.python=python;inner.running=True;inner.process=types.SimpleNamespace(poll=lambda:None if inner.running else 0);captured.append(inner)
+            def start(inner,**kw):
+                inner.id='e'*32;inner.directory=inner.root/inner.id;inner.directory.mkdir(parents=True)
+                (inner.directory/'preview-0.jpg').write_bytes(b'SYNTHETIC FRAME')
+                media=inner.directory/'video.avi';media.write_bytes(b'SYNTHETIC MEDIA')
+                (inner.directory/'manifest.json').write_text(json.dumps({'session_id':inner.id,'run_id':kw['run_id'],'complete':True,'status':'ENDED','artifacts':[{'kind':'VIDEO','filename':'video.avi','sha256':hashlib.sha256(media.read_bytes()).hexdigest()}]}))
+                return inner.status()
+            def status(inner):return {'session_id':inner.id,'status':'RUNNING' if inner.running else 'ENDED','frame':{'data':{'frame_id':0}},'preview_fresh':True,'frames_captured':1}
+            def stop(inner):inner.running=False;return inner.status()
+            def close(inner):inner.running=False
+        trip=self.new_trip();nav=self.start(trip);base='/trips/'+trip['id']+'/cv/captures'
+        self.assertEqual(self.post(base,{'source_type':'FILE','source_ref':'synthetic','detection':True})[0],422)
+        with patch('greenwave.school_navigation.cv.CaptureController',Capture):
+            status,data,_=self.post(base,{'source_type':'FILE','source_ref':'synthetic','detection':False})
+        self.assertEqual(status,201,data);cid=data['data']['id'];path=base+'/'+cid
+        for suffix in ['', '/frames/0','/events','/media/0']:
+            for who,expected in [(None,401),('other',404),('analyst',404),('admin',404),('driver',200)]:
+                self.use(who);self.assertEqual(self.get(path+suffix)[0],expected)
+        self.assertEqual(self.request('GET',PREFIX+path+'/media/0',headers={'Range':'bytes=0-3'})[0],206)
+        self.assertEqual(self.request('GET',PREFIX+path+'/media/0',headers={'Range':'bytes=9999-'})[0],416)
+        self.assertEqual(self.get(path+'/frames/%2e%2e')[0],404)
+        self.assertEqual(self.post(path+'/stop',{},)[0],200)
+        self.assertFalse(captured[0].running)
+        self.assertEqual(self.finish(nav)[0],200)
+
+    def test_simulation_clock_is_separate_and_predictor_does_not_peek(self):
+        nav=self.start(self.new_trip());drive=self.rec.contexts[nav['id']]['drive'];clock=drive.app.clock
+        clock.set_running(False);clock._monotonic=lambda:100;clock._anchor=100;clock.set_running(True)
+        original=drive.app.simulator.state_at;observed=[]
+        def state_at(signal,seconds):
+            observed.append(seconds);self.assertLessEqual(seconds,clock.read().simulation_seconds+1e-6)
+            return original(signal,seconds)
+        with patch.object(drive.app.simulator,'state_at',side_effect=state_at):
+            drive.app._plan();clock._monotonic=lambda:102;drive.tick()
+        self.assertTrue(observed);self.assertGreaterEqual(drive.app.position.elapsed,1.9)
+        state=self.get('/navigation/'+nav['id'])[1]['data']
+        self.assertEqual(state['response_at'],self.now);self.assertGreaterEqual(state['simulation_seconds'],2)
+        self.assertIsNone(state['live_recommendation'])
 
 
 

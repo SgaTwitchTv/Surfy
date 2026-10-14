@@ -38,7 +38,7 @@ class Drive:
 
     def metadata(self):
         return {'application_version':'school-navigation-9', 'dataset':self.app.dataset,
-                'corridor_id':self.app.corridor.id, 'corridor':asdict(self.app.corridor),
+                'session_id':self.app.session_id,'corridor_id':self.app.corridor.id, 'corridor':asdict(self.app.corridor),
                 'timebase':'SIMULATION' if self.mode=='SIMULATION' else 'UTC_ELAPSED',
                 'school_engine':'M8', 'utc_epoch':self.app.utc_epoch}
 
@@ -50,19 +50,20 @@ class Drive:
         sim=self.mode=='SIMULATION'
         quality=self.app.external_position.status()
         fresh=quality['state']=='RECEIVING' and quality['freshness_status']=='FRESH'
-        return {'mode':self.mode, 'running':s['running'] and not self.closed,
+        return {'active':not self.closed,'mode':self.mode, 'running':s['running'] and not self.closed,
             'control_revision':self.revision, 'rate':s['rate'], 'response_at':self.recorder.repo.clock(),
             'simulation_seconds':s['simulation_seconds'], 'dataset':s['dataset'],
-            'synthetic':sim, 'speed_mps':s['position']['speed_mps'] if sim else (None if sample is None or not fresh else sample.speed_mps),
+            'synthetic':sim, 'speed_mps':None if self.closed else s['position']['speed_mps'] if sim else (None if sample is None or not fresh else sample.speed_mps),
             'speed_source':'SIMULATION' if sim else (None if sample is None else sample.speed_source),
             'speed_limit_mps':s['speed_limit_mps'] if sim else (mapping['recommendation_eligibility'].get('solver_input') or {}).get('speed_limit_mps'),
+            'is_mock':False if sim else None if sample is None else sample.is_mock,
             'heading_deg':None if sample is None else sample.heading_deg,
             'position':s['position'] if sim else (None if sample is None or quality['state']=='STALE' else {k:getattr(sample,k) for k in ('latitude','longitude','speed_mps')}),
             'signals':s['signals'] if sim else [], 'mapping':mapping,
             'quality':{'source':'SYNTHETIC','state':'DEMO'} if sim else self.app.external_position.status(),
-            'simulation_recommendation':s['recommendation'] if sim else None,
-            'live_recommendation':None if sim else mapping['live_recommendation'],
-            'eligibility':{'allowed':False,'reason_codes':['SIMULATION_NOT_LIVE']} if sim else mapping['recommendation_eligibility']}
+            'simulation_recommendation':s['recommendation'] if sim and not self.closed else None,
+            'live_recommendation':None if sim or self.closed else mapping['live_recommendation'],
+            'eligibility':{'allowed':False,'reason_codes':['NAVIGATION_CLOSED']} if self.closed else {'allowed':False,'reason_codes':['SIMULATION_NOT_LIVE']} if sim else mapping['recommendation_eligibility']}
 
     def control(self, command, expected):
         if self.closed: raise AuthError(409,'NAVIGATION_CLOSED')

@@ -51,11 +51,13 @@ class Recording:
                     try:
                         drive.tick()
                     except Exception:
-                        drive.close();self.close_failed_logger(ctx['logger']);self.interrupt(ctx['trip_id'],'ENGINE_FAILED');self.contexts.pop(ctx['id'],None);continue
+                        drive.close();self.close_failed_logger(ctx['logger'])
+                        if getattr(self,'vision',None):self.vision.close_trip(ctx['trip_id'])
+                        self.interrupt(ctx['trip_id'],'ENGINE_FAILED');self.contexts.pop(ctx['id'],None);continue
                 if drive and not ctx['logger'].active:
                     with self.repo.database.connection() as c:status=c.execute('SELECT status FROM trips WHERE id=?',(ctx['trip_id'],)).fetchone()[0]
                     # Preserve successful user FINISH handles for identical retries.
-                    if status!='COMPLETE':self.finish_context(ctx,'engine-ended',system=True)
+                    if status in {'RECORDING','FINALIZING'}:self.finish_context(ctx,'engine-ended',system=True)
 
     def dto(self,ctx):
         with self.repo.database.connection() as c:t=c.execute('SELECT * FROM trips WHERE id=?',(ctx['trip_id'],)).fetchone()
@@ -73,7 +75,8 @@ class Recording:
         with self.lock:
             ctx=self.contexts.get(resource_id(nid))
             if not ctx or ctx['session_id']!=row['id'] or ctx['credential']!=row['secret_hash']:raise AuthError(404,'NOT_FOUND')
-            self.policy.trip(raw,ctx['trip_id'],True)
+            _,_,trip,_=self.policy.trip(raw,ctx['trip_id'],True)
+            if trip['status'] in {'COMPLETE','INTERRUPTED'}:raise AuthError(409,'NAVIGATION_CLOSED')
             return self.dto(ctx)
 
     def control(self,raw,nid,body):

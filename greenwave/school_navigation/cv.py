@@ -42,9 +42,13 @@ class Vision:
             nav=self.recorder.own_context(row,tid)
             if trip['status']!='RECORDING' or not nav.get('drive') or nav['drive'].closed:raise AuthError(409,'ACTIVE_NAVIGATION_REQUIRED')
             if body['source_type']=='CAMERA':
-                self.recorder.devices.real();name='camera:'+str(body.get('camera_index'))
+                self.recorder.devices.real()
+                if 'source_ref' in body:raise AuthError(422,'VALIDATION')
+                name='camera:'+str(body.get('camera_index'))
                 if type(body.get('camera_index')) is not int:raise AuthError(422,'VALIDATION')
-            elif body['source_type']=='FILE':name=body.get('source_ref')
+            elif body['source_type']=='FILE':
+                if 'camera_index' in body:raise AuthError(422,'VALIDATION')
+                name=body.get('source_ref')
             else:raise AuthError(422,'VALIDATION')
             if not isinstance(name,str) or name not in self.sources:raise AuthError(422,'SOURCE_UNAVAILABLE')
             if type(body.get('detection',False)) is not bool:raise AuthError(422,'VALIDATION')
@@ -96,7 +100,7 @@ class Vision:
     def events(self,raw,tid,cid,q):
         self.policy.trip(raw,tid,True);resource_id(cid)
         ctx=self.captures.get(cid)
-        if not ctx or ctx['trip_id']!=tid:return self.files.events(raw,tid,cid,q)
+        if not ctx or ctx['trip_id']!=tid:return self.review_dtos(tid,cid,self.files.events(raw,tid,cid,q))
         self.repo.database.storage._safe(ctx['capture'].directory)
         from greenwave.school_resources.reads import pagination
         from greenwave.vision_contracts import decode_vision,VisionObservation
@@ -111,7 +115,16 @@ class Vision:
             event=decode_vision(json.loads(payload)['observation'])
             if not isinstance(event,VisionObservation):raise AuthError(409,'ARTIFACT_INVALID')
             items.append({'id':eid,'state':event.detection.state,'event_type':event.event_type,'track_id':event.detection.track_id,'frame_id':event.detection.frame.frame_id,'diagnostic_only':True})
-        return {'items':items,'page':{'limit':limit,'offset':offset}}
+        return self.review_dtos(tid,cid,{'items':items,'page':{'limit':limit,'offset':offset}})
+
+    def review_dtos(self,tid,cid,page):
+        with self.repo.database.connection() as c:
+            for item in page['items']:
+                rows=c.execute("SELECT reason FROM audit_events WHERE resource_id=? AND action='CV_REVIEW' AND json_valid(reason) AND json_extract(reason,'$.capture_id')=? AND json_extract(reason,'$.event_id')=? ORDER BY sequence DESC LIMIT 10",(tid,cid,item['id'])).fetchall()
+                history=[json.loads(row[0]) for row in rows]
+                item['review_revision']=0 if not history else history[0]['revision']
+                item['reviews']=[{k:row[k] for k in ('actor_id','server_at','reason','status','revision')} for row in reversed(history)]
+        return page
 
     def associate(self,raw,tid,cid,body,remove=False):
         fields(body,{'track_id'} if remove else {'track_id','route_version_id','stop_line_id','movement'})
@@ -119,6 +132,7 @@ class Vision:
         with self.recorder.lock:
             row,actor=self.policy.session(raw);_,_,trip,_=self.policy.trip(raw,tid,True)
             nav=self.recorder.own_context(row,tid)
+            if trip['status']!='RECORDING' or nav['drive'].closed:raise AuthError(409,'ACTIVE_NAVIGATION_REQUIRED')
             ctx=self.captures.get(resource_id(cid))
             if not ctx or ctx['trip_id']!=tid or ctx['navigation']!=nav['id']:raise AuthError(404,'NOT_FOUND')
             if remove:result=ctx['workbench'].unassign(body['track_id'])
