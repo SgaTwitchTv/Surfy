@@ -27,6 +27,7 @@ class NavigationTests(RecordsTests):
         self.assertEqual(self.finish(nav)[0],200)
         self.assertEqual(self.get('/navigation/'+nav['id'])[0],409)
         self.assertEqual(self.get('/trips/'+trip['id']+'/export')[0],200)
+        self.assertEqual(self.get('/trips/'+trip['id']+'/replay-options')[1]['data']['modes'],['SIMULATION'])
         status,data,_=self.post('/trips/'+trip['id']+'/replays',{'mode':'SIMULATION'})
         self.assertEqual(status,201,data);hid=data['data']['id']
         self.assertEqual(self.post('/replays/'+hid+'/control',{'command':'RATE','value':10})[0],200)
@@ -246,6 +247,68 @@ class NavigationTests(RecordsTests):
         self.assertEqual(self.request('GET',PREFIX+'/device/session',headers={'Authorization':'Bearer '+device['device_token']})[0],403)
         status,data,_=self.request('GET',PREFIX+'/device/session',headers={'Authorization':'Bearer '+replacement['device_token']})
         self.assertEqual(status,200);self.assertFalse(data['data']['active']);self.assertIsNone(data['data']['app_session_id'])
+
+
+    def test_live_block_revokes_device_and_finishes_raw(self):
+        self.real_proxy();device,_=self.pair()
+        from greenwave.school_data import Actor
+        from pathlib import Path
+        cfg=self.repo.create_config(Actor(self.users['admin']['id']),'ROUTE','block-live-test',json.loads(Path('data/routes/zwirki_wigury_draft.json').read_text(encoding='utf-8')))
+        cfg=self.repo.publish_config(Actor(self.users['admin']['id'],self.now),cfg['id'],cfg['revision'])
+        trip=self.post('/trips',{'title':'Synthetic blocked driver','mode':'LIVE','route_version_id':cfg['id']})[1]['data']
+        nav=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id'],'device_id':device['device_id']},{'Idempotency-Key':'D'*32})[1]['data']
+        self.use('admin');target=self.repo.get_user(self.users['driver']['id'])
+        status,data,_=self.request('PATCH',PREFIX+'/admin/users/'+target['id'],{'status':'BLOCKED','expected_revision':target['revision'],'reason':'Synthetic revocation'})
+        self.assertEqual(status,200,data)
+        self.assertEqual(self.request('GET',PREFIX+'/device/session',headers={'Authorization':'Bearer '+device['device_token']})[0],403)
+        with self.db.connection() as c:self.assertEqual(c.execute('SELECT status FROM trips WHERE id=?',(trip['id'],)).fetchone()[0],'COMPLETE')
+        self.use('driver');self.assertEqual(self.get('/navigation/'+nav['id'])[0],401)
+
+    def test_association_exact_route_parent_and_no_verification_change(self):
+        import types
+        self.real_proxy();device,_=self.pair()
+        from greenwave.school_data import Actor
+        from pathlib import Path
+        data={'schema_version':1,'route_id':'SYNTHETIC-CV-ROUTE','geometry_version':'test-v1','name':'Synthetic fixture','direction_description':'North','source':{'attribution':'SYNTHETIC TEST ONLY'},'geometry_verification':{'status':'DRAFT'},'coordinates':[[21,52],[21,52.001]],'speed_sections':[],'stop_lines':[{'stop_line_id':'synthetic-line','coordinates':[[20.9999,52.0005],[21.0001,52.0005]],'segment_index':0,'direction':'FORWARD','movement':'STRAIGHT','source':{'attribution':'SYNTHETIC TEST ONLY'},'verification':{'status':'DRAFT'},'position_uncertainty_m':1}]}
+        cfg=self.repo.create_config(Actor(self.users['admin']['id']),'ROUTE','association-test',data)
+        cfg=self.repo.publish_config(Actor(self.users['admin']['id'],self.now),cfg['id'],cfg['revision'])
+        trip=self.post('/trips',{'title':'Synthetic association','mode':'LIVE','route_version_id':cfg['id']})[1]['data']
+        nav=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id'],'device_id':device['device_id']},{'Idempotency-Key':'A'*32})[1]['data']
+        cid='c'*32;calls=[]
+        workbench=types.SimpleNamespace(assign=lambda *args:calls.append(args) or {'live_prediction_eligible':False},unassign=lambda track:{'unassigned':track})
+        self.server.resources.vision.captures[cid]={'trip_id':trip['id'],'navigation':nav['id'],'workbench':workbench,'capture':types.SimpleNamespace(close=lambda:None)}
+        line=data['stop_lines'][0];body={'track_id':'synthetic-track','route_version_id':cfg['id'],'stop_line_id':line['stop_line_id'],'movement':line.get('movement')}
+        path='/trips/'+trip['id']+'/cv/captures/'+cid+'/associations'
+        self.assertEqual(self.post(path,{**body,'route_version_id':'0'*32})[0],409)
+        self.assertEqual(self.post(path,{**body,'stop_line_id':'not-found'})[0],422)
+        status,result,_=self.post(path,body);self.assertEqual(status,200,result);self.assertTrue(calls)
+        self.assertFalse(result['data']['live_prediction_eligible'])
+        for who in ['other','analyst','admin']:
+            self.use(who);self.assertEqual(self.post(path,body)[0],404)
+        self.use('driver')
+        self.assertEqual(self.get('/navigation/'+nav['id'])[1]['data']['eligibility']['allowed'],False)
+        self.assertEqual(self.request('DELETE',PREFIX+path+'/synthetic-track',{})[0],204)
+        self.assertEqual(self.finish(nav)[0],200)
+        self.assertEqual(self.post(path,body)[0],409)
+
+
+    def test_gps_write_failure_is_not_acknowledged_and_releases_slot(self):
+        self.real_proxy();device,_=self.pair()
+        from greenwave.school_data import Actor
+        from pathlib import Path
+        cfg=self.repo.create_config(Actor(self.users['admin']['id']),'ROUTE','write-failure-test',json.loads(Path('data/routes/zwirki_wigury_draft.json').read_text(encoding='utf-8')))
+        cfg=self.repo.publish_config(Actor(self.users['admin']['id'],self.now),cfg['id'],cfg['revision'])
+        trip=self.post('/trips',{'title':'Synthetic write failure','mode':'LIVE','route_version_id':cfg['id']})[1]['data']
+        nav=self.request('POST',PREFIX+'/navigation',{'trip_id':trip['id'],'device_id':device['device_id']},{'Idempotency-Key':'W'*32})[1]['data']
+        payload={'session_id':nav['id'],'timestamp_seconds':self.now/1000,'latitude':52,'longitude':21,'gps_accuracy_m':5,'speed_mps':None,'speed_accuracy_mps':None,'heading_deg':None,'heading_accuracy_deg':None,'altitude_m':None,'vertical_accuracy_m':None,'is_mock':True,'source':'ANDROID_FUSED','device_id':'synthetic-phone','stream_id':'synthetic-stream','sample_sequence':1,'elapsed_realtime_nanos':1000000000,'sent_elapsed_realtime_nanos':1000000000}
+        ctx=self.rec.contexts[nav['id']];logger=ctx['logger']
+        def fail(*args,**kwargs):logger._fail(OSError('Synthetic write failure'));return False
+        with patch.object(logger,'append',side_effect=fail):
+            status,data,_=self.request('POST',PREFIX+'/device/position',payload,{'Authorization':'Bearer '+device['device_token']})
+        self.assertEqual(status,503,data);self.assertEqual(data['error']['code'],'RECORDING_WRITE_FAILED');self.assertIsNone(logger.stream)
+        self.assertEqual(self.get('/trips/'+trip['id'])[1]['data']['status'],'INTERRUPTED')
+        self.assertFalse((self.raw_path(trip['id']).parent/'complete.json').exists())
+        self.use('other');self.start(self.new_trip('After failed GPS write'),key='N'*32)
 
 
 

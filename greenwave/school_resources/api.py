@@ -49,7 +49,7 @@ class ResourceAPI:
             if query_string:raise AuthError(400,'BAD_REQUEST')
             if len(handler.headers.get_all('Authorization',[]))>1:raise AuthError(400,'BAD_REQUEST')
             bearer=handler.headers.get('Authorization','')
-            if route=='/device/pair' and method=='POST':return True,self.devices.pair(handler.resource_body(),handler.client_address[0]),200
+            if route=='/device/pair' and method=='POST':return True,self.devices.pair(handler.resource_body(),handler.client_ip),200
             if route=='/device/session' and method=='GET':return True,self.devices.session(bearer),200
             if route=='/device/position' and method=='POST':return True,self.devices.ingest(bearer,handler.resource_body()),200
             return False,None,None
@@ -94,6 +94,7 @@ class ResourceAPI:
             ('HEAD', r'/trips/([^/]+)/export', set(), 'export_check'),
             ('GET', r'/config/versions', {'kind','logical_id','status','limit','offset','cursor'}, 'configs'),
             ('GET', r'/config/versions/([^/]+)', set(), 'config'),
+            ('GET',r'/trips/([^/]+)/replay-options',set(),'replay_options'),
             ('POST', r'/trips/([^/]+)/replays', set(), 'replay_create'),
             ('GET', r'/replays/([^/]+)', set(), 'replay_read'),
             ('POST', r'/replays/([^/]+)/control', set(), 'replay_control'),
@@ -163,6 +164,7 @@ class ResourceAPI:
                 elif operation == 'config': data = self.reads.configs(raw, q, args[0])
                 elif operation == 'export_check':self.files.run(raw,args[0],True);data=None
                 elif operation == 'export': return True, self.export(raw, args[0]), 200
+                elif operation=='replay_options':data=self.contexts.replay_options(raw,args[0])
                 elif operation.startswith('replay_') or operation in {'job_create','job_cancel','job_read'}:
                     if operation in {'replay_close','job_cancel'} and body != {}: raise AuthError(422, 'VALIDATION')
                     fn = getattr(self.contexts, operation)

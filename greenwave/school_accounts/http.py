@@ -187,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             alias=DEVICE_ALIASES.get(urlsplit(self.path).path)
             device_route=(alias is not None and self.command==alias[0]) or urlsplit(self.path).path in {PREFIX+'/device/pair',PREFIX+'/device/position',PREFIX+'/device/session'}
-            ip=self.check_request(mutation and not device_route)
+            ip=self.check_request(mutation and not device_route);self.client_ip=ip
             parsed=urlsplit(self.path)
             if parsed.scheme or parsed.netloc or parsed.fragment:raise AuthError(400,'BAD_REQUEST')
             path=parsed.path

@@ -83,10 +83,15 @@ class Vision:
             'diagnostic_only':True,'live_prediction_eligible':False}
 
     def stop(self,raw,tid,cid,body):
-        fields(body,set());self.policy.trip(raw,tid,True)
-        ctx=self.captures.get(resource_id(cid))
-        if not ctx or ctx['trip_id']!=tid:raise AuthError(404,'NOT_FOUND')
-        ctx['capture'].stop();return self.status(raw,tid,cid)
+        fields(body,set())
+        with self.recorder.lock:
+            row,_=self.policy.session(raw);self.policy.trip(raw,tid,True)
+            ctx=self.captures.get(resource_id(cid))
+            if not ctx or ctx['trip_id']!=tid:raise AuthError(404,'NOT_FOUND')
+            if ctx['capture'].process.poll() is None:
+                nav=self.recorder.own_context(row,tid)
+                if nav['id']!=ctx['navigation']:raise AuthError(404,'NOT_FOUND')
+            ctx['capture'].stop();return self.status(raw,tid,cid)
 
     def frame(self,raw,tid,cid,frame):
         _,_,trip,_=self.policy.trip(raw,tid,True)
@@ -129,6 +134,8 @@ class Vision:
     def associate(self,raw,tid,cid,body,remove=False):
         fields(body,{'track_id'} if remove else {'track_id','route_version_id','stop_line_id','movement'})
         text(body['track_id'],1,120)
+        if not remove:
+            resource_id(body['route_version_id']);text(body['stop_line_id'],1,120);text(body['movement'],1,80)
         with self.recorder.lock:
             row,actor=self.policy.session(raw);_,_,trip,_=self.policy.trip(raw,tid,True)
             nav=self.recorder.own_context(row,tid)
@@ -149,7 +156,7 @@ class Vision:
             return result
 
     def review(self,raw,tid,cid,body,request_id):
-        fields(body,{'event_id','status','reason','expected_revision','client_operation_id'})
+        fields(body,{'event_id','status','reason','expected_revision','client_operation_id'},{'association'})
         if body['status'] not in {'ACCEPTED','REJECTED'}:raise AuthError(422,'VALIDATION')
         text(body['event_id'],1,256);text(body['reason'],3,500);revision(body['expected_revision']);operation_key(body['client_operation_id'])
         # Evidence remains immutable; review is an append-only audited separate fact.
@@ -158,9 +165,26 @@ class Vision:
         if ctx and ctx['trip_id']==tid:
             from contextlib import closing
             workbench=ctx['workbench'];self.repo.database.storage._safe(workbench.path);workbench.ingest(cid)
-            with closing(workbench.connect()) as index:exists=index.execute('SELECT 1 FROM events WHERE capture_id=? AND id=?',(cid,body['event_id'])).fetchone() is not None
-        else:exists=self.files.event_exists(raw,tid,cid,body['event_id'])
-        if not exists:raise AuthError(404,'EVENT_NOT_FOUND')
+            with closing(workbench.connect()) as index:row=index.execute('SELECT payload FROM events WHERE capture_id=? AND id=?',(cid,body['event_id'])).fetchone()
+            from greenwave.vision_contracts import decode_vision
+            evidence=None if row is None else decode_vision(json.loads(row[0])['observation'])
+        else:evidence=self.files.find_event(raw,tid,cid,body['event_id'])
+        if evidence is None:raise AuthError(404,'EVENT_NOT_FOUND')
+        association=None
+        if body.get('association') is not None:
+            if body['status']!='ACCEPTED':raise AuthError(422,'VALIDATION')
+            fields(body['association'],{'route_version_id','stop_line_id','movement'})
+            value=body['association'];resource_id(value['route_version_id']);text(value['stop_line_id'],1,120);text(value['movement'],1,80)
+            _,_,trip,_=self.policy.trip(raw,tid,True)
+            if trip['route_version_id']!=value['route_version_id']:raise AuthError(409,'ROUTE_CHANGED')
+            with self.repo.database.connection() as c:version=c.execute('SELECT * FROM config_versions WHERE id=?',(trip['route_version_id'],)).fetchone()
+            from .maps import snapshot_route
+            route=snapshot_route(self.repo.database.storage,{'version_id':version['id'],'payload':json.loads(version['payload']),'payload_hash':version['payload_hash']})
+            line=next((line for line in route.stop_lines if line.stop_line_id==value['stop_line_id']),None)
+            if line is None or line.movement!=value['movement']:raise AuthError(422,'VALIDATION')
+            expected={'ARROW_LEFT':'LEFT','ARROW_RIGHT':'RIGHT','ARROW_STRAIGHT':'STRAIGHT'}.get(evidence.detection.pictogram)
+            if evidence.detection.pictogram=='PEDESTRIAN' or (expected and line.movement!=expected):raise AuthError(422,'PICTOGRAM_CONFLICT')
+            association={**value,'geometry_hash':route.geometry_hash,'diagnostic_only':True,'live_prediction_eligible':False}
         with self.repo.atomic(request_id) as (repo,c):
             _,actor,trip,_=self.policy.basis_trip(raw,tid,owner_only=True,connection=c)
             entries=c.execute("SELECT reason FROM audit_events WHERE resource_id=? AND action='CV_REVIEW' ORDER BY server_at,sequence",(tid,)).fetchall()
@@ -172,6 +196,6 @@ class Vision:
                 return {k:v for k,v in existing.items() if k!='request_hash'}
             previous=[r for r in records if r['capture_id']==cid and r['event_id']==body['event_id']]
             if len(previous)!=body['expected_revision']:raise AuthError(409,'REVISION_CONFLICT')
-            data={**body,'capture_id':cid,'actor_id':actor.user_id,'server_at':repo.clock(),'revision':len(previous)+1,'request_hash':fingerprint,'live_prediction_eligible':False}
+            data={**body,'association':association,'capture_id':cid,'actor_id':actor.user_id,'server_at':repo.clock(),'revision':len(previous)+1,'request_hash':fingerprint,'live_prediction_eligible':False}
             repo.audit(c,actor,'CV_REVIEW','TRIP',tid,json.dumps(data,separators=(',',':')))
             return {k:v for k,v in data.items() if k!='request_hash'}

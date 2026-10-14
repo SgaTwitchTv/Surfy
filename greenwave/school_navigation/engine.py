@@ -68,8 +68,8 @@ class Drive:
     def control(self, command, expected):
         if self.closed: raise AuthError(409,'NAVIGATION_CLOSED')
         revision(expected)
-        if expected != self.revision: raise AuthError(409,'REVISION_CONFLICT')
         if self.mode != 'SIMULATION': raise AuthError(403,'SIMULATION_REQUIRED')
+        if expected != self.revision: raise AuthError(409,'REVISION_CONFLICT')
         if command not in {'PAUSE','RESUME'}: raise AuthError(422,'VALIDATION')
         self.app.control(running=command=='RESUME'); self.revision+=1; self.tick()
 
@@ -77,8 +77,8 @@ class Drive:
         fields(body,{'expected_revision'},{'rate','speed_kmh','follow_recommendation'})
         if len(body)==1: raise AuthError(422,'VALIDATION')
         revision(body['expected_revision'])
-        if body['expected_revision']!=self.revision: raise AuthError(409,'REVISION_CONFLICT')
         if self.mode!='SIMULATION' or self.closed: raise AuthError(403,'SIMULATION_REQUIRED')
+        if body['expected_revision']!=self.revision: raise AuthError(409,'REVISION_CONFLICT')
         try: self.app.control(**{k:v for k,v in body.items() if k!='expected_revision'})
         except ValueError: raise AuthError(422,'VALIDATION') from None
         self.revision+=1;self.tick()

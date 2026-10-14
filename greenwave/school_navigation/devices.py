@@ -143,14 +143,26 @@ class Devices:
         with self.repo.database.connection() as pre:
             device=self.authenticate(header,pre)
         self.policy.accounts.limits.take('TELEMETRY_DEVICE',device['id'],100,60000)
-        with self.recorder.lock,self.repo.atomic() as (_,c):
-            device=self.authenticate(header,c);ctx=self.active(device)
-            if not ctx or body['session_id']!=ctx['id']:raise AuthError(409,'SESSION_CHANGED')
-            if body['device_id']!=device['client_device_id']:raise AuthError(403,'DEVICE_REPAIR_REQUIRED')
-            try:ctx['drive'].app.ingest_external_position(**{k:v for k,v in body.items() if k!='session_id'})
-            except ValueError:raise AuthError(422,'VALIDATION') from None
-            provider=ctx['drive'].app.external_position
-            now=self.repo.clock()
-            c.execute('UPDATE devices SET last_seen_at=? WHERE id=?',(now,device['id']))
-            c.execute('UPDATE browser_sessions SET last_activity_at=? WHERE id=? AND absolute_expiry>?',(now,device['parent_session_id'],now))
-            return {'accepted':provider.last_update_accepted,'duplicate':not provider.last_update_accepted,'external_status':provider.status()}
+        with self.recorder.lock:
+            ctx=None
+            try:
+                with self.repo.atomic() as (_,c):
+                    device=self.authenticate(header,c);ctx=self.active(device)
+                    if not ctx or body['session_id']!=ctx['id']:raise AuthError(409,'SESSION_CHANGED')
+                    if body['device_id']!=device['client_device_id']:raise AuthError(403,'DEVICE_REPAIR_REQUIRED')
+                    try:ctx['drive'].app.ingest_external_position(**{k:v for k,v in body.items() if k!='session_id'})
+                    except ValueError:raise AuthError(422,'VALIDATION') from None
+                    if not ctx['logger'].active or ctx['logger'].error:raise AuthError(503,'RECORDING_WRITE_FAILED')
+                    provider=ctx['drive'].app.external_position
+                    now=self.repo.clock()
+                    c.execute('UPDATE devices SET last_seen_at=? WHERE id=?',(now,device['id']))
+                    c.execute('UPDATE browser_sessions SET last_activity_at=? WHERE id=? AND absolute_expiry>?',(now,device['parent_session_id'],now))
+                    return {'accepted':provider.last_update_accepted,'duplicate':not provider.last_update_accepted,'external_status':provider.status()}
+            except AuthError as error:
+                if error.code=='RECORDING_WRITE_FAILED' and ctx is not None:
+                    ctx['drive'].close();self.recorder.close_failed_logger(ctx['logger'])
+                    if getattr(self.recorder,'vision',None):self.recorder.vision.close_trip(ctx['trip_id'])
+                    # Outside the ingest transaction; failed DB cleanup remains retriable
+                    # by the existing watchdog/startup recovery and holds its SQL lease.
+                    self.recorder.interrupt(ctx['trip_id'],'TELEMETRY_WRITE_FAILED')
+                raise

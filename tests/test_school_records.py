@@ -328,8 +328,13 @@ class RecordsTests(Fixture):
             except Exception as error:return type(error).__name__
         with concurrent.futures.ThreadPoolExecutor(2) as pool:self.assertCountEqual(list(pool.map(lambda x:outcome(edit,x),['a','b'])),['OK','Conflict'])
         a=self.new_trip('A');self.use('other');b=self.new_trip('B');otherraw=self.cookies['gw_session'];self.use('driver');ownerraw=self.cookies['gw_session'];barrier=threading.Barrier(2)
-        def start(args):barrier.wait();return self.server.resources.recorder.start(args[0],{'trip_id':args[1]},args[2],'concurrent')
-        with concurrent.futures.ThreadPoolExecutor(2) as pool:self.assertCountEqual(list(pool.map(lambda x:outcome(start,x),[(ownerraw,a['id'],'a'*32),(otherraw,b['id'],'b'*32)])),['OK','Conflict'])
+        def start(args):
+            from greenwave.school_accounts.errors import AuthError
+            barrier.wait()
+            try:return self.server.resources.recorder.start(args[0],{'trip_id':args[1]},args[2],'concurrent')
+            except AuthError as error:
+                self.assertEqual((error.status,error.code),(409,'ACTIVE_SESSION_BUSY'));raise
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:self.assertCountEqual(list(pool.map(lambda x:outcome(start,x),[(ownerraw,a['id'],'a'*32),(otherraw,b['id'],'b'*32)])),['OK','AuthError'])
 
     def test_key_conflicts_and_stale_share_revoke(self):
         trip=self.new_trip();nav=self.start(trip)

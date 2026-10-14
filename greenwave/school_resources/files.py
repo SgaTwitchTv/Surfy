@@ -190,19 +190,19 @@ class Files:
                     seen += 1
         return {'items': result, 'page': {'limit': limit, 'offset': offset}}
 
-    def event_exists(self,raw,tid,cid,eid):
+    def find_event(self,raw,tid,cid,eid):
         _,root,manifest=self.capture(raw,tid,cid)
         item=next((v for v in manifest.get('artifacts',[]) if v.get('kind')=='VISION_EVENTS'),None)
-        if item is None:return False
+        if item is None:return None
         if item.get('filename')!='events.jsonl':raise AuthError(409,'ARTIFACT_INVALID')
         path=self.path(root,'events.jsonl');validate=lambda:self.policy.trip(raw,tid,True)
         if self.digest(path,validate,16*1024*1024)!=item.get('sha256'):raise AuthError(409,'ARTIFACT_INVALID')
         with path.open(encoding='utf-8') as stream:
             while True:
                 validate();line=stream.readline(1048577)
-                if not line:return False
+                if not line:return None
                 if len(line)>1048576:raise AuthError(409,'ARTIFACT_TOO_LARGE')
                 for event in json.loads(line).get('events',[]):
                     obs=decode_vision(event['observation'])
                     if not isinstance(obs,VisionObservation) or not re.fullmatch(re.escape(cid)+r'(?::[0-9]+)?',obs.detection.frame.session_id):raise AuthError(409,'ARTIFACT_INVALID')
-                    if obs.observation_id==eid:return True
+                    if obs.observation_id==eid:return obs

@@ -56,18 +56,30 @@ class Contexts:
                 job['cancelled'] = True
                 del self.jobs[jid]
 
+    def replay_options(self,raw,tid):
+        trip,_,root,_=self.files.run(raw,tid)
+        metadata=self.files.json(root/'metadata.json');manifest=self.files.json(root/'complete.json')
+        modes=[]
+        if manifest.get('counts',{}).get('EXTERNAL_TELEMETRY',0)>0:modes.append('GPS')
+        if metadata.get('timebase')=='SIMULATION':modes.append('SIMULATION')
+        return {'modes':modes,'diagnostic_only':True}
+
     def replay_create(self, raw, tid, body):
         if body not in ({'mode':'GPS'},{'mode':'SIMULATION'}):raise AuthError(422,'REPLAY_MODE_UNAVAILABLE')
         row, _, _, basis = self.policy.basis_trip(raw, tid, closed=True)
-        trip, logger, _, _ = self.files.run(raw, tid, basis=basis)
+        trip, logger, root, _ = self.files.run(raw, tid, basis=basis)
+        metadata=self.files.json(root/'metadata.json')
         if body['mode']=='SIMULATION':
             from greenwave.school_navigation.replay import SimulationReplay
-            metadata=json.loads((self.files.storage.run(trip['owner_id'],tid,trip['run_id'])/'metadata.json').read_text(encoding='utf-8'))
             if metadata.get('timebase')!='SIMULATION':raise AuthError(409,'SIMULATION_REPLAY_UNAVAILABLE')
             provenance='M8_SIMULATION' if metadata.get('school_engine')=='M8' else 'LEGACY_MINIMAL_SYNTHETIC'
             replay=SimulationReplay(logger)
         else:
-            replay = GPSReplaySession(logger);provenance='RECORDED_GPS'
+            route=None
+            if metadata.get('school_route_snapshot') is not None:
+                from greenwave.school_navigation.maps import snapshot_route
+                route=snapshot_route(self.files.storage,metadata['school_route_snapshot'])
+            replay = GPSReplaySession(logger,route);provenance='RECORDED_GPS'
         try: replay.load(trip['run_id'])
         except ValueError: raise AuthError(409, 'GPS_REPLAY_UNAVAILABLE') from None
         self.policy.bound_trip(raw, basis)
