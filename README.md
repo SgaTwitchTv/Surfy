@@ -243,3 +243,12 @@ GreenWave School — widoki trzech ról, administracja i konfiguracje (etap8):
 [uruchomienie i ręczny odbiór](docs/school-app/run.md#14-etap8--odbiór-trzech-ról),
 [implementacja i dowody](docs/school-app/stage8.md). Admin nie uzyskuje dostępu do
 cudzych przejazdów; publikacja konfiguracji nie odblokowuje rekomendacji live.
+
+
+### GreenWave School — etap9
+
+Chroniona nawigacja M8/demo, własny logger i urządzenia Android, izolowany GPS oraz
+replay i diagnostyczne CV są opisane w [instrukcji](docs/school-app/run.md#16-etap9--demo-nawigacji-bez-sprzętu)
+i [raporcie integracji](docs/school-app/stage9.md). Demo nie wymaga telefonu,
+ADB, kamery ani YOLO. LIVE nie jest odblokowywane kontem, rolą, publikacją ani CV.
+Odbiór fizycznego sprzętu pozostaje osobny; Docker i końcowy coverage to dalsze etapy.

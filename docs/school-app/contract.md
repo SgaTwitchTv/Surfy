@@ -826,3 +826,40 @@ Zmiana konta atomowo unieważnia credentials i niewłaściwe grants; po commit w
 callback finalizuje nagrywanie i unieważnia wykonanie kontekstów. Owner management
 jobów jest nadal odrębne od execution authorization; nie podmienia podstawy OWN/SHARE.
 Admin nie ma wyjątku dla cudzych danych. Unblock nie aktywuje niezweryfikowanego email.
+
+
+## Doprecyzowania integracyjne etapu9
+
+Role, własność i live gate pozostają jak wyżej. Jedna rezerwacja trip w SQLite
+obsługuje simulation/live/capture. Parent session, boot i konkretna credential
+telefonu są związane z kontekstem; re-pair nie zamienia starej credential w nową.
+Android queued sample ma captured session + credential epoch i nie jest retagowana
+podczas wysyłki. Nullable GPS speed nie staje się zerem.
+
+Navigation DTO ujawnia revision trwałego trip oraz control_revision pamięciowego
+silnika. FINISH expected_revision używa pierwszej (kompatybilność etapu6),
+PAUSE/RESUME/PATCH simulation drugiej. Obydwie są wyłącznie serwerowe. GET zamkniętej
+navigation409; po revocation/usunięciu handle404. Stary FINISH key jest idempotentny.
+
+Dodatkowy GET /trips/{id}/replay-options jest chronionym read: owner lub aktywny
+konkretny share, complete/nonarchive, sealed manifest/hashes. Modes wynikają z
+raw artefacts, a nie zgadywania po trip.mode. Simulation replay rozróżnia
+M8_SIMULATION i LEGACY_MINIMAL_SYNTHETIC, nie przepisuje starych plików. Publiczny
+state nie zwraca całej historii zdarzeń. GPS rates1/2/5; simulation także10.
+
+Default simulation jest jawnie bundlowanym syntetycznym S1–S5. Wybrana szkolna
+geometria GPS pozostaje osobnym frozen snapshot; nie jest arbitralnie normalizowana
+na ten schemat. Publikacja nowego config nie zmienia aktywnego snapshot/hash.
+
+CV źródła wyłącznie operator allowlist i nowy per-trip root. Status/start/stop,
+frames, events i każdy Range reautoryzowane owner-only. Aktywny stop/association
+wymagają właściwego parent navigation. GET /cv/sources zwraca tylko dozwolone labels
+bez paths. Review to append-only author/ms/reason/revision/history, opcjonalna
+association dokładnej frozen ROUTE/line/movement; nie zmienia detekcji ani verified.
+Ledger CV_REVIEW jest prywatnym audytowanym faktem trip, niewidocznym w admin audit.
+Nie jest to migracja głównej DB — pozostaje14 tabel/schema3.
+
+Ingest przy błędzie raw nie zwraca accepted=true; 503 i ograniczony cleanup,
+INTERRUPTED po sukcesie DB, watchdog/startup recovery po awarii. Bez obietnicy
+transakcji DB–filesystem. Capture dependency/worker error daje jawne FAILED,
+nie globalny publiczny fallback. Hardware/YOLO/Docker nie są zaliczane mockiem.

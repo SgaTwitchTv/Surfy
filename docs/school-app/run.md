@@ -957,3 +957,140 @@ advance/user/config commands przez stdin i czeka na ack. Nie ma endpointu HTTP d
 zmiany czasu lub danych. Takie sterowanie nie jest częścią produkcyjnego serwera.
 Przebiegi sprawdzają desktop/telefon, Escape/Tab/focus i rzeczywiste403/401, a nie
 udają expiry przez mock. Wyniki i ograniczenia: końcowa sekcja stage8.md.
+
+
+## 16. Etap9 — demo nawigacji bez sprzętu
+
+Nowy root; żadnych starych baz, filmów ani kont. Wszystkie poniższe dane są
+syntetyczne. Shell/poczta zgodne z poprzednimi etapami.
+
+```powershell
+Set-Location 'C:\Users\konra\.codex\worktrees\school-app\Surfy'
+git branch --show-current
+$stage9Root = Join-Path (Get-Location) ('runtime\stage9-demo-' + [guid]::NewGuid().ToString('N'))
+python -m greenwave.school_data --root "$stage9Root" init
+python -m greenwave.school_data --root "$stage9Root" status
+python -m scripts.school_resource_fixtures --root "$stage9Root" --confirm-synthetic
+# Wprowadź własne hasło syntetycznych kont przez getpass, nie argv.
+python -m greenwave.school_accounts secrets --output "$stage9Root\server-secrets.json"
+$env:SCHOOL_SECRET_FILE = "$stage9Root\server-secrets.json"
+$env:SCHOOL_PROFILE = 'demo'
+$env:SCHOOL_PUBLIC_BASE_URL = 'http://127.0.0.1:8770'
+$env:SCHOOL_ALLOWED_HOSTS = '127.0.0.1:8770'
+$env:SCHOOL_SMTP_HOST = '127.0.0.1'
+$env:SCHOOL_SMTP_PORT = '1025'
+$env:SCHOOL_SMTP_MODE = 'plain'
+$env:SCHOOL_SMTP_SENDER = 'greenwave@example.test'
+# Usuń wartości realnego profilu, jeśli pozostały w tym shellu.
+Remove-Item Env:SCHOOL_TLS_CERT,Env:SCHOOL_TLS_KEY,Env:SCHOOL_TRUSTED_PROXY -ErrorAction SilentlyContinue
+python -m greenwave.school_accounts serve --root "$stage9Root" --host 127.0.0.1 --port 8770
+```
+
+Poczta w drugim terminalu (wyłącznie example.test):
+
+```powershell
+Set-Location 'C:\Users\konra\.codex\worktrees\school-app\Surfy'
+python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771
+```
+
+Otwórz http://127.0.0.1:8770 i zaloguj `driver@example.test` hasłem podanym
+w getpass. Utwórz SIMULATION bez trasy, start, menu Nawigacja, pause/resume,
+obserwacja pasażera (`S1`, STATE_SEEN), finish. W szczegółach read/export,
+replay symulacji → play/pause/seek/tempo10. Dawne fixture GPS udostępnione
+analitykowi otwierają GPS replay, nie fikcyjną symulację. Sprawdź share/revoke,
+archiwizację i ponowny login/restart. Drugie konto nie czyta cudzych
+navigation ani CV; jego start przy zajętym slocie409 nie ujawnia właściciela.
+
+Opcjonalny świeży klip (OpenCV/numpy w wybranym interpreterze; nie YOLO).
+Przed startem serwera w tym samym nowym root:
+
+```powershell
+python -m scripts.school_navigation_demo --root "$stage9Root" --confirm-synthetic
+$env:SCHOOL_CV_SOURCES_FILE = "$stage9Root\operator\cv-sources.json"
+$env:SCHOOL_CV_PYTHON = (python -c 'import sys; print(sys.executable)')
+# Następnie ponownie uruchom serve z powyższej komendy.
+```
+
+Podczas aktywnej własnej jazdy w Laboratorium wybierz `synthetic-clip`, start CV,
+preview/status i stop. Plik/preview to nowo wygenerowana kolorowa lampa;
+nie potwierdzają skuteczności detektora. Detector jest domyślnie wyłączony.
+Brak optional runtime daje jawny FAILED, bez zatrzymania całego portalu.
+Zatrzymanie serwera: Ctrl+C; systemowa finalizacja i recovery jak stage6/9.
+
+## 17. Etap9 — Android i opcjonalna kamera (odbiór sprzętowy niewykonany)
+
+Nie używaj localhost HTTP demo do telefonu. Dla powtarzalnej próby USB z danymi
+syntetycznymi można wybrać **https://localhost:8770** po `adb reverse`, z certyfikatem
+obejmującym DNS localhost i CA jawnie zaufanym na komputerze oraz w debug APK.
+Nowy root i już zweryfikowane konta operatorskie są nadal wymagane. Profil real
+wymusza HTTPS/Secure cookies i poprawnie skonfigurowany SMTP STARTTLS/SMTPS;
+plain demo_mail nie jest transportem tego profilu. Konfiguracja SMTP/sekretów
+jest w sekcji9; nie omijaj weryfikacji certyfikatu.
+
+```powershell
+$env:SCHOOL_PROFILE = 'real'
+$env:SCHOOL_PUBLIC_BASE_URL = 'https://localhost:8770'
+$env:SCHOOL_ALLOWED_HOSTS = 'localhost:8770'
+$env:SCHOOL_TLS_CERT = "$stage9Root\certificates\server.crt"
+$env:SCHOOL_TLS_KEY = "$stage9Root\certificates\server.key"
+# Certyfikat/private key przygotowuje operator poza Git; odpowiedni TLS SMTP także.
+python -m greenwave.school_accounts serve --root "$stage9Root" --host 127.0.0.1 --port 8770
+```
+
+Build i świadome podłączenie własnego telefonu:
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+.\android\GreenWaveSensor\gradlew.bat -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --offline
+adb devices
+# Poniższe dopiero dla świadomie wybranego, podłączonego telefonu:
+adb install -r android/GreenWaveSensor/app/build/outputs/apk/debug/app-debug.apk
+adb reverse tcp:8770 tcp:8770
+```
+
+W debug urządzeniu jawnie zaufaj testowemu CA operatora; HTTPS/hostname
+verification nie jest wyłączone. Release APK ufa standardowym systemowym CA,
+nie debug-overrides. [Oficjalny kontrakt Android network security](https://developer.android.com/privacy-and-security/security-config)
+opisuje ten rozdział. Dla prawdziwych danych użyj poprawnego certyfikatu HTTPS,
+realnego SMTP oraz release procesu wdrożenia; nie fixture ignoreHTTPSErrors.
+
+Na PC otwórz https://localhost:8770, login → Urządzenia → kod. Na Androidzie
+podaj dokładnie https://localhost:8770, kod i sparuj. Credentials trafiają do
+Keystore-encrypted storage. Utwórz własny LIVE z published ROUTE i wybierz własne
+sparowane device do startu. Telefon ma tylko device/session i telemetry;
+GET /api/state jest co najwyżej tym samym chronionym minimum. Po 409 kolejka
+starego run jest odrzucona; po revoke/nowym boot potrzebne nowe parowanie.
+Próbki mają niezmienne captured session/credential epoch i monotonic boundary.
+
+Testuj oddzielnie Fused permissions, background service, actual GPS accuracy,
+stale/off-route/reverse/stationary drift, reset/logout/revoke i finalizację.
+Aktualnie nie wykonano tej próby: ADB lista pusta. JUnit/APK i syntetyczny sender
+nie zastępują hardware. Publiczne konfiguracje DRAFT/unverified nadal nie dają rady.
+
+Kamera: wyłącznie operator allowlist w SCHOOL_CV_SOURCES_FILE, np. `camera:0`
+o wartości integer0; nie dowolny path w formularzu. Profile real i świadomy start
+we własnej aktywnej navigation. Nie uruchamiano fizycznej kamery w odbiorze.
+Opcjonalne licensed weights wyłącznie nowy root + SCHOOL_CV_MODEL,
+SCHOOL_CV_LICENSE_ACK=operator-verified-license, właściwy SCHOOL_CV_PYTHON;
+nie kopiuj prywatnych modeli/nagrań. Nie pobrano wag i nie testowano YOLO.
+
+## 18. Etap9 — automatyczny odbiór i pomiary
+
+```powershell
+python -m unittest discover -s tests -p test_school_navigation.py -v
+node --experimental-test-coverage --test --test-coverage-include='**/portal/*.mjs' tests/school_portal.cjs tests/school_roles.cjs tests/school_reauth.cjs tests/school_driving.cjs
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_navigation.cjs
+# Ten test tworzy tymczasowy cert/klip/DB, używa HTTPS i prawdziwego KDF.
+# ignoreHTTPSErrors dotyczy WYŁĄCZNIE certyfikatu tej syntetycznej fixture.
+python -m scripts.school_stage9_verify --coverage-python .venv-school/Scripts/python.exe
+```
+
+Verifier eksportuje wyłącznie kod i jawne publiczne seedy do TemporaryDirectory,
+sprawdza origin importowanego modułu i uruchamia pełną Python suite z branch=True.
+Nie kopiuje runtime, private data/runs, derived, baz, wag ani filmów. Raporty
+artifacts/stage9-python-tests.txt i stage9-python-coverage.json są ignorowane;
+wyniki liczbowe i per-module są utrwalone w stage9.md. Nie zawężają końcowego
+zakresu etapu10. Screenshoty w docs/school-app/screenshots/stage9-* są syntetyczne.
+Bazowe GreenWave nadal: `python -m greenwave --no-browser --port 8767`; smoke
+wykonuj z izolowanego eksportu sekcji3, nie z prywatnym runs root.

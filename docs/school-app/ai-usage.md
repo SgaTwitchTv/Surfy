@@ -2899,3 +2899,91 @@ screenshoty zachowane przez GW_SCREENSHOT_ROOT do ignorowanego artifacts. Każda
 DB i mailbox nowe i syntetyczne; żadnego data/runs/starego runtime/school nie czytano.
 Nie użyto subagentów. Dokumenty i staging sprawdzono konkretnymi plikami, bez runtime
 lub sekretów. Etap8 przygotowany do ponownego odbioru;9 Do zrobienia. Bez push/merge/rewrite.
+
+
+## 2026-10-14 — etap9: nawigacja, Android GPS, CV i responsywność
+
+### Ujawniony prompt i zakres
+
+Użytkownik zlecił w tym samym czacie pełną implementację etapu9 po akceptacji
+7927fc233f48a90ee238fc2ecacf1566b9a0a6fa; nie kończyć na planie, małe commity,
+STOP przed etapem10. Poniżej zapis zakresu tego promptu (oryginał w historii
+tego wątku, nie przedstawiamy skrótu jako dosłownego cytatu):
+
+1. Audyt rzeczywistego M8/Android/map/matcher/replay/CV, docs stage5–8 i AGENTS.
+   Macierz moduł/endpoint/owner/root/test, bez catch-all LocalServer/token-as-account.
+2. Jedna lease na deployment, oddzielny engine/matcher/clock/logger per context;
+   parent/owner/boot/trip/device z serwera, slot409 bez identity; pause nie zwalnia.
+3. Pełne bundlowane syntetyczne M8 demo start/pause/resume/finish/state, solver,
+   real logger events, no hardware/ADB/YOLO; UTCms vs modelsec rozdzielone.
+4. Own devices, label/revoke, challenges, atomic pair, separate bearer hash/TTL
+   bound parent/security_version/boot; phone nie wybiera owner/trip ani nie czyta danych.
+5. Native Android nowy payload/authenticated session; bounded/dedupe/sequence queue,
+   stary boot/run nie trafia do nowego; nullable nie0, type validation, JUnit/APK;
+   hardware odrębnie bez zaliczania mocka jako Fused/ADB.
+6. Logout/all/reset/password/block/role/device revoke/expiry/restart: odcięcie
+   credentials/ingest/capture i ograniczona systemowa finalizacja raw; idle tylko
+   podczas active ingest, absolute expiry nie przedłużane, zachować failed-start cleanup.
+7. Protected maps/routes allowlist i frozen config/hash; no arbitrary paths/URLs,
+   brak terenowej weryfikacji nie zastąpiony wymyśloną geometrią/limitami/fazami.
+8. Prosta perspective map, next named lights/states/source/freshness, zakrzywiony
+   duży S2000-inspirowany gauge, speed/limit/source/connection/quality, advanced Lab;
+   missing speed/position nie fałszowane i GPS nie normalizowany na synthetic map.
+9. Existing evaluate_live_navigation/guidance gate, MATCHED/FORWARD/fresh/verified
+   geometry-line-limit-phase-window-clock-solver; legal limit/braking/stop/hysteresis,
+   stale/off-route/reverse/disconnect czyści zakres i komendę. Replay/CV/config nie dają live.
+10. GPS oraz simulation replay play/pause/seek/rate adapter, isolated state,
+    owner lub konkretny share; revoke/regrant nie ożywia uchwytów.
+11. Diagnostic capture/tracker/review/association per-trip owner-only, ten sam slot,
+    bounded preview/queues, every frame/media/Range auth, operator sources, no upload;
+    append-only author/time, no phase learning/verified; optional dependencies clear,
+    nie kopiować/download/publikować private/licensed weights bez właściwego przeglądu.
+12. Desktop1360×900, phone390×844, width320 i landscape; speed/no-data czytelne,
+    keyboard/focus/contrast/status text/no page overflow; observations dla pasażera.
+13. Actual HTTP/tempSQLite/synthetic files; full role/ID/revocation/pair race/TTL/
+    sequence/clock/quality/capture/lifecycle/error/security matrix; JS logic, browser
+    real backend, separate synthetic vs hardware evidence, JUnit/APK, per-module
+    branch coverage bez omijania trudnych I/O; finalny szeroki odbiór etap10.
+14. Actual screenshots reviewed, hardware-free and hardware instructions separate,
+    exact profile addresses/HTTPS, no claim Docker/field deployment without execution.
+15. stage9.md/contract/run/README/AI/stages, stage8accepted literal hash, stage9prepared
+    po testach,10–12Do zrobienia; concrete staging, no DB/runtime/media/secrets/weights,
+    no push/merge/history rewrite, preserve unrelated/main/vision/private data.
+
+### Faktyczna pomoc AI
+
+AI przeglądał kod i dokumenty, zaprojektował i zaimplementował school_navigation
+(engine/devices/maps/replay/CV), adaptery HTTP i koordynatora, klient Androida,
+UI/guidance/projection/devices/CV i skrypty fixture/odbioru. Nie użyto subagentów,
+nie przenoszono prac do innego czatu i nie użyto generatora obrazów do dowodów.
+Źródłem screenshotów był rzeczywisty headless Edge z syntetyczną DB.
+
+Przegląd wykrył i poprawił: premature FINISH handle cleanup, wybór replay po
+trip.mode zamiast source artefacts, pinning konkretnej device credential przy
+re-pair, retagowanie queued Android samples, nieprawidłową orientację północną
+projekcji, overlap nazw na mapie, brak ACK odmowy po raw write failure oraz
+blokujący import/startup CV ze stdin odziedziczonym z fixture. Odrębne liczniki
+rewizji i provenance starego minimalnego zapisu zostały jawnie opisane.
+
+Wszystkie próby na TemporaryDirectory/nowych synthetic roots. Brak prywatnego
+runs/runtime importu. Wagi nie zostały pobrane/przeczytane/opublikowane. ADB
+zwróciło pustą listę; fizyczne Fused/Keystore/kamera/YOLO/field ride niewykonane.
+Windows-only własne wykonania; nie przypisujemy sobie niezależnych Linux wyników.
+
+### Weryfikacja wyników pomocy
+
+Actual Python unit/integration HTTP/SQLite, event/barrier races, logger/raw/export,
+Node/V8 i Edge E2E oraz JUnit/APK. Eksport sprawdza origin modułu i ma allowlist
+publicznych seedów, bez private runtime/db/movie/model. Raporty chwilowe w
+artifacts są ignorowane; liczby/per-module/skips/ograniczenia w stage9.md.
+Po obejrzeniu screenshotów poprawiono overlap; testowane rozmiary nie są
+sprzętowym testem Androida. Błędny początkowy zerowy coverage był błędem konfiguracji
+reportowania relative_files, nie uznano go za poprawny pomiar; odtworzono raport
+z identyczną konfiguracją i ponowiono finalną suite. Przerwania uruchomień i
+błędne stare oczekiwania zostały odróżnione od wyników nieprzerwanych.
+
+Instrukcję debug-only CA sprawdzono w oficjalnej dokumentacji Android:
+https://developer.android.com/privacy-and-security/security-config . To nie jest
+deklaracja wykonania połączenia fizycznego telefonu ani licencji konkretnego modelu.
+
+Końcowe własne dowody: full400 OK/1skip (501.479s),17 new HTTP PASS,35 Node/V8 (99.56 lines/96.38branches),Junit7/APK success, Edge nav4/roles3/reauth2 PASS, base isolated smoke PASS. Coverage etapowy87.2919combined;new_navigation76.9616combined. Szczegółowe liczby i niskie pokrycie CVsupervisor38% nie są ukryte w stage9.md.
