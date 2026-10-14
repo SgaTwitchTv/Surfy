@@ -3,6 +3,7 @@ import {stamp} from './dates.mjs';
 import {labels} from './validation.mjs';
 import {editTrip,archiveTrip,shareTrip,revokeTrip,manualObservation,correctObservation} from './forms.mjs';
 import {laboratory} from './laboratory.mjs';
+import {visionPanel} from './vision.mjs';
 import {navigationView} from './navigation.mjs';
 export async function tripDetail(records,id) {
   records.leave();const serial=records.serial,app=records.app;app.active=records.scope==='shared'?'shared':'trips';app.menu();app.screen.replaceChildren(notice('Ładowanie przejazdu…'));
@@ -27,6 +28,7 @@ export async function tripDetail(records,id) {
   }
   await load();
   if(trip.capabilities.analysis)laboratory(records,trip,screen);
+  visionPanel(records,trip,screen);
   if(records.scope==='shared'){
     const epoch=app.state.epoch;
     const check=async()=>{try{await app.api.request('/trips/'+id);if(serial===records.serial&&epoch===app.state.epoch)records.timer=setTimeout(check,2000);}catch(e){if(serial===records.serial&&epoch===app.state.epoch){records.leave();screen.replaceChildren(notice('Udostępniony zasób nie jest dostępny.'));}}};records.timer=setTimeout(check,2000);

@@ -7,8 +7,9 @@ export async function createTrip(records) {
     const routes=await app.api.request('/config/versions',{query:{kind:'ROUTE',status:'PUBLISHED',limit:'100'}});
     if(epoch!==app.state.epoch)return;
     const routeOptions=[['','Bez trasy — dane syntetyczne'],...routes.items.map(r=>[r.id,r.logical_id+' · wersja '+r.version])];
-    const body=el('div');body.append(notice('Tworzysz plan syntetycznego zapisu testowego, bez prawdziwego GPS. Live jest niepodłączone. Lista tras pokazuje do 100 opublikowanych wersji.'));
-    let d;body.append(form([{name:'title',label:'Tytuł',max:120},{name:'note',label:'Notatka',type:'textarea',max:1000,required:false},{name:'mode',label:'Tryb',options:[['SIMULATION','Syntetyczny zapis testowy']]},{name:'route_version_id',label:'Wersja trasy',options:routeOptions,required:false}],{title:rules.title,note:rules.note,mode:v=>v==='SIMULATION'?'':'Wybierz tryb syntetyczny.',route_version_id:v=>routeOptions.some(o=>o[0]===v)?'':'Wybierz opublikowaną trasę.'},async value=>{
+    const body=el('div');body.append(notice('Symulacja używa bundlowanego syntetycznego silnika S1–S5. GPS LIVE wymaga profilu HTTPS, sparowanego telefonu i opublikowanej wersji trasy; nie oznacza dostępności rekomendacji live.'));const modes=app.state.value.demo?[['SIMULATION','Symulacja M8 · demo']]:[['SIMULATION','Symulacja M8 · demo'],['LIVE','GPS telefonu · LIVE']];
+    let d;body.append(form([{name:'title',label:'Tytuł',max:120},{name:'note',label:'Notatka',type:'textarea',max:1000,required:false},{name:'mode',label:'Tryb',options:modes},{name:'route_version_id',label:'Wersja trasy',options:routeOptions,required:false}],{title:rules.title,note:rules.note,mode:v=>modes.some(m=>m[0]===v)?'':'Wybierz dozwolony tryb.',route_version_id:v=>routeOptions.some(o=>o[0]===v)?'':'Wybierz opublikowaną trasę.'},async value=>{
+      if(value.mode==='LIVE'&&!value.route_version_id){const {APIError}=await import('./api.mjs');throw new APIError(422,{fields:{route_version_id:'LIVE wymaga opublikowanej trasy.'}});}
       if(!value.route_version_id)delete value.route_version_id;const t=await app.api.request('/trips',{method:'POST',body:value});d.close();records.detail(t.id);app.message('Utworzono przejazd.');
     },'Utwórz przejazd'));d=dialog('Nowy przejazd',body);
   }catch(error){app.fail(error);}
@@ -34,7 +35,7 @@ export function revokeTrip(records,trip) {
 }
 export function manualObservation(records,trip) {
   let d;const content=el('div'),closed=['COMPLETE','INTERRUPTED'].includes(trip.status);
-  content.append(notice(closed?'Historyczna adnotacja zamkniętego przejazdu. Czas pomiaru nieznany; nie dopisuje GPS/raw i nie udaje obserwacji podczas jazdy.':'Dla pasażera w syntetycznym zapisie. Kierowca nie musi klikać podczas jazdy. Źródło MANUAL i czas otrzymania nadaje serwer.'));
+  content.append(notice(closed?'Historyczna adnotacja zamkniętego przejazdu. Czas pomiaru nieznany; nie dopisuje GPS/raw i nie udaje obserwacji podczas jazdy.':'Dla pasażera w aktywnym zapisie. Kierowca nie musi klikać podczas jazdy. Źródło MANUAL i czas otrzymania nadaje serwer.'));
   content.append(el('p','Zaobserwowano stan: widzisz aktualny kolor. Początek fazy: widzisz moment przejścia do tego koloru. Nieznany stan nie może być początkiem fazy.','muted'));
   const pending='observe:'+trip.id;if(records.operations.entries.has(pending))content.append(action('Rozpocznij osobne nowe zdarzenie',()=>{records.operations.done(pending);records.app.message('Nowe zdarzenie dostanie nowy identyfikator.');}));
   content.append(form([{name:'signal_id',label:'Sygnalizator',max:120},{name:'state',label:'Stan',options:options(STATES)},{name:'event_type',label:'Rodzaj zdarzenia',options:options(EVENTS)}],{signal_id:rules.signal_id,state:rules.state,event_type:rules.event_type},async value=>{

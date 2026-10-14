@@ -23,6 +23,22 @@ def main():
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();threads.append(thread)
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         cfg=Config(f'http://127.0.0.1:{port}',(f'127.0.0.1:{port}',),b'a'*32,b'b'*32,port=port,smtp_port=smtp.server_address[1])
+        if os.environ.get('GW_NAV_FIXTURE')=='1':
+            import dataclasses, subprocess
+            from pathlib import Path
+            source=Path(root)/'operator'/'synthetic.avi';source.parent.mkdir()
+            import cv2, numpy as np
+            writer=cv2.VideoWriter(str(source),cv2.VideoWriter_fourcc(*'MJPG'),20,(320,240))
+            if not writer.isOpened():raise RuntimeError('Synthetic video encoder unavailable')
+            for i in range(240):
+                frame=np.zeros((240,320,3),dtype=np.uint8)
+                cv2.circle(frame,(160,85),22,(0,0,255) if i<120 else (0,255,0),-1);writer.write(frame)
+            writer.release()
+            cert=Path(root)/'test-cert.pem';key=Path(root)/'test-key.pem'
+            openssl=os.environ.get('GW_OPENSSL',r'C:\Program Files\Git\usr\bin\openssl.exe')
+            subprocess.run([openssl,'req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],check=True,capture_output=True)
+            cfg=dataclasses.replace(cfg,profile='real',base_url=cfg.base_url.replace('http:','https:'),smtp_mode='starttls',tls_cert=str(cert),tls_key=str(key),cv_sources=(('synthetic-clip',str(source)),))
+            cfg.validate()
         with Database(storage) as db:
             from greenwave.school_data.time_units import now_ms
             controlled=os.environ.get('GW_REAUTH_FIXTURE')=='1'

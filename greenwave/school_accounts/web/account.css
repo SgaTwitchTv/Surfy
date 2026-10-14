@@ -455,3 +455,13 @@ h1,h2,h3 {
 
 pre {white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;padding:1rem;background:#11191a;border-radius:12px;font-size:.8rem;}
 .lab-panel{margin-top:2rem;padding:1rem;border:1px solid #3b4944;border-radius:14px;}
+
+/* Navigation owns a bounded, responsive viewport; tables keep their own scroll. */
+.drive-view{background:#101a20;border:1px solid #31413c;border-radius:20px;padding:18px;margin:20px 0;min-width:0}
+.drive-heading{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:.85rem;color:#b2c1bc}
+.drive-badge{color:#c9f36b;font-weight:800;letter-spacing:.06em}.drive-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:20px;align-items:center}
+.drive-map{min-width:0;border-radius:16px;overflow:hidden}.drive-map svg,.drive-dashboard svg{display:block;width:100%;height:auto}.drive-dashboard{min-width:0;text-align:center}.drive-dashboard svg text{fill:#d8e2d8;font-size:18px}.drive-dashboard svg .drive-speed{font-size:88px;font-weight:800;fill:#f4fae8;font-variant-numeric:tabular-nums}.drive-tick{stroke:#33443a;stroke-width:7}.drive-tick.lit{stroke:#c9f36b}.drive-advice{font-size:1.4rem;font-weight:750;color:#c9f36b;margin:4px 0 14px}.drive-advice small{display:block;font-size:.85rem;color:#ccd6c7;margin-top:5px}.drive-lights{display:grid;gap:10px;list-style:none;padding:0}.drive-lights li{padding:10px 14px;border:1px solid #31413c;border-radius:10px;overflow-wrap:anywhere}
+@media(max-width:700px){.drive-view{padding:12px}.drive-grid{grid-template-columns:1fr;gap:8px}.drive-map svg{max-height:240px}.drive-dashboard svg{max-height:220px}.drive-heading{font-size:.75rem}.drive-advice{font-size:1.25rem}}
+@media(max-height:500px) and (orientation:landscape){.drive-grid{grid-template-columns:1fr 1fr}.drive-map svg,.drive-dashboard svg{max-height:220px}}
+
+.cv-preview{display:block;max-width:100%;height:auto;border-radius:12px}.pairing-code{font-size:2rem;letter-spacing:.2em;font-variant-numeric:tabular-nums}

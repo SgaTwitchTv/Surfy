@@ -2,7 +2,7 @@ from test_school_accounts import Fixture
 
 class StaticUITests(Fixture):
     def test_explicit_modules_public_and_no_filesystem_fallback(self):
-        for name in ['state','dates','validation','api','filters','dom','auth','records','lists','forms','details','navigation','roles','role_views','laboratory']:
+        for name in ['state','dates','validation','api','filters','dom','auth','records','lists','forms','details','navigation','roles','role_views','laboratory','driving','drive_view','devices','vision']:
             status,data,headers=self.request('GET','/school/static/portal/'+name+'.mjs')
             self.assertEqual(status,200,name)
             self.assertIn('application/javascript',dict(headers)['Content-Type'])

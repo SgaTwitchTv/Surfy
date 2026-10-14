@@ -22,6 +22,10 @@ FORMS={
  '/auth/logout':set(),'/auth/logout-all':set()}
 STATIC={'/':'index.html','/school/static/account.js':'account.js','/school/static/account.css':'account.css'}
 STATIC.update({
+    '/school/static/portal/vision.mjs':'portal/vision.mjs',
+    '/school/static/portal/devices.mjs':'portal/devices.mjs',
+    '/school/static/portal/driving.mjs':'portal/driving.mjs',
+    '/school/static/portal/drive_view.mjs':'portal/drive_view.mjs',
     '/school/static/portal/roles.mjs':'portal/roles.mjs',
     '/school/static/portal/role_views.mjs':'portal/role_views.mjs',
     '/school/static/portal/laboratory.mjs':'portal/laboratory.mjs',
