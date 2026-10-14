@@ -1,6 +1,6 @@
 # Etap 8 — widoki analityka i administratora
 
-**Przygotowany do odbioru**, 2026-10-13. Zaakceptowany etap 7:
+**Przygotowany do ponownego odbioru**, 2026-10-14. Zaakceptowany etap 7:
 **0499805f282d39944989fb88232fda8cfdb256c9**. HEAD na wejściu zgodny, status i staging
 puste, worktree C:/Users/konra/.codex/worktrees/school-app/Surfy, codex/school-app.
 Przeczytano pusty obowiązujący AGENTS, contract, stage4–7, stages, run i ai-usage.
@@ -106,8 +106,9 @@ i raw. Nie przepisuje istniejących nagrań. Brak obietnicy wspólnej transakcji
   Po Play jawne POST PLAY (CSRF) przesuwają timeline do końca; GET nadal nie mutuje.
   Automatyczne i ręczne controls są serializowane; starszy status nie cofa nowego sterowania.
 - ADMIN: filtrowalna lista kont, modal role/status/reason, bezpieczny audit.
-  Przy REAUTH_REQUIRED użytkownik przechodzi do potwierdzenia hasła w Koncie,
-  wraca do panelu i świadomie ponawia — bez automatycznej starej mutacji.
+  Przy REAUTH_REQUIRED modal zostaje zamknięty, a draft w pamięci wraca po
+  potwierdzeniu hasła wyłącznie temu samemu użytkownikowi, po odczycie zasobu i praw.
+  Każda mutacja nadal wymaga świadomego submit; szczegóły poprawki niżej.
 - Konfiguracje: lista stanów/rodzajów/ID, szczegóły, create/edit draft, nowa wersja,
   publish/archive. Pola kind/logical_id/reason są nazwane; złożona geometria/fazy
   używają jawnego zaawansowanego JSON z szablonami ROUTE/SIGNAL/MODEL i walidacją
@@ -279,3 +280,83 @@ Checklista akceptacji:
 - [ ] ROUTE/SIGNAL/MODEL walidowane; flags/read-only/published immutable/snapshot bez zmiany live gate.
 - [ ] Testy/coverage/screenshoty i samodzielny odbiór sekcji14 run.md.
 - [ ] Akceptacja użytkownika przed etapem9.
+
+
+## Poprawka reauth z dialogu administracyjnego — 2026-10-14
+
+Przegląd dotyczył **d9c281a186f657048bbba72ec749fea075c1033c**. HEAD zgodny,
+status/staging puste; obowiązujący AGENTS pusty, dodatkowych instrukcji repo brak.
+Wyłącznie frontend, wewnętrzna syntetyczna fixture i testy oraz dokumentacja.
+Produkcyjny backend, CSRF, Origin, cookie/rotacja, reauth TTL, SQL i polityki niezmienione.
+
+### Reproduktor przed / po
+
+Nowa tymczasowa baza, realny HTTP i produkcyjny scrypt. Fixture ma wstrzyknięty zegar
+integer UTC ms; operator steruje nim wyłącznie przez stdin. Po otwarciu dialogu
+czas zwiększono o300001ms i PATCH zwrócił rzeczywiste403 REAUTH_REQUIRED.
+Przed poprawką: przycisk tworzył formularz hasła w tle, `open modal=1`, password form=1;
+regresyjna asercja `open modal=0` FAIL. Po: modal=0, password form=1, focus na haśle,
+reauth dostępny z klawiatury; ten sam test PASS. Nie mockowano odpowiedzi403 i nie
+czekano pięciu minut. Nie dodano publicznego endpointu zegara/provisioningu.
+
+### Jednorazowy powrót
+
+AdministrativeDraft w state.mjs przechowuje tylko userId, operation account/publish/archive,
+resourceID, expected_revision/status i dozwolone pola formularza. Dla konta email jest
+potrzebny do istniejącego dokładnego odczytu listy; wynik jest dodatkowo porównywany poID.
+Pola konta: role/status/reason; konfiguracji: reason. Bez password/token/CSRF/cookie,
+bez localStorage/sessionStorage. Snapshot powstaje dopiero przy kliknięciu przejścia do
+reauth, obejmuje też zmiany wpisane po403; tylko w pamięci, nie w URL lub logach.
+
+Accounts pobiera return tylko po udanym reauth z tym samym userID, przed state.set.
+state.set nadal bez wyjątku abortuje requests, czyści wszystkie prywatne widoki,
+uchwyty i globalny draft oraz zamyka dialogi. Jednorazowy lokalny snapshot tego samego
+użytkownika jest następnie rewalidowany przez GET auth/me, odpowiedni zasób i aktualny
+uprawniony widok. Epoch konta chroni także await. Zwykły login nie konsumuje ani nie
+przywraca return. Brak zasobu/operacji/ADMIN lub401 nie otwiera formularza zapisu.
+
+Przywrócony modal zawiera draft do przeglądu, nie wykonuje mutacji. Gdy revision/status
+są inne, pokazuje aktualne DTO i wymaga przycisku Użyj aktualnej rewizji; submit przed
+przyjęciem nie wysyła żądania. Nie zmienia revision po cichu. Account/PUBLISH zachowują
+serwerowe expected_revision. ARCHIVE zgodnie z niezmienionym kontraktem API wysyła reason;
+revision służy dodatkowej jawnej kontroli powrotu UI, nie nowej gwarancji CAS dla DELETE.
+
+Escape, Zrezygnuj z powrotu, istniejący Powrót do konta, inna pozycja menu, logout,
+401 i zmiana konta usuwają draft. Złe hasło daje401 i pełne czyszczenie, więc draft nie
+wraca po późniejszym loginie. Escape w przywróconym modalu zwraca focus do users/configs;
+Escape w formularzu reauth wraca do Konto. Nie wyłączono pełnego czyszczenia tożsamości.
+
+### Wyniki wykonania
+
+| Sprawdzenie | Wynik |
+|---|---|
+| Nowy browser `scripts/check_school_reauth.cjs` |PASS desktop1360×900 i phone390×844: real403, focus, drugi submit, account/publish/archive, revision/status gate, bad password401,3 cancel paths, utrata zasobu/roli, logout/login other, Escape/focus; brak błędów strony/storage/overflow|
+| `tests/school_reauth.cjs` + roles + portal |29 PASS,177.239ms;4 nowe jednostkowe|
+| Konta/hasła/SMTP `test_school_accounts*.py` |26 PASS,34.108s|
+| `test_school_admin.py` |10 PASS,31.420s|
+| `test_school_ui_static.py` |4 PASS,8.301s|
+| Browser accounts |PASS desktop/phone, cały register/mail/verify/login/reauth/logout/reset/change/logout-all|
+| Browser UI etapu7 |PASS desktop/phone/320px, formularze/konflikty/network/identity/focus|
+| Browser roles etapu8 |PASS desktop/phone/320px, shared/replay/analysis/revoke/config/admin|
+
+Browser zlicza PATCH, publish POST i archive DELETE: po reauth licznik jest bez zmian,
+dopiero kolejny świadomy submit zwiększa go o1. W przypadku innej revision submit przed
+przyjęciem również nie zwiększa licznika. Sprawdza dokładnie zapisany role/status/reason,
+w tym reason zmieniony po403. Eventy i odpowiedzi kontrolują postęp; bez sleep.
+
+V8 coverage sześciu dotychczasowych modułów logiki:99.46%linii,95.72%gałęzi,98.68%funkcji;
+state.mjs (wraz z AdministrativeDraft)100/100/100. Pozostałe per-module: roles100/100/100,
+api100/92.45/87.50,dates94.74/96.43/100,filters100/88.89/100,validation100/87.50/100.
+DOM auth/role_views sprawdzono E2E, nie zaliczono do liczbowego pomiaru Node.
+Nie powtarzano pełnej regresji383 ani backend coverage bez potrzeby: backend nie zmieniony;
+powyżej właściwa regresja40Python i29JS oraz rzeczywista przeglądarka. Historyczne wyniki
+pełnej regresji etapu8 pozostają we wcześniejszej sekcji. Własne wykonanie tylko Windows,
+bez deklaracji Linux/Docker. Nie było blokady przeglądarkowej w tym wykonaniu.
+
+Screenshoty zaakceptowanego etapu8 zachowano: podczas regresji GW_SCREENSHOT_ROOT wskazuje
+ignorowany artifacts. Nie dodano DB/runtime/mailboxów/sekretów/prywatnych danych do Git.
+Instrukcja odbioru: run.md,sekcja15. Etap8 Przygotowany do ponownego odbioru;
+etap9 i pozostałe etapy Do zrobienia. Bez push/merge/rewrite.
+
+Commit poprawki kodu/testów: **cc7637334da78d470e674bf2a62f11ecec00d10e**. Commit tej dokumentacji w odpowiedzi
+i przez `git log -1 --format=%H -- docs/school-app/stage8.md`.

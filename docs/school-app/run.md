@@ -882,8 +882,9 @@ Scenariusz ręczny, najlepiej osobne profile/incognito przeglądarek:
    dostaje401. Zaloguj other ponownie, zablokuj konto; następny odczyt ponownie401.
    Unblock nie przywraca wcześniejszych credentials/grants. PENDING nie aktywuje się
    zwykłym unblock. Degradacja/blokada ostatniego aktywnego ADMIN daje409.
-8. Po >5 minutach bez reauth mutacja daje REAUTH_REQUIRED. Potwierdź hasło w Koncie,
-   wróć do panelu i świadomie ponów; żądanie nie wykonuje się automatycznie.
+8. Po >5 minutach bez reauth mutacja daje REAUTH_REQUIRED. Potwierdź hasło w dostępnym formularzu;
+   draft wróci po sprawdzeniu tego samego użytkownika, zasobu i uprawnień. Świadomie
+   kliknij zapis; zmieniona revision wymaga przyjęcia. Żądanie nie wykonuje się automatycznie.
 9. Konflikt revision w dwóch kartach: zobacz aktualny rekord/payload, świadomie
    przyjmij revision i zapisz ponownie. Nie nadpisuj automatycznie zmian.
 10. Audit: filtrowanie dat/akcji/actor, kolejne strony; rozwijany pełny powód. Brak
@@ -918,3 +919,41 @@ nie potrzebują uruchomionego serwera ani publicznego test endpointu. Nowe role 
 GW_SCREENSHOT_ROOT pozwala zachować zaakceptowane screenshoty etapu7 podczas regresji.
 Pełna regresja w tym etapie jest wykonana w izolowanym eksporcie kodu bez runtime/data/runs;
 wyniki, zakres coverage i pominięcia w stage8.md. Etap9 nie rozpoczęty.
+
+
+## 15. Etap8 — odbiór powrotu draftu po reauth
+
+Uruchomienie bez zmian: sekcja14, nowy syntetyczny root, admin@example.test z hasłem
+wybranym przez getpass. Serwerowe TTL/CSRF/rotacja/role/revision pozostają obowiązkowe.
+Ręcznie: otwórz modal zmiany konta, wpisz role/status/reason, po wygaśnięciu reauth
+spróbuj zapisu.403 → Potwierdź tożsamość zamyka modal, ustawia focus na haśle. Po reauth
+modal wraca z draftem; operacja wykonuje się dopiero po ponownym submit. To samo
+publish/archive konfiguracji. Jeśli dane zmieniono w drugiej karcie, zobacz aktualne
+DTO i świadomie przyjmij revision. Utrata zasobu lub uprawnienia nie otwiera modalu.
+
+Escape/Zrezygnuj/Powrót do konta usuwa draft. Logout lub401 też; login innym kontem
+nie przywraca danych. Błędne hasło reauth daje401 i usuwa return zgodnie z polityką.
+Draft jest tylko w pamięci, znika też po reload; bez localStorage/sessionStorage.
+
+Automatyczny odbiór bez czekania pięciu minut:
+
+```powershell
+Set-Location C:\Users\konra\.codex\worktrees\school-app\Surfy
+$env:GW_PLAYWRIGHT_MODULE = 'C:/Users/konra/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'
+node scripts/check_school_reauth.cjs
+node --test tests/school_reauth.cjs tests/school_roles.cjs tests/school_portal.cjs
+python -m unittest discover -s tests -p 'test_school_accounts*.py' -v
+python -m unittest discover -s tests -p test_school_admin.py -v
+python -m unittest discover -s tests -p test_school_ui_static.py -v
+$env:GW_SCREENSHOT_ROOT = 'artifacts/reauth-ui-screenshots'
+node scripts/check_school_accounts.cjs
+node scripts/check_school_ui.cjs
+node scripts/check_school_roles.cjs
+```
+
+Nowy browser harness tworzy TemporaryDirectory/SQLite/SMTP i używa realnego KDF.
+GW_REAUTH_FIXTURE w jego procesie wstrzykuje integer-ms clock; test operatora wysyła
+advance/user/config commands przez stdin i czeka na ack. Nie ma endpointu HTTP do
+zmiany czasu lub danych. Takie sterowanie nie jest częścią produkcyjnego serwera.
+Przebiegi sprawdzają desktop/telefon, Escape/Tab/focus i rzeczywiste403/401, a nie
+udają expiry przez mock. Wyniki i ograniczenia: końcowa sekcja stage8.md.

@@ -2852,3 +2852,50 @@ Sekrety nie są zwracane lub zapisywane w localStorage/logach/Git. Przed staging
 diff check, konkretne pliki i kontrola niedozwolonych DB/runtime/sekretów. PUBLISH-01
 nadal osobny problem historyczny; bez rewrite/force push. Etap8 przygotowany do odbioru,
 9–12 Do zrobienia; STOP po etapie8.
+
+
+## 2026-10-14 — korekta reauth z dialogu administracyjnego
+
+Prompt użytkownika: „jeszcze odnośnie etapu8 — poprawka reauth z dialogu administracyjnego”.
+Baza d9c281a186f657048bbba72ec749fea075c1033c; kontynuować istniejący worktree, nie zaczynać9,
+przeczytać AGENTS/docs, zachować zmiany, nie zmieniać main/vision-camera. Problem: guarded
+pokazuje password za otwartym modalem, state.set usuwa formularz. Zapamiętać tylko
+potrzebne pola/operację/ID/revision w pamięci bez password/token/storage, zamknąć modal,
+fokusować reauth. Po sukcesie ten sam user, aktualny zasób/uprawnienia, draft do przeglądu,
+bez autosubmit. Zmieniona revision/status wymaga świadomej akceptacji; brak dostępu
+nie otwiera zapisu. Logout/401/inne konto/cancel usuwa draft, pełne identity cleanup zachowane.
+Objąć account role/block oraz publish/archive, bez zmiany serwerowego CSRF/rotacji/TTL/
+revision/role. Browser real expiry z synthetic clock (niepubliczny endpoint, bez5minwait),
+badpassword/cancel/revision/lostaccess/logout-other/desktopphone/keyboardfocus, JS draft tests,
+właściwa regresja. Update stage8/run/stages/ai-usage, prepared again, konkretne commity,
+bez runtime/DB/secrets/private data/push/merge. Wyniki przed/po, brak autosave, testy/hash/status.
+
+AI sprawdziło HEAD i czysty status/staging (domyślny sandbox nie potrafił git status
+poza workspace; ta sama kontrola z autoryzowanym require_escalated przeszła). AGENTS pusty,
+brak dodatkowych repo instrukcji. Odtworzyło real403 przez zegar stdin-only syntetycznej
+fixture: modal1/password1 i FAIL oczekiwania modal0 przed zmianą. Początkowy harness miał
+też podwójne zakończenie stdin po błędzie asercji; poprawiono idempotentne kończenie.
+
+AI napisało AdministrativeDraft z allowlistą i deep clone/one-shot take(userID),
+zamykanie modalnego dialogu i focus hasła, świeży odczyt auth/me/zasobu/widoku, review gate,
+pełne epoch/identity cleanup bez wyjątku, cancel oraz focus restore. Snapshot pól powstaje
+przy przejściu do reauth, nie przy pierwszym403. Nie przechowuje hasła/sekretów, nie dodaje
+API lub backend security changes. Podczas przeglądu znaleziono drugi cancel: stary
+Powrót do konta; account() również czyści draft i E2E obejmuje wszystkie3cancelpaths.
+
+Weryfikacja: 4 nowe jednostkowe JS + dotychczasowe = 29 PASS,177.239ms. V8 include
+6 modułów:99.46% linii,95.72% gałęzi,98.68% funkcji; state100/100/100. Python:
+26 kont (34.108s),10 admin (31.420s),4 static (8.301s) PASS. Nowy real browser E2E
+1360×900/390×844 PASS: real403, modal0/focus na haśle, zachowane pola i revision,
+licznik mutacji bez zmian po reauth i+1 dopiero przy drugim submit. Publish/archive,
+revision gate, real401 po złym haśle, Escape/Powrót do konta/Zrezygnuj, utrata zasobu
+lub roli, logout i login innym kontem PASS. Regresja browser kont desktop/phone PASS;
+UI7 i roles8 desktop/phone/320 PASS. Czas: integer-ms clock tylko w procesie fixture,
+komendy operatora przez stdin, bez publicznego HTTP i sleep. Realny KDF bez osłabienia.
+
+Nie powtarzano pełnej383 regresji backendu/coverage, bo backend jest niezmieniony.
+Nie deklarowano Linux/Docker/telefonu/drogi. Browser nie był zablokowany. Zaakceptowane
+screenshoty zachowane przez GW_SCREENSHOT_ROOT do ignorowanego artifacts. Każda testowa
+DB i mailbox nowe i syntetyczne; żadnego data/runs/starego runtime/school nie czytano.
+Nie użyto subagentów. Dokumenty i staging sprawdzono konkretnymi plikami, bez runtime
+lub sekretów. Etap8 przygotowany do ponownego odbioru;9 Do zrobienia. Bez push/merge/rewrite.
