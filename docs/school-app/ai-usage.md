@@ -3071,3 +3071,70 @@ Końcowy własny wynik etapu10:412Python(411PASS/0FAIL/0ERROR/1WinError1314skip)
 1201/1215V8branches=98.84%;7JUnit PASS/debugAPK37tasksEXECUTED. Zero wyłączeń
 linii w zakresie;4jawnie uzasadnione moduły poza Python source. Pełny denominator,
 per-module i rozróżnienie hardware/CI w stage10.md. Raporty nie są dodawane do Git.
+
+
+## Korekta etapu 10 po niezależnym przeglądzie — 2026-10-15
+
+Prompt użytkownika (jawne streszczenie, nie dosłowny cytat): naprawić etap10 na
+bazie9395f1a5780c7b7ab99dc21237441342dd6d1f41, zachować worktree/main/prywatne dane,
+bez reset/push/merge. Naprawić test mapy bez globalnego mocka pathlib i bez zmiany
+409na422;sprawdzić3.12/3.14lubCI. Odczytać rzeczywiste logi run38706404163 i nowsze,
+oddzielić kod/środowisko/dependencies/transient. Naprawić Windows runner z zachowaniem
+izolacji/coverage/statusów,JS/Chromium z prawdziwym backendem i bez sleep/wycinania
+mianownika,Android setup bez oznaczania go opcjonalnym. Ponowić całość Python,
+JS/browser/coverage,mobile_flow,Junit/APK;dokumentacja stage10/stages/run/AI i małe
+commity konkretnych plików. Pełne zamknięcie wymaga zielonego realActions;bez pushu
+status ma brzmieć„poprawki lokalne gotowe, oczekuje na push i weryfikację ci”. STOP11.
+Jeśli pełnych logów nie da się odczytać, wykonać niezależne poprawki i jawnie wskazać
+brakujące logi,bez wymyślania przyczyn.
+
+Faktyczne działania AI:
+- Git/HEAD/staging czyste zgodne z bazą;AGENTS i aktualna dokumentacja/runner/testy
+  przejrzane. Brak odczytu prywatnych runs/starego runtime/school i produkcyjnych kont.
+- Publiczne GitHub API jobs/checks/annotations/runs potwierdziło4jobs i brak nowszego
+  runu. Pełne logi zwróciły403,artefaktAPI401;brak gh i standardowego tokenu API.
+  Sprawdzono inventory przeglądarki przez cua, brak zalogowanej karty, bez czytania
+  haseł/cookies/profili. Nie instalowano pluginu ani nie pobierano poświadczeń.
+- Publiczny javascript-browser ZIP pobrany przez nightly.link;odczytano tylko
+  browser*.txt,js-scope/summary. Potwierdzono roles/narrow overflow,inne5suitePASS,
+ 42unitPASS;progi same przeszły,job prawidłowo exit1. ZIP tylko ignorowane artifacts.
+  Przyczyna Windows/Android wewnątrz nieodczytanych kroków NIE jest uznana za poznaną.
+- Test mapy używa rzeczywistego nowego sparse pliku i jedynie przekierowania modułu
+  __file__;oddzielne status/error codes dla name/missing/oversize. Bez zmian app handlera.
+- Lokalny kontrolowany repro cp1252parent/UTF8child wykazał UnicodeDecodeError.
+  Dodano jawne UTF8strict,bezpieczny terminalowy wydruk,wczesny progress/error artifact
+  i2regresje toola (Unicode oraz niezerowy kod dziecka). To potwierdzony niezależny
+  błąd runnera,nie automatycznie udowodniona przyczyna WindowsCI.
+- Chromium z npm lockfile zainstalowany z oficjalnego Playwright CDN,realHTTP/tempDB/
+  actualKDF tests. Monospace20px przy320 odtwarza395pagewidth;po zawijaniu summary
+  pełneID pozostaje czytelne ioverflow znika. Bez zmiany CSP albo ukrywania danych.
+- Dodatkowy lokalny timeout UI odtworzono dokładnie na kliknięciu po logout;dodano
+  bramkę konkretnego listGET,serverlogout,release i oczekiwanie na prawdziwe401.
+  Usuwa założenie,że inny poprawny401nie mógł już wyczyścić DOM. Bez sleep/timeoutincrease.
+- Pierwszy Chromium run miał także jednorazowy timeout inicjalizacji resources;
+  dodano fazy i page-error/requestfailed diagnostics,diagnostyczne ponowienie PASS.
+  Nie przypisano tego do nieudowodnionej przyczyny zdalnej ani nie zaliczono starego runu.
+- Workflow:pełne3.12/3.14×Windows/Linux,Ubuntu24.04 jawne;setupAndroid-v3 zastąpiony
+  istniejącym hostedSDK+wersje/platform/build-tools check;Java17/setup-java-v5,
+  zachowaneJunitAPK/alwayslogs/gates. Nie wykonano zdalnie tej nowej konfiguracji.
+
+Źródła właściwego środowiska zweryfikowane w oficjalnych repozytoriach:
+https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
+https://github.com/actions/setup-java
+https://github.com/android-actions/setup-android
+
+Weryfikacja: wyniki aktualnych wykonań i raporty w końcowej sekcji stage10.md.
+Python3.12lokalnie niedostępny;Windows3.14aktualny pełny pomiar,Chromium rzeczywisty
+browser bez udawania Linux. Nie użyto wcześniejszych udanych V8reportów do zaliczenia
+bieżącego testu. Nie użyto subagentów/nowego czatu ani generowania makiet.
+Sprzęt nadal niewykonany. Brak pushu i poprawionego zdalnego runu;STOP przed11.
+
+
+Końcowe faktyczne wyniki korekty:414Python(413PASS/0FAIL/0ERROR/1WinError1314skip),
+429.724s,lin7055/7651=92.2102%,branches2316/3084=75.0973%,combined87.2939%.
+42Node/6Chromiumsuites/16viewportPASS;JS778/1021lines76.19%,1214/1228V8blocks98.85%.
+7JUnitPASS/APK37taskEXECUTED45s;mobile_flowPASS. Mianowniki .coveragerc/targetsbez zmian.
+Aktualne codecommits:e53c346,f9a2c9b,1df0e3b,225b7e5;wyniki tylko ignoredartifacts,
+repo zawiera konfigurację/testy/dokumentację bezDB/mailboxów/sekretów.
+Stan:poprawki lokalne gotowe, oczekuje na push i weryfikację ci;pełne zamknięcie
+wymaga zielonego nowego runu,którego nie uruchomiono bezautoryzowanego pushu.

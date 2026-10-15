@@ -1169,3 +1169,46 @@ per-module raport, jawne skips i sześć PASS w browser-tests.json. Scenariusze
 przechodzą register/SMTP/verify/reset, zapisy/korekty/listy, role/shared/revoke,
 reauth/draft/drugi świadomy submit i nawigację/CV. Wymagania sprzętowe i adres
 HTTPS pozostają z sekcji 17. Nie jest to odbiór Docker/drugiego komputera.
+
+
+## 20. Korekta etapu 10 — pełna regresja Python i Chromium
+
+Baza przeglądu9395f1a5780c7b7ab99dc21237441342dd6d1f41. Pierwszy prawdziwy CI
+[38706404163](https://github.com/SgaTwitchTv/Surfy/actions/runs/38706404163)
+nie był zielony. Statusy/przyczyny potwierdzone i logi niedostępne: stage10.md.
+Poniższe są lokalną weryfikacją, nie zastępują wyniku CI po pushu użytkownika.
+
+```powershell
+Set-Location 'C:\Users\konra\.codex\worktrees\school-app\Surfy'
+$env:GW_PYTHON = (Resolve-Path artifacts/stage10/clean-env/Scripts/python.exe).Path
+& $env:GW_PYTHON -m scripts.school_verify --output artifacts/stage10-review/python
+npx playwright install chromium
+$env:GW_BROWSER_CHANNEL = 'chromium'
+$env:GW_TEST_OUTPUT = 'artifacts/stage10-review/chromium-verified'
+npm run coverage:js
+node tests/mobile_flow.cjs
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+.\android\GreenWaveSensor\gradlew.bat -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --offline --rerun-tasks
+```
+
+Jeśli nie masz clean-env, przygotuj świeży interpreter i przypięte zależności jak
+w sekcji19;--offlineGradle tylko przy już zainstalowanym SDK/dependencies.
+Python3.12nie był dostępny lokalnie (py -0p pokazuje3.14);nie podnosimy minimum.
+CI uruchamia pełne testy3.12i3.14naWindowsiUbuntu24.04 (artifact nazwa zawiera obie
+wersje platformy/interpretera). LinuxTk/Xvfb nadal obowiązkowy;importerror nie jest
+maskowany skipem. Runner teraz zapisuje runner-progress.txt/error.txt już przed
+wykonaniem suite i dekoduje UTF8 jawnie,nie domyślną stroną kodową Windows.
+
+Dwa ostatnie źródła UI nie zmieniły kontraktuAPI:pełny raportID zawija się w320px;
+reauth/role/shares pozostają chronione. Test utraty sesji wstrzymuje konkretny GET,
+wylogowuje prawdziwą sesję,zwalnia GET i wymaga401oraz usunięcia danych.
+
+AndroidCI używa SDK obecnego na ubuntu24.04 i sprawdza jawny sdkmanager zamiast
+pobierać ponownie instalator setup-android. Setupstdout/stderr są artefaktem
+android-setup.txt także po błędzie. Build/JUnit nie są opcjonalne. Lokalny Windows
+build z istniejącym SDK nie dowodzi działania nowego przygotowania LinuxCI.
+
+Po pushu użytkownika sprawdzić rzeczywisty nowy run wszystkich jobs i artefakty;
+bez tego **poprawki lokalne gotowe, oczekuje na push i weryfikację ci**.
+Brakujące szczegółowe stare logi:job116326789802step7 i job116326789656step4.
+Nie trzeba ponownie tworzyć kont/bazy ani uruchamiać portalu dla automatycznych testów.
