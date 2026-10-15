@@ -654,3 +654,126 @@ wyłącznie run 38706404163 dla 9395f1a5780c7b7ab99dc21237441342dd6d1f41,
 completed/failure. Lokalna poprawiona wersja 318f89c9717af70b4851bf038e6abf2314de65f9
 nie ma jeszcze zdalnego wyniku. Status: **poprawki lokalne gotowe, oczekuje na push
 i weryfikację ci**. Nie wykonano pushu.
+
+
+## Kolejna korekta runnera Windows — run 38712987740
+
+Punkt przeglądu: **de74c5e3b6a6164b1f5dab6a3639a6a45b707c72**.
+Przed pracą HEAD był identyczny, status i staging czyste. Poprawka kodu:
+**c3b9b92c994de325eab4930d2cd2ef5acc8a841c**.
+
+### Rzeczywisty końcowy wynik zdalnego CI
+
+Odczytano publiczne GitHub Jobs API oraz publiczne artefakty runu
+[38712987740](https://github.com/SgaTwitchTv/Surfy/actions/runs/38712987740).
+Nie wykonano pobranego kodu. ZIP i diagnostyka wyłącznie w ignorowanym
+artifacts/stage10-followup; brak gh i dostępnych logów wymagających uprawnień.
+
+|Zadanie|Job ID|Końcowy wynik i dowód|
+|---|---|---|
+|Python 3.12 / ubuntu-24.04|116348732920|SUCCESS; 414 testów: 413 PASS / 1 skip junction Windows; 0 FAIL / ERROR|
+|Python 3.14 / ubuntu-24.04|116348732911|SUCCESS; 414 testów: 413 PASS / 1 skip junction Windows; 0 FAIL / ERROR|
+|Python 3.12 / windows-latest|116348732924|FAILURE przed testami; runner-progress START, EXPORT; runner-error CalledProcessError w kontroli importu|
+|Python 3.14 / windows-latest|116348733184|FAILURE przed testami; ten sam etap i CalledProcessError|
+|JS and actual Chromium browser|116348734248|SUCCESS; 42 unit PASS, wszystkie 6 browser suite exit 0; unitsExit=0, browserExit=0|
+|Android JUnit and debug APK|116348733172|SUCCESS; 7 JUnit, 0 failure/error/skip; testDebugUnitTest i assembleDebug wykonane|
+
+Linux coverage z rzeczywistych artefaktów, bez łączenia wersji interpreterów:
+
+|Interpreter|Linie|Gałęzie|Combined|
+|---|---:|---:|---:|
+|3.12|7201/7810 = 92.2023%|2422/3084 = 78.5344%|88.3330%|
+|3.14|7048/7651 = 92.1187%|2315/3084 = 75.0649%|87.2194%|
+
+Konfiguracja i zakres są takie same; liczba statements zależy także od wersji
+Pythona i analizy coverage. Nie redukowano listy modułów ani wyłączeń.
+JS osobno: 22 pliki, 777/1021 linii = 76.10%, 1201/1215 V8 blocks = 98.84%;
+oba progi 70% przeszły. Nie łączymy tych procentów z Pythonem.
+
+### Potwierdzona awaria oraz granica diagnozy CI
+
+Oba artefakty python-windows-latest-3.12 i python-windows-latest-3.14 zawierają
+wyłącznie runner-error.txt i runner-progress.txt. Nie powstały python-tests.txt/json:
+żaden test aplikacji nie został wykonany w tych jobach. Wyjątek runnera to
+subprocess.CalledProcessError (exit 1) z podprocesu sprawdzającego pochodzenie
+importu greenwave.application, linia 55 poprzedniego school_verify.py.
+To awaria narzędzia preflight, a nie niezaliczony test aplikacji.
+
+Znaleziono i odtworzono błąd tego konkretnego warunku: ścieżkę __file__ poddawano
+resolve(), a Path.cwd() nie. Windows może zachować w cwd alias 8.3, np. RUNNER~1,
+gdy resolve() rozwinie go do pełnej nazwy. Dwa zapisy tego samego katalogu nie
+spełniają wtedy is_relative_to(). Lokalny syntetyczny katalog utworzony przez
+TemporaryDirectory i uzyskany przez GetShortPathNameW odtwarza AssertionError
+tego samego polecenia przed poprawką; nie jest potrzebna żadna prywatna baza.
+
+**Ograniczenie dowodu:** stare artefakty nie przechwytują stderr tego podprocesu.
+Pełny REST log joba zwraca 403, a fragment logu ze strony joba jest niedostępny
+(404; występowały też timeout/DNS). Brakuje wewnętrznego tracebacka bezpośrednio
+przed CalledProcessError w kroku „Full isolated Python tests…” Windows.
+Nie twierdzimy, że artefakty samodzielnie potwierdzają użycie aliasu przez runner
+GitHub ani wykluczają dodatkowy błąd importu. Odtworzony błąd porównania jest
+naprawiony; ostateczne potwierdzenie wystarczalności poprawki wymaga nowego CI.
+Nie przypisujemy tej diagnozy historycznemu runowi 38706404163.
+
+### Najmniejsza poprawka i regresja
+
+- Obie strony kontroli pochodzenia są kanonizowane: module.resolve() oraz
+  cwd.resolve(). Kontrola containment pozostaje obowiązkowa.
+- check_source_origin przechwytuje stdout/stderr UTF-8 do runner-origin.txt;
+  niezerowy exit nadal powoduje CalledProcessError i porażkę całego runnera.
+- Postęp zawiera teraz ORIGIN pomiędzy EXPORT i TESTS. Istniejące always-upload
+  runner-*.txt już obejmuje nowy plik; workflow nie wymaga zmiany.
+- Dwie regresje: poprawny import przez normalną i krótką ścieżkę Windows oraz
+  odmowa importu spoza eksportu z zachowaniem tracebacka w artefakcie. Woluminy
+  bez odrębnych aliasów 8.3 nadal obsługują ścieżkę kanoniczną; lokalnie alias był
+  rzeczywiście inny i odtworzył problem.
+
+Przed zmianą warunku: 6 testów narzędzi, 5 PASS / 1 ERROR (AssertionError
+podprocesu dla właściwego eksportu przez alias). Po zmianie: 6 PASS, 0 FAIL/ERROR/skip.
+Import spoza eksportu nadal jest odrzucany. Nie zmieniono aplikacji, Androida,
+Chromium, polityk dostępu, migracji, surowego formatu ani bramek live.
+
+### Bieżące lokalne wykonanie
+
+Komendy (PowerShell, istniejący worktree):
+
+```powershell
+$env:PYTHONIOENCODING = 'utf-8'
+artifacts/stage10/clean-env/Scripts/python.exe -m unittest discover -s tests -p test_verification_tools.py -v
+artifacts/stage10/clean-env/Scripts/python.exe -m scripts.school_verify --output artifacts/stage10-followup/python
+npm test
+```
+
+Interpreter lokalny: Windows / Python 3.14; py -0p nie wykazuje 3.12.
+Pełna macierz 3.12/3.14 × Windows/Linux pozostaje obowiązkowa w CI.
+42 testy JS ponowione lokalnie: PASS. Frontend nie zmieniał się, poprzedni run
+potwierdził pełne Chromium, dlatego nie powtarzano lokalnie kosztownego browser
+coverage ani Androida. Ich wyniki powyżej są zdalnym wykonaniem de74c5e, a nie
+nowym lokalnym uruchomieniem po poprawce runnera.
+
+Bieżące lokalne wykonanie pełnego Pythona: **416 testów, 415 PASS, 0 FAIL,
+0 ERROR, 1 skip**, 523.3314 s, exit 0; bazowy rzeczywisty HTTP smoke PASS.
+Skip: Windows symlink privilege WinError 1314; Windows junction PASS, Tkinter PASS.
+Po poprawce porównania uruchomiono pełny izolowany eksport; po dopisaniu samej
+etykiety diagnostycznej ORIGIN i doprecyzowaniu testu normalnej ścieżki ponowiono
+wszystkie 6 testów narzędzi (PASS). Te zmiany nie dotykają kodu aplikacji.
+
+Cały niezmieniony zakres 81 modułów: **7055/7651 linii = 92.2102%,
+2319/3084 gałęzi = 75.1946%, combined 87.3218%**; zero wyłączonych linii.
+Próg 70% egzekwuje combined z branch=True. .coveragerc i lista 22 JS plików bez zmian.
+Dodatkowy podział tego samego pomiaru:
+
+|Zakres|Linie|Gałęzie|Combined|
+|---|---:|---:|---:|
+|Sześć pakietów szkolnych|3474/3654 = 95.0739%|1070/1478 = 72.3951%|88.5425%|
+|Używany rdzeń GreenWave/M8/CV|3581/3997 = 89.5922%|1249/1606 = 77.7709%|86.2038%|
+
+Per-module raport i dane maszynowe: artifacts/stage10-followup/python/
+python-coverage.txt/json/xml, python-html/, python-tests.txt/json oraz
+runner-origin.txt i runner-progress.txt. Pliki są ignorowane, powstają ponownie
+po podanych komendach; nie dodano ich do repo. Środowisko: Python 3.14.4,
+coverage 7.13.1, numpy 2.4.4, OpenCV 4.13.0. Py3.12 lokalnie niedostępny.
+
+Status: **poprawki lokalne gotowe, oczekuje na weryfikację ci**. Pełne zamknięcie wymaga zielonego nowego runu wszystkich sześciu
+zadań. Historyczne logi nie blokują zamknięcia po takim sukcesie; przegląd wyników
+jest odbiorem, dokumentacja po CI ostatnim krokiem. Bez push/merge i etapu 11.

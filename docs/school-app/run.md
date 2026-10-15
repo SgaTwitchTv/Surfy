@@ -1219,3 +1219,21 @@ zapisujemy URL, testowany hash, wyniki i pominięcia w dokumentacji oraz wspóln
 przeglądamy wyniki. To odbiór, nie kolejna funkcja do implementowania. Stare logi
 Windows/Android nie są wymagane do zamknięcia; ich przyczyny można pozostawić
 jako niepotwierdzone. Wszystkie wymagane bieżące zadania i progi muszą przejść.
+
+
+## 21. Diagnostyka preflight Windows etapu 10
+
+```powershell
+Set-Location 'C:\Users\konra\.codex\worktrees\school-app\Surfy'
+artifacts/stage10/clean-env/Scripts/python.exe -m unittest discover -s tests -p test_verification_tools.py -v
+artifacts/stage10/clean-env/Scripts/python.exe -m scripts.school_verify --output artifacts/stage10-followup/python
+```
+
+Nowy runner-origin.txt zawiera stdout/stderr kontroli importu; runner-progress.txt
+rozróżnia EXPORT, ORIGIN, TESTS. Niezerowy exit preflight nadal kończy cały runner
+błędem i zapisuje runner-error.txt. Wszystkie runner-*.txt są już objęte artefaktem
+CI. Brak python-tests.json po błędzie ORIGIN nie oznacza niezaliczonych testów
+aplikacji: suite nie została jeszcze uruchomiona. Kontrola rozwiązuje aliasy
+Windows po obu stronach porównania i nadal odrzuca import spoza eksportu.
+Bieżące wyniki i ograniczenia: końcowa sekcja stage10.md. Jeśli brak clean-env,
+przygotuj środowisko z requirements-test.txt zgodnie z sekcją 19.

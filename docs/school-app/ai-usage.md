@@ -3155,3 +3155,50 @@ Uaktualniono wyłącznie stage10.md, stages.md, run.md i ten rejestr zgodnie
 z decyzją użytkownika. Weryfikacja: diff, spójność kryteriów, whitespace i staging
 konkretnych plików. Bez ponawiania regresji dla zmian wyłącznie dokumentacyjnych,
 bez dostępu do prywatnych danych, pushu, merge ani rozpoczęcia etapu 11.
+
+
+### Pozostałe problemy etapu 10 — run 38712987740 (2026-10-15)
+
+Prompt użytkownika (streszczenie zakresu): kontynuować po de74c5e, odczytać końcowe
+wyniki runu 38712987740 i artefakty obu Windowsów, ustalić rzeczywisty etap awarii,
+naprawić potwierdzone błędy z regresją, wykonać pełny izolowany Python i utrzymać
+progi oraz mianowniki. Nie zmieniać działającego Androida bez potrzeby; odczytać
+Linux/Chromium zamiast zakładać sukces. Bez prywatnych danych, pushu, merge i etapu
+11. Przed pushem lokalna gotowość, pełne zamknięcie dopiero po zielonym nowym CI.
+
+Działania AI i weryfikacja:
+
+- Sprawdzono czysty status/staging i historię: brak nowszych commitów niż de74c5e.
+- Publiczne Jobs API potwierdziło końcowe wyniki: dwa Linuxy, Chromium i Android
+  SUCCESS; oba Windowsy FAILURE. Publiczne ZIP pobrano przez nightly.link jedynie
+  do ignored artifacts/stage10-followup, odczytano dane/raporty, nie uruchamiano kodu.
+- Oba Windows ZIP mają tylko runner-error/progress: START, EXPORT, CalledProcessError
+  podczas kontroli pochodzenia importu. Nie było wykonania testów aplikacji.
+- gh niedostępny; pełny REST log odmówił 403. Stronę joba odczytano, właściwy
+  fragment logu pozostaje niedostępny. Nie ujawniano tokenów ani nie odczytywano
+  profili/cookies. Potrzebny do ścisłego potwierdzenia przyczyny wewnętrzny traceback
+  preflight wskazano użytkownikowi; nie utożsamiamy domysłu z zawartością logu.
+- Syntetyczny Windows GetShortPathNameW + dokładny warunek preflight odtworzył
+  AssertionError: resolve() module kontra nierozwiązany cwd. Regresja przed
+  poprawką: 6 testów, 5 PASS / 1 ERROR; po kanonizacji obu stron: 6 PASS. Import
+  z zewnętrznego katalogu nadal odrzucony. Dodano runner-origin.txt i etap ORIGIN.
+- Nie zmieniono workflow, scope/progów coverage, aplikacji ani zabezpieczeń.
+  Nie przypisano tej diagnozy starszemu runowi 38706404163. Stare stderr nie jest
+  dostępne w ZIP, więc wystarczalność poprawki na GitHub potwierdzi dopiero nowy run.
+- Ponowiono 42 JS unit: PASS. Istniejący run potwierdza 6 Chromium suite i oba
+  progi dla 22 plików; nie przedstawiamy tego jako nowego lokalnego browser runu.
+  Zdalny Android 7 JUnit i APK PASS; nie powtarzano niezmienionego zadania lokalnie.
+- Pełny izolowany Python 3.14 z branch coverage uruchomiony na nowym syntetycznym
+  eksporcie; rzeczywiste wyniki zapisane w końcowej sekcji stage10.md. Lokalnie
+  Python 3.12 niedostępny, pełna macierz pozostaje w CI. Sprzętu nie uruchamiano.
+
+Końcowe kontrole: staged diff/whitespace, jawne pliki, brak DB/nagrań/sekretów i
+artefaktów w commicie. Wyniki lokalne, zdalne oraz brakujące kontrole są rozdzielone.
+
+Wynik bieżącego pełnego izolowanego wykonania:416 testów,415PASS,0FAIL,0ERROR,
+1WinError1314symlinkskip;523.3314s;exit0;BaseHTTPsmokePASS.81modułów,
+7055/7651linii92.2102%,2319/3084gałęzi75.1946%,combined87.3218%.
+Po dodaniu samej etykiety ORIGIN i doprecyzowaniu regresji normalnej ścieżki
+ponowiono6tooltestsPASS;pełny eksport już zawierał naprawiony warunek pochodzenia.
+Kod poprawki:c3b9b92c994de325eab4930d2cd2ef5acc8a841c. Nowego runu poprawki
+nie wykonano;użytkownik wypchnie commity. Nie uznano etapu10za w pełni zamknięty.

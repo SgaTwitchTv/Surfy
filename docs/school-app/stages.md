@@ -40,7 +40,7 @@ Niższe wpisy zachowują historię wcześniejszych odbiorów, nie zastępują bi
 |7|Interfejs użytkownika, tabele i formularze|Zaakceptowany przez użytkownika|0499805f282d39944989fb88232fda8cfdb256c9;8ce6d513a2fbae420b51aead71b9b44231741c9b;d8e4e25599f8081a7a08e5bb105cfdc873d591e6;75e25b48c7b94641c573763a161c56e0f2ccbe88;a18fef0cbd8344b20b9bf40014dfe0e50d4088eb;dokumentacja stage7.md|16 Node/V8, 47 Python, browser 3 rozmiary, 10 screenshotów; stage7.md|Dodatkowe role i pełna nawigacja: 8–9; STOP przed 8|
 |8|Widoki analityka i administratora|Zaakceptowany przez użytkownika|7927fc233f48a90ee238fc2ecacf1566b9a0a6fa;cc7637334da78d470e674bf2a62f11ecec00d10e;d9c281a186f657048bbba72ec749fea075c1033c;781f8bc1a45c892ee4c5de55e14316255406f625;0a738140000a78da401df99115d42f4fb989f568;f7df99da6cf4f8752d51d922101245e79aa6d372;dokumentacja stage8.md|10 admin HTTP;157 szkolnych/383 pełna regresja (1 skip),25 Node/V8,3 rozmiary browser,8 PNG;stage8.md|Nawigacja/Android/CV etap9;pełny mianownik coverage etap10;STOP przed9|
 |9|Nawigacja, Android GPS, CV i responsywność|Zaakceptowany przez użytkownika|dabe41356c6028b855506ffd8e93aa3a844ad126;92c07c80fd6658c5464c7de5e232e2e6529f16c1;77798fd202728f76df7c9b28008b129bb2899810;844e633c48e56ac6c8adb72e183e9598a9bdba5e;546c37241843c6f4de5db8215b61494ee4379f1b;c23e8b8698064a39a880d0e74784a5af5e59c819;dokumentacja stage9.md|400 Python OK/1skip;17 new HTTP;35 Node/V8;Edge4 viewport, role3 i reauth2;JUnit7/APK;coverage87.2919% etapowego zakresu;stage9.md|Akceptacja w prompcie10;sprzęt/YOLO/field ride niewykonane|
-|10|Pełne testy i pokrycie|Poprawki lokalne gotowe, oczekuje na push i weryfikację CI|przegląd9395f1a5780c7b7ab99dc21237441342dd6d1f41;e53c346;f9a2c9b;1df0e3b;225b7e5;stage10.md|414Python:413PASS/1skip;42Node;6Chromium/16viewportPASS;7JUnit/APK;Python87.2939%combined;JS76.19%lines/98.85%V8blocks|Warunek zamknięcia:zielony nowyActions;staryrun38706404163failure;stare przyczyny Windows/Android niepotwierdzone, nie blokują po zielonym CI;sprzęt osobno;STOP11|
+|10|Pełne testy i pokrycie|Poprawki lokalne gotowe, oczekuje na weryfikację CI|przegląd de74c5e3b6a6164b1f5dab6a3639a6a45b707c72; c3b9b92c994de325eab4930d2cd2ef5acc8a841c; stage10.md|416 Python:415PASS/1symlink skip;6 tool regressions PASS;42 JS PASS;Python87.3218%combined;run38712987740:Linux×2/Chromium/Android PASS|Windows×2 w CI:preflight origin failure;nowa poprawka wymaga zielonego runu;wewnętrzny stderr starego joba niedostępny;STOP11|
 |11|Docker i wdrożenie demo|Do zrobienia|—|—|Docker engine/CLI, drugi komputer, syntetyczne dane|
 |12|Raport końcowy i odbiór użytkownika|Do zrobienia|—|—|Wyniki wcześniejszych etapów, screenshoty i reprodukcja|
 
@@ -136,3 +136,12 @@ i Androida nie jest blokadą zamknięcia po sukcesie wszystkich wymaganych zada�
 poprawionego CI. Nasz przegląd wyników stanowi odbiór, bez dodatkowej implementacji.
 Aktualizacja dokumentacji wynikami nowego CI jest zwykłym ostatnim krokiem.
 Szczegóły i bieżący status: końcowa sekcja stage10.md. Etapy 11–12 Do zrobienia.
+
+
+Kolejna korekta etapu 10: run 38712987740 zakończony; oba Linuxy, Chromium i
+Android przeszły, oba Windowsy zatrzymały się w preflight kontroli importu.
+Naprawiono odtworzony błąd kanonizacji krótkiej ścieżki, zachowując odmowę importu
+spoza eksportu; diagnostyka ORIGIN i runner-origin.txt. Wyniki i granica potwierdzenia
+wewnętrznego wyjątku zdalnego w końcowej sekcji stage10.md. Bieżący lokalny pełny
+wynik 416 testów / 415 PASS / 1 skip i combined 87.3218%; nie jest to zielony nowy CI.
+Status: poprawki lokalne gotowe, oczekuje na weryfikację ci. Etapy 11–12 Do zrobienia.
