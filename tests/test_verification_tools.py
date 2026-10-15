@@ -41,3 +41,37 @@ class RunnerEncodingTests(unittest.TestCase):
         binary=io.BytesIO();terminal=io.TextIOWrapper(binary,encoding='cp1252',write_through=True)
         with patch('sys.stdout',terminal):show('Zażółć → ā')
         self.assertIn(b'\\u0101',binary.getvalue())
+
+
+class SourceOriginTests(unittest.TestCase):
+    def test_origin_accepts_export_with_normal_and_windows_short_paths(self):
+        import ctypes,os,tempfile
+        from pathlib import Path
+        from scripts.school_verify import check_source_origin
+        with tempfile.TemporaryDirectory(prefix='gw-source-origin-') as temporary:
+            root=Path(temporary);(root/'greenwave').mkdir()
+            (root/'greenwave/__init__.py').write_text('',encoding='utf-8')
+            (root/'greenwave/application.py').write_text('',encoding='utf-8')
+            cwd=root
+            if os.name=='nt':
+                buffer=ctypes.create_unicode_buffer(32768)
+                self.assertTrue(ctypes.windll.kernel32.GetShortPathNameW(str(root),buffer,len(buffer)))
+                cwd=Path(buffer.value)
+                # Some volumes disable 8.3 aliases; canonical paths must still work.
+                self.assertEqual(cwd.resolve(),root.resolve())
+            check_source_origin(cwd,{**os.environ,'PYTHONIOENCODING':'utf-8'},root)
+            check_source_origin(root,{**os.environ,'PYTHONIOENCODING':'utf-8'},root)
+            self.assertIn('Isolated source origin PASS',(root/'runner-origin.txt').read_text(encoding='utf-8'))
+
+    def test_origin_rejects_external_import_and_saves_failure(self):
+        import os,subprocess,tempfile
+        from pathlib import Path
+        from scripts.school_verify import check_source_origin
+        with tempfile.TemporaryDirectory(prefix='gw-external-origin-') as temporary:
+            root=Path(temporary);export=root/'export';export.mkdir()
+            external=root/'external';(external/'greenwave').mkdir(parents=True)
+            (external/'greenwave/__init__.py').write_text('',encoding='utf-8')
+            (external/'greenwave/application.py').write_text('',encoding='utf-8')
+            env={**os.environ,'PYTHONPATH':str(external),'PYTHONIOENCODING':'utf-8'}
+            with self.assertRaises(subprocess.CalledProcessError):check_source_origin(export,env,root)
+            self.assertIn('AssertionError',(root/'runner-origin.txt').read_text(encoding='utf-8'))

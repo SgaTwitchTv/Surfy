@@ -9,6 +9,15 @@ def run_captured(command, *, cwd=None, env=None):
                           stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='strict')
 
 
+def check_source_origin(root, env, artifacts):
+    """Refuse imports outside the isolated export and retain preflight diagnostics."""
+    origin="import pathlib,greenwave.application;assert pathlib.Path(greenwave.application.__file__).resolve().is_relative_to(pathlib.Path.cwd().resolve());print('Isolated source origin PASS')"
+    result=run_captured([sys.executable,'-c',origin],cwd=root,env=env)
+    (artifacts/'runner-origin.txt').write_text(result.stdout,encoding='utf-8')
+    show(result.stdout)
+    result.check_returncode()
+
+
 def show(message):
     # Preserve UTF-8 in artifacts; a legacy terminal must not abort the runner.
     encoding=getattr(sys.stdout,'encoding',None) or 'utf-8'
@@ -51,8 +60,8 @@ def verify(args,repo,artifacts,progress):
         shutil.copyfile(repo/'.coveragerc',root/'.coveragerc')
         env={k:v for k,v in os.environ.items() if not k.startswith(('SCHOOL_','GW_','COVERAGE_'))}
         env.update(PYTHONIOENCODING='utf-8',COVERAGE_FILE=str(artifacts/'python.coverage'),GW_TEST_RESULT=str(artifacts/'python-tests.json'))
-        origin="import pathlib,greenwave.application;assert pathlib.Path(greenwave.application.__file__).resolve().is_relative_to(pathlib.Path.cwd());print('Isolated source origin PASS')"
-        subprocess.run([sys.executable,'-c',origin],cwd=root,env=env,check=True)
+        with progress.open('a',encoding='utf-8') as log:log.write('ORIGIN\n')
+        check_source_origin(root,env,artifacts)
         with progress.open('a',encoding='utf-8') as log:log.write('TESTS\n')
         command=[sys.executable,'-m','coverage','run','--rcfile=.coveragerc','-m','scripts.school_unittest','--pattern',args.pattern]
         result=run_captured(command,cwd=root,env=env)
