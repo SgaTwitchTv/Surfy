@@ -1,4 +1,4 @@
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const assert=require('node:assert/strict'),{spawn}=require('node:child_process'),readline=require('node:readline');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{env:{...process.env,GW_RESOURCE_FIXTURE:'1',GW_REAUTH_FIXTURE:'1'},stdio:['pipe','pipe','pipe']});
 const lines=readline.createInterface({input:child.stdout});let initialResolve,ackResolve;const initial=new Promise(r=>initialResolve=r);lines.on('line',s=>{const data=JSON.parse(s);if(data.url)initialResolve(data);else if(ackResolve){const resolve=ackResolve;ackResolve=null;resolve(data);}});

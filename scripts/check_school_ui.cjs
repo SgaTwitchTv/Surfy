@@ -1,5 +1,5 @@
 // Actual backend + production KDF, temporary synthetic DB, no public provisioning.
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {spawn}=require('node:child_process'),readline=require('node:readline');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{env:{...process.env,GW_RESOURCE_FIXTURE:'1',GW_SCHOOL_UI_FIXTURE:'1'},stdio:['pipe','pipe','pipe']});

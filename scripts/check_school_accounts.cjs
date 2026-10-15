@@ -1,5 +1,5 @@
 // Dedicated synthetic DB+SMTP, actual production KDF, desktop+phone. No token logging.
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {spawn}=require('node:child_process'),readline=require('node:readline');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{stdio:['pipe','pipe','pipe']});

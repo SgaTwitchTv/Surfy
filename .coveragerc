@@ -1,0 +1,24 @@
+# Stage 10: fixed denominator, including every school package and the M8/CV core.
+[run]
+branch = True
+relative_files = True
+source = greenwave
+omit =
+    greenwave/ui.py
+    greenwave/__main__.py
+    greenwave/vision_probe.py
+    greenwave/vision_demos.py
+
+[report]
+# Do not silently exclude defensive branches, TYPE_CHECKING or pragma lines.
+exclude_lines =
+fail_under = 70
+precision = 4
+show_missing = True
+
+[xml]
+output = artifacts/stage10/python-coverage.xml
+[json]
+output = artifacts/stage10/python-coverage.json
+[html]
+directory = artifacts/stage10/python-html

@@ -1,5 +1,5 @@
 // API read smoke in real browser sessions; target tables remain stage7.
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const assert=require('node:assert/strict'),{spawn}=require('node:child_process'),readline=require('node:readline');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{env:{...process.env,GW_RESOURCE_FIXTURE:'1'},stdio:['pipe','pipe','pipe']});
 let stderr='';child.stderr.on('data',d=>stderr+=d);

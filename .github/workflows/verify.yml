@@ -1,0 +1,113 @@
+name: GreenWave verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  python:
+    name: Python / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+      - name: Install Tcl/Tk and headless display (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk tk xvfb xauth
+      - run: python -m pip install -r requirements-test.txt
+      - name: Full isolated Python tests and 70 percent combined coverage (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m scripts.school_verify
+      - name: Full isolated Python tests and 70 percent combined coverage (Windows)
+        if: runner.os == 'Windows'
+        run: python -m scripts.school_verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-${{ matrix.os }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            artifacts/stage10/python-tests.json
+            artifacts/stage10/python-tests.txt
+            artifacts/stage10/python-coverage.*
+            artifacts/stage10/python-html/
+
+  javascript:
+    name: JS and actual Chromium browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python -m pip install -r requirements-test.txt
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Node units, actual HTTP browser scenarios and fixed-scope coverage gate
+        env:
+          GW_BROWSER_CHANNEL: chromium
+          GW_PYTHON: python
+        run: npm run coverage:js
+      - name: Existing mobile transmitter contract mock (not hardware)
+        if: always()
+        run: node tests/mobile_flow.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: javascript-browser
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            artifacts/stage10/js/
+            artifacts/stage10/js-tests.txt
+            artifacts/stage10/js-scope.json
+            artifacts/stage10/browser-*.txt
+            artifacts/stage10/browser-tests.json
+            artifacts/stage10/screenshots/
+            artifacts/school-accounts/
+
+  android:
+    name: Android JUnit and debug APK (no device)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: SDK for the declared compileSdk
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0'
+      - name: Actual local JUnit and debug build
+        run: bash android/GreenWaveSensor/gradlew -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --rerun-tasks
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            android/GreenWaveSensor/app/build/test-results/
+            android/GreenWaveSensor/app/build/reports/tests/

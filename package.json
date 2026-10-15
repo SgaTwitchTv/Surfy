@@ -1,0 +1,19 @@
+{
+  "name": "greenwave-verification",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Development-only isolated tests; the app needs no bundler",
+  "scripts": {
+    "test": "node --test tests/school_portal.cjs tests/school_roles.cjs tests/school_reauth.cjs tests/school_driving.cjs tests/driver_ui.cjs tests/vision_workbench_ui.cjs",
+    "test:browser": "node scripts/school_browser_suite.cjs",
+    "coverage:js": "node scripts/school_js_coverage.cjs"
+  },
+  "devDependencies": {
+    "istanbul-lib-coverage": "3.2.2",
+    "istanbul-lib-report": "3.0.1",
+    "istanbul-reports": "3.1.7",
+    "playwright": "1.64.1",
+    "v8-to-istanbul": "9.3.0",
+    "yaml": "2.8.2"
+  }
+}

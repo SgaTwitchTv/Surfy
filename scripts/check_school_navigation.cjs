@@ -1,10 +1,10 @@
 // Actual HTTPS backend, synthetic clip/GPS, no physical-phone or YOLO claim.
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const {spawn}=require('node:child_process'),readline=require('node:readline'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{env:{...process.env,GW_RESOURCE_FIXTURE:'1',GW_SCHOOL_UI_FIXTURE:'1',GW_NAV_FIXTURE:'1'},stdio:['pipe','pipe','pipe']});
 let stderr='';child.stderr.on('data',d=>stderr+=d);
 (async()=>{const cfg=await new Promise((resolve,reject)=>{readline.createInterface({input:child.stdout}).once('line',line=>resolve(JSON.parse(line)));child.once('exit',code=>reject(new Error('Fixture exited '+code)));});
- const browser=await chromium.launch({channel:'msedge',headless:true});const out=path.resolve('docs/school-app/screenshots');fs.mkdirSync(out,{recursive:true});
+ const browser=await chromium.launch({channel:'msedge',headless:true});const out=path.resolve(process.env.GW_SCREENSHOT_ROOT||'docs/school-app/screenshots');fs.mkdirSync(out,{recursive:true});
  try{for(const[label,width,height]of[['desktop',1360,900],['phone',390,844],['narrow',320,844],['landscape',844,390]]){
  const context=await browser.newContext({viewport:{width,height},ignoreHTTPSErrors:true}),page=await context.newPage(),errors=[];page.setDefaultTimeout(60000);page.on('pageerror',e=>errors.push(e.message));
  const button=name=>page.getByRole('button',{name,exact:true});

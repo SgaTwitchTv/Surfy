@@ -35,9 +35,10 @@ def main():
                 cv2.circle(frame,(160,85),22,(0,0,255) if i<120 else (0,255,0),-1);writer.write(frame)
             writer.release()
             cert=Path(root)/'test-cert.pem';key=Path(root)/'test-key.pem'
-            openssl=os.environ.get('GW_OPENSSL',r'C:\Program Files\Git\usr\bin\openssl.exe')
+            import shutil
+            openssl=os.environ.get('GW_OPENSSL') or shutil.which('openssl') or r'C:\Program Files\Git\usr\bin\openssl.exe'
             subprocess.run([openssl,'req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1'],check=True,capture_output=True)
-            cfg=dataclasses.replace(cfg,profile='real',base_url=cfg.base_url.replace('http:','https:'),smtp_mode='starttls',tls_cert=str(cert),tls_key=str(key),cv_sources=(('synthetic-clip',str(source)),))
+            cfg=dataclasses.replace(cfg,profile='real',base_url=cfg.base_url.replace('http:','https:'),smtp_mode='starttls',tls_cert=str(cert),tls_key=str(key),cv_python=__import__('sys').executable,cv_sources=(('synthetic-clip',str(source)),))
             cfg.validate()
         with Database(storage) as db:
             from greenwave.school_data.time_units import now_ms

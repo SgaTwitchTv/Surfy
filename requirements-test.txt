@@ -1,0 +1,4 @@
+# No ML weights/torch/YOLO required. Python 3.12+ for this test environment.
+coverage==7.13.1
+numpy==2.4.4
+opencv-python-headless==4.13.0.92

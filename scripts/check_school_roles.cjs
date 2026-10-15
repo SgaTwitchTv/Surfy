@@ -1,5 +1,5 @@
 // Real HTTP + temporary SQLite, synthetic fixtures and production scrypt.
-const {chromium}=require(process.env.GW_PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./browser_test_support.cjs');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),readline=require('node:readline');
 const child=spawn(process.env.GW_PYTHON||'python',['-m','scripts.school_browser_fixture'],{env:{...process.env,GW_RESOURCE_FIXTURE:'1',GW_SCHOOL_ROLE_FIXTURE:'1'},stdio:['pipe','pipe','pipe']});let stderr='';child.stderr.on('data',d=>stderr+=d);
 (async()=>{const config=await new Promise((resolve,reject)=>{const rl=readline.createInterface({input:child.stdout});rl.once('line',line=>{rl.close();resolve(JSON.parse(line));});child.once('exit',c=>reject(new Error('Fixture exit '+c)));});const browser=await chromium.launch({channel:'msedge',headless:true});const out=path.resolve(process.env.GW_SCREENSHOT_ROOT||'docs/school-app/screenshots');fs.mkdirSync(out,{recursive:true});
