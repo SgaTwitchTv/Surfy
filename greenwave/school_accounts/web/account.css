@@ -454,6 +454,7 @@ h1,h2,h3 {
 }
 
 pre {white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;padding:1rem;background:#11191a;border-radius:12px;font-size:.8rem;}
+.lab-panel summary{overflow-wrap:anywhere;}
 .lab-panel{margin-top:2rem;padding:1rem;border:1px solid #3b4944;border-radius:14px;}
 
 /* Navigation owns a bounded, responsive viewport; tables keep their own scroll. */

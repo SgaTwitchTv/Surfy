@@ -10,18 +10,19 @@ concurrency:
   cancel-in-progress: true
 jobs:
   python:
-    name: Python / ${{ matrix.os }}
+    name: Python ${{ matrix.python }} / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
+        python: ['3.12', '3.14']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: requirements-test.txt
       - name: Install Tcl/Tk and headless display (Linux)
@@ -37,10 +38,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: python-${{ matrix.os }}
+          name: python-${{ matrix.os }}-${{ matrix.python }}
           retention-days: 14
           if-no-files-found: warn
           path: |
+            artifacts/stage10/runner-*.txt
             artifacts/stage10/python-tests.json
             artifacts/stage10/python-tests.txt
             artifacts/stage10/python-coverage.*
@@ -48,7 +50,7 @@ jobs:
 
   javascript:
     name: JS and actual Chromium browser
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
@@ -89,17 +91,29 @@ jobs:
 
   android:
     name: Android JUnit and debug APK (no device)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - name: SDK for the declared compileSdk
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0'
+      # The hosted ubuntu-24.04 image already provides command-line tools/licenses.
+      # Do not redownload a second SDK via setup-android before every build.
+      - name: Verify hosted SDK and install the declared platform/build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/stage10
+          {
+            : "${ANDROID_HOME:?Hosted Android SDK is required}"
+            sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            test -x "$sdkmanager"
+            java -version
+            "$sdkmanager" --version
+            "$sdkmanager" 'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0'
+          } 2>&1 | tee artifacts/stage10/android-setup.txt
       - name: Actual local JUnit and debug build
         run: bash android/GreenWaveSensor/gradlew -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --rerun-tasks
       - uses: actions/upload-artifact@v4
@@ -109,5 +123,6 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: |
+            artifacts/stage10/android-setup.txt
             android/GreenWaveSensor/app/build/test-results/
             android/GreenWaveSensor/app/build/reports/tests/
