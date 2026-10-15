@@ -629,3 +629,28 @@ nie przypisujemy im niepotwierdzonych przyczyn. NoweCI udostępni diagnostykę w
 Commity korekty:e53c346(map/UTF8),f9a2c9b(overflow/matrix/SDK),1df0e3b(real401gate),
 225b7e5(reuseSDKpackages),commitniniejszejdokumentacji przez
 `git log -1 --format=%H -- docs/school-app/stage10.md`.
+
+
+### Uzgodnione kryteria końcowego odbioru — 2026-10-15
+
+Użytkownik doprecyzował warunki zamknięcia etapu 10:
+
+- Brak pełnych logów historycznej awarii Windows i Androida nie blokuje zamknięcia,
+  jeżeli poprawiona wersja przejdzie wszystkie wymagane zadania rzeczywistego CI.
+  Przyczyny tych dwóch wcześniejszych awarii pozostają niepotwierdzone. Nie trzeba
+  odtwarzać historycznej awarii za wszelką cenę ani dostarczać starych logów.
+- Przegląd wyników i akceptacja użytkownika są odbiorem wykonanej pracy, a nie
+  dodatkowym zadaniem implementacyjnym. Aktualizacja dokumentacji po CI jest
+  normalnym ostatnim krokiem: zapisujemy hash testowanej wersji, URL runu, wyniki
+  zadań, progi pokrycia i jawne pominięcia.
+
+Pozostałe kryteria pozostają bez zmian: Python 3.12 i 3.14 na Linux i Windows,
+JavaScript wraz z pełnymi testami Chromium i oboma progami 70%, Android JUnit
+i assembleDebug, aktualne artefakty i brak maskowania niepowodzeń. Wyniki sprzętu
+pozostają oddzielne; etap 11 nie jest rozpoczęty.
+
+Bieżący odczyt publicznego API GitHub Actions dla codex/school-app nadal zwraca
+wyłącznie run 38706404163 dla 9395f1a5780c7b7ab99dc21237441342dd6d1f41,
+completed/failure. Lokalna poprawiona wersja 318f89c9717af70b4851bf038e6abf2314de65f9
+nie ma jeszcze zdalnego wyniku. Status: **poprawki lokalne gotowe, oczekuje na push
+i weryfikację ci**. Nie wykonano pushu.

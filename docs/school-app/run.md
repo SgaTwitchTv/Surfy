@@ -1212,3 +1212,10 @@ Po pushu użytkownika sprawdzić rzeczywisty nowy run wszystkich jobs i artefakt
 bez tego **poprawki lokalne gotowe, oczekuje na push i weryfikację ci**.
 Brakujące szczegółowe stare logi:job116326789802step7 i job116326789656step4.
 Nie trzeba ponownie tworzyć kont/bazy ani uruchamiać portalu dla automatycznych testów.
+
+
+Doprecyzowanie odbioru etapu 10: po zielonym rzeczywistym CI poprawionej wersji
+zapisujemy URL, testowany hash, wyniki i pominięcia w dokumentacji oraz wspólnie
+przeglądamy wyniki. To odbiór, nie kolejna funkcja do implementowania. Stare logi
+Windows/Android nie są wymagane do zamknięcia; ich przyczyny można pozostawić
+jako niepotwierdzone. Wszystkie wymagane bieżące zadania i progi muszą przejść.

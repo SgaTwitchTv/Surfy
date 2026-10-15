@@ -3138,3 +3138,20 @@ Aktualne codecommits:e53c346,f9a2c9b,1df0e3b,225b7e5;wyniki tylko ignoredartifac
 repo zawiera konfigurację/testy/dokumentację bezDB/mailboxów/sekretów.
 Stan:poprawki lokalne gotowe, oczekuje na push i weryfikację ci;pełne zamknięcie
 wymaga zielonego nowego runu,którego nie uruchomiono bezautoryzowanego pushu.
+
+
+### Doprecyzowanie końcowego odbioru etapu 10 — 2026-10-15
+
+Prompt użytkownika (pełna treść):
+
+> zmieniłbym tylko te dwie rzeczy:
+> **stare logi nie powinny blokować zamknięcia.** jeśli poprawiona wersja przejdzie wszystkie wymagane zadania, wystarczy zapisać wcześniejsze przyczyny jako niepotwierdzone. nie trzeba odtwarzać historycznej awarii za wszelką cenę.
+> **„twoja akceptacja” to nasz przegląd wyników**, a nie kolejna rzecz do implementowania. aktualizacja dokumentacji po ci jest normalnym ostatnim krokiem. . reszta moze byc jak jest. jedziesz.
+
+AI sprawdziło HEAD 318f89c9717af70b4851bf038e6abf2314de65f9, czysty status
+i staging oraz listę worktree. Odczyt publicznego GitHub REST API nadal wykazał
+tylko run 38706404163 (9395f1a, completed/failure); brak nowego wyniku CI.
+Uaktualniono wyłącznie stage10.md, stages.md, run.md i ten rejestr zgodnie
+z decyzją użytkownika. Weryfikacja: diff, spójność kryteriów, whitespace i staging
+konkretnych plików. Bez ponawiania regresji dla zmian wyłącznie dokumentacyjnych,
+bez dostępu do prywatnych danych, pushu, merge ani rozpoczęcia etapu 11.
