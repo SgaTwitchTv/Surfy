@@ -1,7 +1,6 @@
 """Owner-only diagnostic capture; sources are operator configuration, never user paths."""
 import json
 import re
-import subprocess
 from greenwave.vision_capture import CaptureController
 from greenwave.school_accounts.errors import AuthError
 from greenwave.school_records.writes import fields,revision
@@ -52,23 +51,35 @@ class Vision:
             else:raise AuthError(422,'VALIDATION')
             if not isinstance(name,str) or name not in self.sources:raise AuthError(422,'SOURCE_UNAVAILABLE')
             if type(body.get('detection',False)) is not bool:raise AuthError(422,'VALIDATION')
+            # Bad form input is not an unavailable runtime. Validate before allocating
+            # a controller/directory, retaining the capture supervisor's own checks.
+            for key,default,minimum,maximum in [('width',1280,160,3840),('height',720,120,2160),('fps',30,1,60)]:
+                value=body.get(key,default)
+                if type(value) is not int or not minimum<=value<=maximum:raise AuthError(422,'VALIDATION')
+            if type(body.get('realtime',True)) is not bool:raise AuthError(422,'VALIDATION')
             if body.get('detection',False) and self.model is None:raise AuthError(422,'DETECTOR_NOT_CONFIGURED')
             if any(v['trip_id']==tid and v['capture'].process.poll() is None for v in self.captures.values()):raise AuthError(409,'CAPTURE_BUSY')
             root=self.repo.database.storage._safe(self.repo.database.storage.trip(trip['owner_id'],tid)/'cv')
             controller=CaptureController(root,python=self.policy.accounts.config.cv_python or None)
+            cid=None
             try:
                 # Optional imports happen in the capture worker, never synchronously
                 # in a portal request. Missing dependencies become a bounded FAILED
                 # diagnostic state rather than blocking navigation or authentication.
                 result=controller.start(source_type=body['source_type'],source=self.sources[name],run_id=trip['run_id'],detection=body.get('detection',False),weights_path=None if self.model is None else str(self.model),
                     **{k:body[k] for k in ('width','height','fps','realtime') if k in body})
-            except (OSError,ValueError,subprocess.SubprocessError):
-                controller.close();raise AuthError(503,'CAPTURE_UNAVAILABLE') from None
-            cid=result['session_id']
-            from greenwave.vision_workbench import VisionWorkbench
-            reviews=self.repo.database.storage._safe(root/'reviews.sqlite3')
-            self.captures[cid]={'trip_id':tid,'capture':controller,'navigation':nav['id'],'workbench':VisionWorkbench(controller,nav['drive'].app,path=reviews)}
-            return self.status(raw,tid,cid)
+                cid=result['session_id']
+                from greenwave.vision_workbench import VisionWorkbench
+                reviews=self.repo.database.storage._safe(root/'reviews.sqlite3')
+                workbench=VisionWorkbench(controller,nav['drive'].app,path=reviews)
+                self.captures[cid]={'trip_id':tid,'capture':controller,'navigation':nav['id'],'workbench':workbench}
+                return self.status(raw,tid,cid)
+            except Exception:
+                # Initialization includes index registration and the first status read,
+                # not just process spawn. Never orphan a started worker on an index error.
+                if cid is not None:self.captures.pop(cid,None)
+                try:controller.close()
+                finally:raise AuthError(503,'CAPTURE_UNAVAILABLE') from None
 
     def status(self,raw,tid,cid):
         self.policy.trip(raw,tid,True);resource_id(cid)
