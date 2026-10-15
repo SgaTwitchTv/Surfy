@@ -112,7 +112,16 @@ jobs:
             test -x "$sdkmanager"
             java -version
             "$sdkmanager" --version
-            "$sdkmanager" 'platforms;android-36' 'build-tools;35.0.0' 'build-tools;36.0.0'
+            missing=()
+            test -f "$ANDROID_HOME/platforms/android-36/source.properties" || missing+=('platforms;android-36')
+            for version in 35.0.0 36.0.0; do
+              test -f "$ANDROID_HOME/build-tools/$version/source.properties" || missing+=("build-tools;$version")
+            done
+            if ((${#missing[@]})); then
+              "$sdkmanager" "${missing[@]}"
+            else
+              echo 'Required SDK platform/build tools are already installed.'
+            fi
           } 2>&1 | tee artifacts/stage10/android-setup.txt
       - name: Actual local JUnit and debug build
         run: bash android/GreenWaveSensor/gradlew -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --rerun-tasks
