@@ -22,3 +22,22 @@ class ReporterTests(unittest.TestCase):
         result=self.run_case(Fixture)
         self.assertFalse(result.wasSuccessful());self.assertEqual(len(result.failures),2)
         self.assertEqual(len(result.subtest_failures),1);self.assertFalse(result.outcomes)
+
+
+class RunnerEncodingTests(unittest.TestCase):
+    def test_utf8_child_is_not_decoded_with_windows_parent_codepage(self):
+        import os,sys
+        from unittest.mock import patch
+        from scripts.school_verify import run_captured
+        text='Zażółć gęślą jaźń → ā'
+        with patch('locale.getencoding',return_value='cp1252'):
+            result=run_captured([sys.executable,'-c',f'print({text!r});raise SystemExit(7)'],env={**os.environ,'PYTHONIOENCODING':'utf-8'})
+        self.assertEqual(result.stdout.strip(),text)
+        self.assertEqual(result.returncode,7)  # Never convert a failing child to success.
+
+    def test_legacy_terminal_cannot_break_utf8_artifact_reporting(self):
+        from unittest.mock import patch
+        from scripts.school_verify import show
+        binary=io.BytesIO();terminal=io.TextIOWrapper(binary,encoding='cp1252',write_through=True)
+        with patch('sys.stdout',terminal):show('Zażółć → ā')
+        self.assertIn(b'\\u0101',binary.getvalue())

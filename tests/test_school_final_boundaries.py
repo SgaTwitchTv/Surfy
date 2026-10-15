@@ -41,13 +41,24 @@ class FinalHTTPTests(NavigationTests):
         self.assertEqual(self.finish(nav)[0],200)
 
     def test_protected_map_exact_allowlist_and_missing_oversized_assets(self):
-        self.assertEqual(self.get('/maps/not-a-map')[0],404)
-        # No real map is modified; fault the metadata/read boundary.
-        with patch('greenwave.school_navigation.maps.Path.is_file',return_value=False):
-            self.assertEqual(self.get('/maps/warsaw')[0],404)
-        with patch('greenwave.school_navigation.maps.Path.stat') as stat:
-            stat.return_value.st_size=8*1024*1024+1
-            self.assertEqual(self.get('/maps/warsaw')[0],409)
+        # Redirect only the map module's bundled root. Actual pathlib.stat/is_file
+        # semantics remain intact on Python 3.12 as well as 3.14; no real map changes.
+        with tempfile.TemporaryDirectory(prefix='gw-map-fixture-') as temporary:
+            root=Path(temporary)
+            asset=root/'data'/'maps'/'warsaw.json';asset.parent.mkdir(parents=True)
+            module=root/'greenwave'/'school_navigation'/'maps.py'
+            def expect(name,status,code):
+                actual,body,_=self.get('/maps/'+name)
+                self.assertEqual(actual,status,body)
+                self.assertEqual(body['error']['code'],code)
+            with patch('greenwave.school_navigation.maps.__file__',str(module)):
+                expect('not-a-map',404,'NOT_FOUND')
+                expect('warsaw',404,'MAP_UNAVAILABLE')
+                with asset.open('wb') as stream:stream.truncate(8*1024*1024+1)
+                self.assertTrue(asset.is_file())
+                self.assertEqual(asset.stat().st_size,8*1024*1024+1)
+                expect('warsaw',409,'MAP_TOO_LARGE')
+
 
 
 class SupervisorTests(unittest.TestCase):
