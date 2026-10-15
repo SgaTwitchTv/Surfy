@@ -21,7 +21,7 @@ let stderr='';child.stderr.on('data',d=>stderr+=d);const PASS='Browser password 
    await menu('Moje przejazdy');await page.locator('table tbody tr').first().waitFor();assert.equal(await page.locator('table tbody tr').count(),25);
    await overflow();if(label!=='narrow')await page.screenshot({path:path.join(out,label+'-trips.png'),fullPage:true});if(!(await page.locator('details').evaluate(n=>n.open)))await page.locator('summary').click();
    const firstText=await page.locator('table tbody').textContent();await button('Następna strona').click();await page.waitForFunction(()=>document.querySelector('#screen').textContent.includes('Koniec wyników.'));assert.notEqual(await page.locator('table tbody').textContent(),firstText);
-   await button('Pierwsza strona').click();await page.locator('table tbody tr').nth(24).waitFor();
+   console.log('UI pagination first '+label);await button('Pierwsza strona').click();await page.locator('table tbody tr').nth(24).waitFor();
    await button('Nowy przejazd').click();let d=page.locator('dialog');await d.waitFor();await d.locator('input[name=title]').fill('');await button('Utwórz przejazd',d).click();assert.match(await d.locator('[data-error=title]').textContent(),/1–120/);
    await d.locator('input[name=title]').focus();await page.keyboard.press('Tab');assert.equal(await d.locator('textarea[name=note]').evaluate(n=>n===document.activeElement),true);await page.keyboard.press('Shift+Tab');assert.equal(await d.locator('input[name=title]').evaluate(n=>n===document.activeElement),true);await page.keyboard.press('Escape');await d.waitFor({state:'detached'});assert.equal(await button('Nowy przejazd').evaluate(n=>n===document.activeElement),true);
    await button('Nowy przejazd').click();d=page.locator('dialog');const title='Przejazd '+label+' <img src=x onerror=window.__xss=1>',editedTitle='Poranny przejazd · '+label;
@@ -73,8 +73,16 @@ let stderr='';child.stderr.on('data',d=>stderr+=d);const PASS='Browser password 
    await button('Zakończ zapis').click();await button('Sprawdź aktualną rewizję finalizacji').waitFor();releaseRevisionPoll();await page.unroute('**/school/api/v1/navigation/'+conflictNav.id);
    await button('Sprawdź aktualną rewizję finalizacji').click();await button('Potwierdź użycie aktualnej rewizji').click();await button('Zakończ zapis').waitFor();await button('Zakończ zapis').click();await button('Adnotacja historyczna').waitFor();
    await button('Powrót do przejazdów').click();await page.locator('table').waitFor();
-   // Expiry is a real server logout with unchanged DOM, then the next read clears private state.
-   assert.equal((await post('/auth/logout',{})).status,204);await button('Pierwsza strona').click();await page.locator('input[name=email]').waitFor();assert.equal(await page.locator('table').count(),0);assert.equal(await page.locator('dialog').count(),0);
+   console.log('UI session expiry '+label);
+   // Hold a real list read before server logout, then let it receive the real401.
+   // Pending requests may otherwise correctly clear the DOM before a later click.
+   let releaseExpired,readExpired;const expiredGate=new Promise(r=>releaseExpired=r),expiredRead=new Promise(r=>readExpired=r);
+   await page.route('**/school/api/v1/trips?*',async route=>{readExpired();await expiredGate;await route.continue();});
+   const deniedList=page.waitForResponse(r=>r.url().includes('/school/api/v1/trips?')&&r.request().method()==='GET'&&r.status()===401);
+   await button('Pierwsza strona').click();await expiredRead;
+   try{assert.equal((await post('/auth/logout',{})).status,204);}finally{releaseExpired();}
+   await deniedList;await page.locator('input[name=email]').waitFor();await page.unroute('**/school/api/v1/trips?*');
+   assert.equal(await page.locator('table').count(),0);assert.equal(await page.locator('dialog').count(),0);
    await login('other');await menu('Moje przejazdy');assert.doesNotMatch(await page.locator('#screen').textContent(),/Historia demonstracyjna|Poranny przejazd|Konflikt FINISH/);await overflow();assert.equal(await page.evaluate(()=>localStorage.length),0);
    await button('Konto').click();await button('Wyloguj').click();await page.locator('input[name=email]').waitFor();assert.equal(await page.locator('table').count(),0);
    assert.deepEqual(errors,[]);report.push({label,width,height,status:'PASS'});await context.close();console.log('PASS '+label+': full records flow, filters/pages, validation, conflict/network loss, session switch, focus, overflow');
@@ -82,4 +90,4 @@ let stderr='';child.stderr.on('data',d=>stderr+=d);const PASS='Browser password 
   fs.mkdirSync('artifacts',{recursive:true});fs.writeFileSync('artifacts/stage7-browser.json',JSON.stringify(report,null,2));
  }finally{await browser.close();if(!child.stdin.writableEnded)child.stdin.end('stop\n');}
  if(stderr)throw new Error('Fixture stderr: '+stderr);
-})().catch(e=>{console.error(e.message.replace(/(#(?:verify|reset)=)[A-Za-z0-9_-]+/g,'$1[redacted]'));if(!child.stdin.writableEnded)child.stdin.end('stop\n');process.exitCode=1;});
+})().catch(e=>{console.error(e.stack.replace(/(#(?:verify|reset)=)[A-Za-z0-9_-]+/g,'$1[redacted]'));if(!child.stdin.writableEnded)child.stdin.end('stop\n');process.exitCode=1;});
