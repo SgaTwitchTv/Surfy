@@ -2987,3 +2987,87 @@ https://developer.android.com/privacy-and-security/security-config . To nie jest
 deklaracja wykonania połączenia fizycznego telefonu ani licencji konkretnego modelu.
 
 Końcowe własne dowody: full400 OK/1skip (501.479s),17 new HTTP PASS,35 Node/V8 (99.56 lines/96.38branches),Junit7/APK success, Edge nav4/roles3/reauth2 PASS, base isolated smoke PASS. Coverage etapowy87.2919combined;new_navigation76.9616combined. Szczegółowe liczby i niskie pokrycie CVsupervisor38% nie są ukryte w stage9.md.
+
+
+## Etap 10 — końcowe testy, pomiar i automatyzacja (2026-10-15)
+
+### Prompt użytkownika — jawne streszczenie zakresu (nie cytat dosłowny)
+
+Użytkownik zaakceptował etapy1–9 i wskazał bazę
+dabe41356c6028b855506ffd8e93aa3a844ad126. Polecił w tym samym worktree i czacie:
+1. Przeczytać README, audit/contract/stages/run/stage3–9/AI i stan Git, zachować
+   nowsze/nieswoje zmiany, nie ruszać main/vision ani prywatnego runs/runtime.
+2. Uruchomić punkt odniesienia, opisać macierz testów unit/integration/browser/hardware.
+3. Ustalić przed nowymi testami uczciwy szeroki mianownik sześciu szkolnych pakietów
+   i używanego M8/CV; jawne wyłączenia; linie/gałęzie/combined i próg70%, osobno JS.
+4. Uzupełnić istotne konta/SMTP/session/CSRF/reset/reauth, własność i trzy role,
+   dokładne share/revoke/regrant, job execution vs owner management, pliki i spoofing.
+5. Sprawdzić SQLite/migracje/rollback/backup/locks, filtry/DST/cursor, revision,
+   idempotency, immutable raw/corrections, recording failure/recovery/slot cleanup.
+6. Sprawdzić admin/lastadmin race/config immutable/live gates oraz navigation,
+   device credentials/queues/expiry, durable GPS ACK i CV process/dependency failures.
+7. Realne browser E2E kont, tabel, zapisu, korekty, share/revoke, admin reauth draft,
+   logout/reset, desktop/phone/narrow; bez publicznego provisioningu/zegara API.
+8. Android JUnit/debug jeśli dostępne, jawne oddzielenie kompilacji/mocka od sprzętu.
+9. Naprawić błędy z regresją; nie osłabiać testów ani mianownika dla70%; artefakty
+   text/XML/JSON/HTML, w repo konfiguracja i zwięzłe wyniki.
+10. Rozbudować istniejące CI albo jedno workflow push/PR, dependencies, Python/JS,
+    browser Windows/Linux różnice, Tkinter dependency, Android i always-artifacts;
+    bez produkcyjnych sekretów i bez deklarowania nieobejrzanego zdalnego sukcesu.
+11. Nowy stage10.md, run/stages/README/AI, świeża instalacja, małe commity konkretnych
+    plików, bez runtime/DB/sekretów/pushu/merge/przepisywania historii.
+12. Końcowe hashe/status, liczby PASS/FAIL/skip, zakresy i wyniki/komendy, CI status,
+    rozmiary browser i hardware ograniczenia. STOP przed Docker/raportem etapów11–12.
+
+### Faktycznie wykonana pomoc AI
+
+Przegląd źródeł/dokumentacji i Git (HEAD zgodny, czysty); ustalenie .coveragerc przed
+nowymi testami i szerszego JS obejmującego DOM/formularze, nie tylko pure helpers.
+Nowy izolowany runner Python z JSON/Text i coverage text/XML/JSON/HTML; wspólny
+browser helper do Edge/Chromium i zbierania V8, scalanie z Node do Istanbul i jawny
+mianownik z zerowym wynikiem dla niewykonanego pliku. npm lockfile i test requirements,
+czysty venv bez system-site-packages oraz npm ci. Jedno nowe workflow (brak poprzednich):
+Windows/Linux Python, Chromium browser+JS i Android JUnit/APK; raporty always.
+
+AI dodał10 testów granic CV/workerów/map i naprawił dwa odtworzone błędy:
+nieprawidłowe parametry CV503 zamiast422 oraz brak close po awarii workbench po
+uruchomieniu capture. Bez zmiany solvera/loggera/live gates, formatu nagrań,
+zastosowanych migracji i uprawnień. Nowy reporter testów początkowo zakładał
+wywoływalne test.id; istniejąca fixture ma pole id. Naprawiono użyciem bazowej
+metody TestCase.id, dodano2 regresje narzędzia i powtórzono cały zestaw; przerwanego
+przebiegu nie zaliczono. Pierwszy test parametrów poprawiono z pustego mocka na
+rzeczywisty walidator CaptureController, aby dowód przed zmianą wynosił503.
+
+Fixture E2E wybiera openssl przez PATH (wcześniej ścieżka wyłącznie Windows),
+a worker CV używa jawnie testowego interpretera. Nie uruchomiono YOLO ani telefonu.
+Nie użyto subagentów, nowego czatu, Sites lub generowania makiet jako dowodów.
+Dokumentacja koryguje też nieaktualne twierdzenia z początków projektu w README/run.
+
+### Weryfikacja pomocy i ograniczenia
+
+Dokładne komendy, wyniki, per-module coverage i pominięcia: stage10.md. Unit i real
+HTTP/SQLite/SMTP pracują na nowych synthetic TemporaryDirectory. M8 pełna suite
+w allowlist eksporcie; origin importu sprawdzony; brak prywatnych danych w eksporcie.
+Edge faktycznie wykonuje formularze/modale/cursory/reauth/statusy; same PNG nie są
+zaliczane jako test. V8 zbiera tylko aplikacyjne źródła JS, bez cookie/form payloadów;
+raporty/trace robocze ignorowane. Bez zmian danych istniejącego portalu.
+
+Konfigurację coverage i CI sprawdzono także względem oficjalnych źródeł:
+- https://coverage.readthedocs.io/en/7.13.1/config.html
+- https://docs.github.com/en/actions/tutorials/store-and-share-data
+- https://github.com/actions/setup-python
+- https://github.com/actions/setup-node
+- https://github.com/android-actions/setup-android
+
+Własne wykonania Windows; zdalne GitHub Actions i Linux niewykonane (brak pushu).
+CLI below-threshold experiment potwierdził realne exit2 przy50%. JUnit/APK to nie
+Fused/Keystore hardware acceptance. Generated clip/mock detector to nie kamera/YOLO.
+Docker/drugi komputer i końcowy raport nie są realizowane w etapie10.
+
+
+Końcowy własny wynik etapu10:412Python(411PASS/0FAIL/0ERROR/1WinError1314skip),
+430.630s;Python lines7054/7651=92.1971%,branches2316/3084=75.0973%,combined87.2846%.
+42Node PASS;6browser suites/16viewport runs PASS;JS777/1021lines=76.10%,
+1201/1215V8branches=98.84%;7JUnit PASS/debugAPK37tasksEXECUTED. Zero wyłączeń
+linii w zakresie;4jawnie uzasadnione moduły poza Python source. Pełny denominator,
+per-module i rozróżnienie hardware/CI w stage10.md. Raporty nie są dodawane do Git.

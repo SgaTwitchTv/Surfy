@@ -1,9 +1,11 @@
 # Uruchomienie aktualnej gałęzi GreenWave
 
-Stan po etapie 4: działa bazowe GreenWave M8/CV oraz **osobny portal kont**.
-Stary prototyp został usunięty; nowa implementacja kont ma SMTP, aktywację,
-sesje i reset hasła. Przejazdy/GPS/CV nie są jeszcze podłączone do kont.
-Bazowe polecenie z sekcji 2 uruchamia M8/CV, portal uruchamia sekcja 9.
+Stan po etapie 9: działa bazowe GreenWave M8/CV oraz **osobny chroniony portal**
+z kontami, danymi, rolami i adapterami nawigacji/Androida/diagnostycznego CV.
+Stary prototyp nie jest używany. Aktualne demo i konfiguracja: sekcja 16;
+sekcje wcześniejsze zachowują instrukcje odbiorów kolejnych etapów.
+Bazowe polecenie z sekcji 2 nie uruchamia portalu kont.
+Automatyczna końcowa weryfikacja: sekcja 19.
 
 ## 1. Worktree i gałąź
 
@@ -1094,3 +1096,76 @@ wyniki liczbowe i per-module są utrwalone w stage9.md. Nie zawężają końcowe
 zakresu etapu10. Screenshoty w docs/school-app/screenshots/stage9-* są syntetyczne.
 Bazowe GreenWave nadal: `python -m greenwave --no-browser --port 8767`; smoke
 wykonuj z izolowanego eksportu sekcji3, nie z prywatnym runs root.
+
+
+## 19. Etap 10 — odtwarzalna pełna weryfikacja
+
+Nie potrzebujesz działającej aplikacji, istniejącej bazy, kont ani server-secrets.
+Testy używają własnych portów, TemporaryDirectory i syntetycznych danych.
+Nie uruchamiaj migracji starego runtime/school ani testów M8 z prywatnymi runs.
+Poniższa instalacja była sprawdzona w nowym środowisku bez system-site-packages.
+
+```powershell
+Set-Location 'C:\Users\konra\.codex\worktrees\school-app\Surfy'
+git branch --show-current
+python -m venv artifacts/test-env
+.\artifacts\test-env\Scripts\python.exe -m pip install -r requirements-test.txt
+npm ci --ignore-scripts --no-audit --no-fund
+$env:GW_PYTHON = (Resolve-Path artifacts/test-env/Scripts/python.exe).Path
+$env:GW_BROWSER_CHANNEL = 'msedge'
+& $env:GW_PYTHON -m scripts.school_verify
+npm run coverage:js
+node tests/mobile_flow.cjs
+```
+
+Jeśli wcześniej ustawiono GW_PLAYWRIGHT_MODULE na narzędzie spoza projektu,
+usuń tę zmienną (`Remove-Item Env:GW_PLAYWRIGHT_MODULE -ErrorAction SilentlyContinue`),
+aby używać wersji z npm ci. Python runner usuwa odziedziczone SCHOOL_/GW_/COVERAGE_
+z procesu testowego. Browser fixture nie importuje bazy ani sekretów istniejącego portalu.
+CV w E2E używa jawnie tego samego interpretera testowego, nie przypadkowej .venv-cv.
+
+Edge zastępuje lokalnie bundled Chromium. Bez Edge:
+
+```powershell
+npx playwright install chromium
+$env:GW_BROWSER_CHANNEL = 'chromium'
+npm run coverage:js
+```
+
+Linux: Python3.14 z tkinter, `sudo apt-get install -y python3-tk tk xvfb xauth`,
+`python -m pip install -r requirements-test.txt`, `npm ci --ignore-scripts`,
+`npx playwright install --with-deps chromium`; następnie
+`xvfb-run -a python -m scripts.school_verify` i
+`GW_PYTHON=python GW_BROWSER_CHANNEL=chromium npm run coverage:js`.
+Workflow robi te kroki; własnego Linux wykonania lokalnie nie deklarujemy.
+
+Raporty powstają nawet przy niezaliczonych testach/progu:
+- Python: artifacts/stage10/python-tests.txt/json, python-coverage.txt/json/xml,
+  python-html/index.html i python.coverage. JSON zawiera per-module lines/branches.
+- JS: artifacts/stage10/js/coverage-final.json, coverage-summary.json,
+  lcov.info i index.html; osobno js-tests.txt, js-scope.json i browser-tests.json.
+- Browser: browser-{accounts,resources,ui,roles,reauth,navigation}.txt oraz screenshots/.
+  Konta dodatkowo zapisują tylko syntetyczne screenshoty w artifacts/school-accounts.
+
+`school_verify --pattern test_school_final_boundaries.py --output artifacts/diagnostic`
+może pomóc diagnozie, ale wąski przebieg nie zastępuje pełnego pomiaru ani progu.
+Nie używaj starszego school_stage9_verify do końcowego mianownika. Wszystkie raporty
+są ignorowane; do Git trafiają konfiguracja, testy i krótkie podsumowanie w stage10.md.
+
+Android (osobny wynik, bez sprzętu):
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+.\android\GreenWaveSensor\gradlew.bat -p android/GreenWaveSensor testDebugUnitTest assembleDebug --no-daemon --rerun-tasks
+```
+
+Lokalnie można dodać --offline tylko gdy zależności/SDK już są w cache.
+JUnit XML: android/GreenWaveSensor/app/build/test-results/testDebugUnitTest/.
+APK to kompilacja, nie odbiór GPS/Fused/Keystore/telefonu. Syntetyczny klip to
+kontrola dekodowania/lifecycle, nie fizycznej kamery lub YOLO.
+
+Ręczny odbiór testów: sprawdź oba kody wyjścia, pełny mianownik w .coveragerc,
+per-module raport, jawne skips i sześć PASS w browser-tests.json. Scenariusze
+przechodzą register/SMTP/verify/reset, zapisy/korekty/listy, role/shared/revoke,
+reauth/draft/drugi świadomy submit i nawigację/CV. Wymagania sprzętowe i adres
+HTTPS pozostają z sekcji 17. Nie jest to odbiór Docker/drugiego komputera.

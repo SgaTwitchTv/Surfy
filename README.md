@@ -9,10 +9,11 @@ a phone.
 
 ## School extension (work in stages)
 
-The previous school portal prototype was removed; this branch currently runs
-baseline GreenWave M8/CV. See [the current run instructions](docs/school-app/run.md),
+The separate GreenWave School portal implements accounts, scoped records, role views,
+navigation/demo, Android telemetry and diagnostic CV. Baseline `python -m greenwave`
+remains a separate local research application. Use [the current school setup](docs/school-app/run.md#16-etap9--demo-nawigacji-bez-sprzętu),
 [the v1 contract](docs/school-app/contract.md), and [stage status](docs/school-app/stages.md).
-The contract describes planned features, not an implemented account-protected portal.
+All tests/demo use synthetic data; physical phone/camera and deployment are separate acceptance items.
 AI prompts and verification are recorded in [AI usage](docs/school-app/ai-usage.md).
 
 ## Running the application
@@ -170,13 +171,15 @@ most recent observations.
 ## Tests
 
 ```powershell
-python -m unittest discover -s tests -v
+# Install test dependencies using the final verification section below first.
+python -m scripts.school_verify
 node --check greenwave/web/app.js
 node tests/mobile_flow.cjs
 ```
 
-The Tkinter test may be skipped when Tcl/Tk is unavailable. HTTP tests require
-access to local network sockets. To run the browser scenario:
+Full regression requires Tcl/Tk (and a display or Xvfb). A missing tkinter import
+is an environment error, not a successful test. HTTP tests require local sockets.
+For safe full regression and coverage use the isolated stage10 runner below. To run the browser scenario:
 
 ```powershell
 python -m greenwave --no-browser --port 8766
@@ -217,8 +220,8 @@ A separate account portal now supports registration, email verification, login,
 sessions, password changes and one-time reset through SMTP. It does not expose
 legacy M8/CV endpoints. Scoped trips, observations/corrections, sharing, signed lists
 and recoverable synthetic recording now work through the school API. A responsive dark/lime UI now provides own trips and observations, metadata edits,
-corrections/history, sharing/archive and synthetic start/finish. Extra role views
-and full navigation/live GPS/Android/camera remain stages 8–9. Use a NEW explicit
+corrections/history, sharing/archive and synthetic start/finish. Role views and the integrated navigation/device/CV adapters are documented in stages 8–9;
+physical hardware acceptance remains separate. Use a NEW explicit
 storage root; prepare it with `python -m greenwave.school_data --root <absolute-root> init`.
 
 Local synthetic mail: `python -m greenwave.school_accounts.demo_mail --smtp-port 1025 --web-port 8771`.
@@ -252,3 +255,36 @@ replay i diagnostyczne CV są opisane w [instrukcji](docs/school-app/run.md#16-e
 i [raporcie integracji](docs/school-app/stage9.md). Demo nie wymaga telefonu,
 ADB, kamery ani YOLO. LIVE nie jest odblokowywane kontem, rolą, publikacją ani CV.
 Odbiór fizycznego sprzętu pozostaje osobny; Docker i końcowy coverage to dalsze etapy.
+
+
+### Final automated verification — stage 10
+
+From this worktree, with Python 3.14 and Node 24 (development dependencies only):
+
+```powershell
+python -m venv artifacts/test-env
+.\artifacts\test-env\Scripts\python.exe -m pip install -r requirements-test.txt
+npm ci --ignore-scripts --no-audit --no-fund
+$env:GW_PYTHON = (Resolve-Path artifacts/test-env/Scripts/python.exe).Path
+$env:GW_BROWSER_CHANNEL = 'msedge'
+& $env:GW_PYTHON -m scripts.school_verify
+npm run coverage:js
+node tests/mobile_flow.cjs
+```
+
+On a machine without Edge: `npx playwright install chromium`, then set
+`GW_BROWSER_CHANNEL=chromium`. Linux needs Playwright system dependencies
+(`npx playwright install --with-deps chromium`) and Tcl/Tk/display for Python tests;
+use `xvfb-run -a python -m scripts.school_verify`. Do not run the old default-root
+full test command against private recordings. The runner exports only code and
+allowlisted public seeds, uses new temporary databases, checks module origin,
+and does not depend on an existing portal, account, secrets or runtime.
+
+Reports: `artifacts/stage10/python-tests.{txt,json}`, `python-coverage.{txt,json,xml}`,
+`python-html/`, `js/` and browser logs. Fixed full Python scope, justified exclusions,
+separate JS scope, per-module results and hardware limits: [stage10.md](docs/school-app/stage10.md).
+Python combined coverage and JS lines/branches each enforce 70%; failures propagate
+as nonzero exit codes. A single [GitHub workflow](.github/workflows/verify.yml)
+runs on push/PR with Windows/Linux Python, actual Chromium E2E and Android JUnit/APK.
+Configuration exists; remote CI results must be checked after an authorized push.
+Docker and deployment remain stage11; the final project report remains stage12.

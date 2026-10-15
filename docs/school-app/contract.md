@@ -863,3 +863,19 @@ Ingest przy błędzie raw nie zwraca accepted=true; 503 i ograniczony cleanup,
 INTERRUPTED po sukcesie DB, watchdog/startup recovery po awarii. Bez obietnicy
 transakcji DB–filesystem. Capture dependency/worker error daje jawne FAILED,
 nie globalny publiczny fallback. Hardware/YOLO/Docker nie są zaliczane mockiem.
+
+
+## Doprecyzowanie odbioru coverage — etap 10
+
+Aktualny pełny mianownik zapisano przed nowymi testami w .coveragerc i stage10.md.
+Obejmuje całe source=greenwave z czterema jawnymi wyłączeniami historycznych
+narzędzi (ui, główny launcher, vision_probe, vision_demos). W przeciwieństwie do
+wcześniejszej propozycji z audytu włączono również vision_detector i
+vision_capture_worker; syntetyczne testy nie potwierdzają prawdziwego YOLO.
+Nie ma wyłączeń uprawnień, błędów, migracji, I/O/recovery ani nowego CLI.
+Próg70% egzekwuje combined coverage.py przy branch=True; osobno podaje się
+liczniki linii/gałęzi, całość, szkołę, rdzeń i per-module. JS mierzy się oddzielnie,
+z pełnymi modułami formularzy/DOM portalu i zachowanymi adapterami legacy;
+V8 block/range branches nie są utożsamiane z Python branch opportunities.
+Nie łączymy tych procentów. Więcej: stage10.md i run.md sekcja19.
+Role, własność, aktywacja/reset, granice raw i dopuszczenie live pozostają bez zmian.
